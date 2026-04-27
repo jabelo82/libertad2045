@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIBERTAD_2045 — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --border: #1e2a38;
+    --accent: #00c896;
+    --accent2: #0088ff;
+    --warn: #ffaa00;
+    --danger: #ff4455;
+    --text: #e0e8f0;
+    --muted: #4a6070;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* HEADER */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 24px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .mode-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    background: rgba(0,200,150,.15);
+    color: var(--accent);
+    border: 1px solid rgba(0,200,150,.3);
+    letter-spacing: 1px;
+  }
+  .last-update {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* LAYOUT */
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  /* KPI GRID */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .kpi.warn::before { background: var(--warn); }
+  .kpi.danger::before { background: var(--danger); }
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .kpi-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* SECCIÓN */
+  .section { margin-bottom: 32px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .toggle-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: none;
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    color: var(--text);
+    transition: border-color .2s;
+  }
+  .toggle-btn:hover { border-color: var(--accent); }
+  .collapsible { overflow: hidden; transition: max-height .3s ease; }
+  .collapsible.collapsed { max-height: 0 !important; }
+
+  /* CHARTS */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* PORTFOLIO PIE */
+  .portfolio-layout { display: flex; gap: 40px; align-items: center; }
+  .pie-wrap {
+    position: relative;
+    width: 320px; height: 320px;
+    flex-shrink: 0;
+  }
+  .pie-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .pie-center-value {
+    font-family: var(--mono);
+    font-size: 13px; font-weight: 700;
+    color: var(--text); white-space: nowrap;
+  }
+  .pie-center-label {
+    font-family: var(--mono); font-size: 9px;
+    color: var(--muted); letter-spacing: 1px;
+    text-transform: uppercase; margin-top: 3px;
+  }
+  .portfolio-legend {
+    flex: 1;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px;
+    padding: 5px 8px; border-radius: 3px;
+    transition: background .15s; cursor: default;
+  }
+  .legend-item:hover { background: rgba(0,200,150,.06); }
+  .legend-dot  { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .legend-ticker { color: var(--text); font-weight: 700; min-width: 38px; }
+  .legend-value  { color: var(--muted); flex: 1; }
+  .legend-pct    { color: var(--accent); min-width: 40px; text-align: right; }
+  @media (max-width: 768px) {
+    .portfolio-layout  { flex-direction: column; }
+    .pie-wrap          { width: 260px; height: 260px; }
+    .portfolio-legend  { grid-template-columns: 1fr; width: 100%; }
+  }
+
+  /* TABLA */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  thead th {
+    background: #0a1520;
+    padding: 10px 16px;
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid rgba(30,42,56,.5); transition: background .15s; }
+  tbody tr:hover { background: rgba(0,200,150,.04); }
+  tbody td { padding: 10px 16px; }
+  .num { text-align: right; }
+
+  .badge {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .badge.ok { background: rgba(0,200,150,.15); color: var(--accent); }
+  .badge.warn { background: rgba(255,68,85,.15); color: var(--danger); }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    letter-spacing: 1px;
+  }
+
+  @media (max-width: 768px) {
+    .main { padding: 16px; }
+    .header { padding: 16px; }
+    .chart-grid { grid-template-columns: 1fr; }
+    .kpi-value { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <div class="logo">⚙ LIBERTAD_2045</div>
+    <div class="mode-badge">PAPER</div>
+  </div>
+  <div class="last-update">Actualizado: 27/04/2026 22:13</div>
+</header>
+
+<main class="main">
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Capital actual</div>
+      <div class="kpi-value" style="color:var(--accent)">1,085,816 €</div>
+      <div class="kpi-sub">Pico: 1,088,142 €</div>
+    </div>
+    <div class="kpi ">
+      <div class="kpi-label">Rentabilidad</div>
+      <div class="kpi-value" style="color:#00ff88">+8.54%</div>
+      <div class="kpi-sub">Desde inicio PAPER</div>
+    </div>
+    <div class="kpi warn">
+      <div class="kpi-label">Drawdown actual</div>
+      <div class="kpi-value" style="color:#ffaa00">-0.21%</div>
+      <div class="kpi-sub">Límite: -10.00%</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Sesiones</div>
+      <div class="kpi-value">29</div>
+      <div class="kpi-sub">Última: 2026-04-27</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Trades ejecutados</div>
+      <div class="kpi-value">2</div>
+      <div class="kpi-sub">Señales detectadas: 107</div>
+    </div>
+  </div>
+
+  <!-- GRÁFICAS -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('charts')">
+      <div class="section-title">// Gráficas</div>
+      <button class="toggle-btn" id="btn-charts">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="charts" style="max-height:600px">
+      <div class="chart-grid">
+        <div class="chart-box">
+          <div class="chart-title">Evolución del capital</div>
+          <div class="chart-wrap"><canvas id="chartCapital"></canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Señales por sesión</div>
+          <div class="chart-wrap"><canvas id="chartSenales"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-grid" style="grid-template-columns:1fr 1fr">
+        <div class="chart-box">
+          <div class="chart-title">Posiciones abiertas por sesión</div>
+          <div class="chart-wrap"><canvas id="chartPosiciones"></canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Drawdown desde pico</div>
+          <div class="chart-wrap"><canvas id="chartDD"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPOSICIÓN DE CARTERA -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('cartera')">
+      <div class="section-title">// Composición de cartera</div>
+      <button class="toggle-btn" id="btn-cartera">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="cartera" style="max-height:500px">
+      <div class="chart-box">
+        <div class="chart-title">Distribución del capital — 1,085,765 €</div>
+        <div class="portfolio-layout">
+          <div class="pie-wrap">
+            <canvas id="chartCartera"></canvas>
+            <div class="pie-center">
+              <div class="pie-center-value" id="pieHoverValue">1,085,765 €</div>
+              <div class="pie-center-label" id="pieHoverLabel">capital total</div>
+            </div>
+          </div>
+          <div class="portfolio-legend" id="portfolioLegend"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLA SESIONES -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('sesiones')">
+      <div class="section-title">// Historial de sesiones</div>
+      <button class="toggle-btn" id="btn-sesiones">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="sesiones" style="max-height:600px">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th class="num">Capital</th>
+              <th class="num">Drawdown</th>
+              <th class="num">Señales</th>
+              <th class="num">Trades</th>
+              <th class="num">Posiciones</th>
+              <th class="num">Tiempo</th>
+              <th>Risk Guardian</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+            <td>2026-04-27</td>
+            <td class="num">1,085,816.16 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-24</td>
+            <td class="num">1,088,142.31 €</td>
+            <td class="num">—</td>
+            <td class="num">7</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-23</td>
+            <td class="num">1,083,304.85 €</td>
+            <td class="num">—</td>
+            <td class="num">12</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-22</td>
+            <td class="num">1,063,222.17 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-21</td>
+            <td class="num">1,064,561.42 €</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-20</td>
+            <td class="num">1,069,196.12 €</td>
+            <td class="num">—</td>
+            <td class="num">12</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-17</td>
+            <td class="num">1,069,391.70 €</td>
+            <td class="num">—</td>
+            <td class="num">15</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-16</td>
+            <td class="num">1,053,480.72 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-15</td>
+            <td class="num">1,042,560.56 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-14</td>
+            <td class="num">1,045,424.86 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-13</td>
+            <td class="num">1,046,277.70 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">1</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-12</td>
+            <td class="num">1,042,876.92 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-10</td>
+            <td class="num">1,045,892.06 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-09</td>
+            <td class="num">1,037,730.22 €</td>
+            <td class="num">—</td>
+            <td class="num">18</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-08</td>
+            <td class="num">1,008,839.02 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-06</td>
+            <td class="num">1,006,353.50 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-04</td>
+            <td class="num">1,001,869.62 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-03</td>
+            <td class="num">1,000,721.14 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-01</td>
+            <td class="num">1,004,036.81 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-31</td>
+            <td class="num">1,002,061.54 €</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="num">0</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-30</td>
+            <td class="num">1,001,487.58 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-27</td>
+            <td class="num">999,068.73 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-26</td>
+            <td class="num">1,000,799.55 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-25</td>
+            <td class="num">1,000,747.74 €</td>
+            <td class="num">—</td>
+            <td class="num">3</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-24</td>
+            <td class="num">1,000,748.44 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-19</td>
+            <td class="num">1,000,544.04 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-18</td>
+            <td class="num">1,000,465.93 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-17</td>
+            <td class="num">1,000,473.28 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-16</td>
+            <td class="num">1,000,351.10 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLA TRADES -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('trades')">
+      <div class="section-title">// Trades ejecutados</div>
+      <button class="toggle-btn" id="btn-trades">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="trades" style="max-height:500px">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Símbolo</th>
+              <th class="num">Acciones</th>
+              <th class="num">Entrada</th>
+              <th class="num">Stop</th>
+              <th class="num">PnL (€)</th>
+              <th class="num">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+                <td>2026-04-13</td>
+                <td><strong>AAPL</strong></td>
+                <td class="num">484</td>
+                <td class="num">259.2</td>
+                <td class="num"></td>
+                <td class="num"><span style="color:#00c896">+3,470 €</span></td>
+                <td class="num"><span style="color:#00c896">+3.24%</span></td>
+            </tr>
+            <tr>
+                <td>2026-04-12</td>
+                <td><strong>AAPL</strong></td>
+                <td class="num">467</td>
+                <td class="num">260.48</td>
+                <td class="num"></td>
+                <td class="num"><span style="color:#00c896">+2,838 €</span></td>
+                <td class="num"><span style="color:#00c896">+2.74%</span></td>
+            </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  LIBERTAD_2045 · Sistema autónomo de trading · Objetivo 2045
+</footer>
+
+<script>
+const fechas = ["2026-03-16", "2026-03-17", "2026-03-18", "2026-03-19", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-30", "2026-03-31", "2026-04-01", "2026-04-03", "2026-04-04", "2026-04-06", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27"];
+const capitales = [1000351.1, 1000473.28, 1000465.93, 1000544.04, 1000748.44, 1000747.74, 1000799.55, 999068.73, 1001487.58, 1002061.54, 1004036.81, 1000721.14, 1001869.62, 1006353.5, 1008839.02, 1037730.22, 1045892.06, 1042876.92, 1046277.7, 1045424.86, 1042560.56, 1053480.72, 1069391.7, 1069196.12, 1064561.42, 1063222.17, 1083304.85, 1088142.31, 1085816.16];
+const senales = [0, 0, 0, 1, 2, 3, 0, 0, 1, 6, 1, 1, 1, 2, 2, 18, 0, 0, 1, 2, 4, 2, 15, 12, 6, 4, 12, 7, 4];
+const posiciones = [1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 10, 10, 10, 10, 10, 10, 10];
+
+// Drawdown desde pico
+const dds = capitales.map((c, i) => {
+  const pico = Math.max(...capitales.slice(0, i+1));
+  return pico > 0 ? ((c - pico) / pico * 100) : 0;
+});
+
+const gridColor = 'rgba(30,42,56,0.8)';
+const tickColor = '#4a6070';
+
+Chart.defaults.color = tickColor;
+Chart.defaults.font.family = "'Space Mono', monospace";
+Chart.defaults.font.size = 10;
+
+function makeChart(id, type, labels, data, color, fill=false) {
+  return new Chart(document.getElementById(id), {
+    type,
+    data: {
+      labels,
+      datasets: [{
+        data,
+        borderColor: color,
+        backgroundColor: fill ? color.replace(')', ', 0.15)').replace('rgb', 'rgba') : 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        fill,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { maxRotation: 45 } },
+        y: { grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+makeChart('chartCapital',   'line', fechas, capitales, 'rgb(0,200,150)', true);
+makeChart('chartSenales',   'bar',  fechas, senales,   'rgb(0,136,255)');
+makeChart('chartPosiciones','line', fechas, posiciones, 'rgb(255,170,0)', true);
+
+new Chart(document.getElementById('chartDD'), {
+  type: 'line',
+  data: {
+    labels: fechas,
+    datasets: [{
+      data: dds,
+      borderColor: 'rgb(255,68,85)',
+      backgroundColor: 'rgba(255,68,85,0.1)',
+      borderWidth: 1.5,
+      pointRadius: 3,
+      fill: true,
+      tension: 0.3
+    },
+    {
+      data: Array(fechas.length).fill(-10),
+      borderColor: 'rgba(255,68,85,0.4)',
+      borderWidth: 1,
+      borderDash: [4,4],
+      pointRadius: 0,
+      fill: false,
+      label: 'Límite -10%'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { maxRotation: 45 } },
+      y: { grid: { color: gridColor } }
+    }
+  }
+});
+
+// ── PORTFOLIO PIE CHART ────────────────────────────────────────────
+const portfolio = {
+  labels: ["FDX", "INTC", "C", "CHRW", "BMY", "AAPL", "BWA", "TER", "CBOE", "CAT", "CASH"],
+  values: [127612, 74186, 114142, 102325, 103867, 110906, 101749, 72338, 103654, 109709, 65277],
+  colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#d19a66", "#98c379", "#61afef", "#ffaa00", "#3a5068"]
+};
+
+const pieTotal = portfolio.values.reduce((a, b) => a + b, 0);
+const fmt = v => v.toLocaleString('es-ES') + ' €';
+
+const pieValue = document.getElementById('pieHoverValue');
+const pieLabel = document.getElementById('pieHoverLabel');
+
+const chartCartera = new Chart(document.getElementById('chartCartera'), {
+  type: 'doughnut',
+  data: {
+    labels: portfolio.labels,
+    datasets: [{
+      data: portfolio.values,
+      backgroundColor: portfolio.colors,
+      borderColor: '#080c10',
+      borderWidth: 2,
+      hoverBorderColor: 'rgba(255,255,255,0.6)',
+      hoverBorderWidth: 2,
+      hoverOffset: 10
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '58%',
+    animation: { animateRotate: true, duration: 700 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const pct = (ctx.raw / pieTotal * 100).toFixed(2);
+            return `  ${fmt(ctx.raw)}  \u00b7  ${pct}%`;
+          }
+        },
+        backgroundColor: '#0d1117',
+        borderColor: '#1e2a38',
+        borderWidth: 1,
+        titleColor: '#e0e8f0',
+        bodyColor: '#e0e8f0',
+        titleFont: { family: "'Space Mono', monospace", size: 11, weight: '700' },
+        bodyFont:  { family: "'Space Mono', monospace", size: 11 },
+        padding: 12,
+        displayColors: true,
+        boxWidth: 10, boxHeight: 10
+      }
+    },
+    onHover: (evt, elements) => {
+      if (elements.length) {
+        const i = elements[0].index;
+        const pct = (portfolio.values[i] / pieTotal * 100).toFixed(2);
+        pieValue.textContent = fmt(portfolio.values[i]);
+        pieLabel.textContent = portfolio.labels[i] + ' · ' + pct + '%';
+      } else {
+        pieValue.textContent = fmt(pieTotal);
+        pieLabel.textContent = 'capital total';
+      }
+    }
+  }
+});
+
+// Leyenda personalizada
+const legendEl = document.getElementById('portfolioLegend');
+portfolio.labels.forEach((label, i) => {
+  const pct = (portfolio.values[i] / pieTotal * 100).toFixed(2);
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML =
+    `<div class="legend-dot" style="background:${portfolio.colors[i]}"></div>` +
+    `<span class="legend-ticker">${label}</span>` +
+    `<span class="legend-value">${fmt(portfolio.values[i])}</span>` +
+    `<span class="legend-pct">${pct}%</span>`;
+  item.addEventListener('mouseenter', () => {
+    pieValue.textContent = fmt(portfolio.values[i]);
+    pieLabel.textContent = label + ' · ' + pct + '%';
+    chartCartera.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
+    chartCartera.update('none');
+  });
+  item.addEventListener('mouseleave', () => {
+    pieValue.textContent = fmt(pieTotal);
+    pieLabel.textContent = 'capital total';
+    chartCartera.tooltip.setActiveElements([], {});
+    chartCartera.update('none');
+  });
+  legendEl.appendChild(item);
+});
+
+// Collapsibles
+function toggle(id) {
+  const el = document.getElementById(id);
+  const btn = document.getElementById('btn-' + id);
+  if (el.classList.contains('collapsed')) {
+    el.classList.remove('collapsed');
+    btn.textContent = '▼ ocultar';
+  } else {
+    el.classList.add('collapsed');
+    btn.textContent = '▶ mostrar';
+  }
+}
+</script>
+</body>
+</html>
