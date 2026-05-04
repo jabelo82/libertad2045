@@ -3,1054 +3,978 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LIBERTAD_2045 — Backtest Dashboard v2</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<title>LIBERTAD_2045 — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   :root {
-    --bg:      #0f1117;
-    --card:    #1a1d2e;
-    --border:  #2d3148;
-    --text:    #e2e8f0;
-    --muted:   #94a3b8;
-    --accent:  #00d4ff;
+    --bg: #080c10;
+    --surface: #0d1117;
+    --border: #1e2a38;
+    --accent: #00c896;
+    --accent2: #0088ff;
+    --warn: #ffaa00;
+    --danger: #ff4455;
+    --text: #e0e8f0;
+    --muted: #4a6070;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
   }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 0;
   }
+
+  /* HEADER */
   .header {
-    background: linear-gradient(135deg, #0f1117 0%, #1a1d2e 50%, #0f1117 100%);
     border-bottom: 1px solid var(--border);
-    padding: 28px 40px;
+    padding: 24px 40px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
-  .header h1 {
-    font-size: 1.6em;
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .mode-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    background: rgba(0,200,150,.15);
+    color: var(--accent);
+    border: 1px solid rgba(0,200,150,.3);
+    letter-spacing: 1px;
+  }
+  .last-update {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* LAYOUT */
+  .main { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+
+  /* KPI GRID */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .kpi.warn::before { background: var(--warn); }
+  .kpi.danger::before { background: var(--danger); }
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .kpi-sub {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* SECCIÓN */
+  .section { margin-bottom: 32px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
     color: var(--accent);
   }
-  .header h1 span { color: var(--text); }
-  .header .meta { color: var(--muted); font-size: 0.85em; text-align: right; }
-  .badge {
-    display: inline-block;
-    background: #10b98120;
-    color: #10b981;
-    border: 1px solid #10b98140;
-    border-radius: 4px;
-    padding: 2px 10px;
-    font-size: 0.75em;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+  .toggle-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: none;
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    color: var(--text);
+    transition: border-color .2s;
   }
-  .container { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
-  .section-title {
-    font-size: 0.7em;
-    font-weight: 700;
-    letter-spacing: 0.15em;
+  .toggle-btn:hover { border-color: var(--accent); }
+  .collapsible { overflow: hidden; transition: max-height .3s ease; }
+  .collapsible.collapsed { max-height: 0 !important; }
+
+  /* CHARTS */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 10px;
     color: var(--muted);
+    letter-spacing: 1px;
     text-transform: uppercase;
     margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
   }
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 24px;
-    margin-bottom: 24px;
-  }
-  .card-title {
-    font-size: 0.85em;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 20px;
-  }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-  .chart-container { position: relative; height: 340px; }
-  .chart-container-tall { position: relative; height: 420px; }
+  .chart-wrap { position: relative; height: 220px; }
 
-  /* KPI */
-  .kpi-group { margin-bottom: 28px; }
-  .kpi-title { font-size: 0.75em; font-weight: 700; letter-spacing: 0.12em;
-                text-transform: uppercase; margin-bottom: 12px; }
-  .kpi-row { display: flex; flex-wrap: wrap; gap: 12px; }
-  .kpi-card {
-    background: #12151f;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 18px;
-    min-width: 140px;
+  /* PORTFOLIO PIE */
+  .portfolio-layout { display: flex; gap: 40px; align-items: center; }
+  .pie-wrap {
+    position: relative;
+    width: 320px; height: 320px;
+    flex-shrink: 0;
+  }
+  .pie-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  .pie-center-value {
+    font-family: var(--mono);
+    font-size: 13px; font-weight: 700;
+    color: var(--text); white-space: nowrap;
+  }
+  .pie-center-label {
+    font-family: var(--mono); font-size: 9px;
+    color: var(--muted); letter-spacing: 1px;
+    text-transform: uppercase; margin-top: 3px;
+  }
+  .portfolio-legend {
     flex: 1;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px;
   }
-  .kpi-label { font-size: 0.72em; color: var(--muted); text-transform: uppercase;
-                letter-spacing: 0.08em; margin-bottom: 6px; }
-  .kpi-value { font-size: 1.1em; font-weight: 700; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px;
+    padding: 5px 8px; border-radius: 3px;
+    transition: background .15s; cursor: default;
+  }
+  .legend-item:hover { background: rgba(0,200,150,.06); }
+  .legend-dot  { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .legend-ticker { color: var(--text); font-weight: 700; min-width: 38px; }
+  .legend-value  { color: var(--muted); flex: 1; }
+  .legend-pct    { color: var(--accent); min-width: 40px; text-align: right; }
+  @media (max-width: 768px) {
+    .portfolio-layout  { flex-direction: column; }
+    .pie-wrap          { width: 260px; height: 260px; }
+    .portfolio-legend  { grid-template-columns: 1fr; width: 100%; }
+  }
 
-  /* Tabla comparativa */
-  .compare-table { width: 100%; border-collapse: collapse; }
-  .compare-table th {
-    background: #12151f;
-    color: var(--muted);
-    font-size: 0.72em;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+  /* TABLA */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  thead th {
+    background: #0a1520;
     padding: 10px 16px;
     text-align: left;
-    border-bottom: 1px solid var(--border);
-  }
-  .compare-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid #1e2235;
-    font-weight: 500;
-  }
-  .compare-table tr:hover td { background: #1e2235; }
-
-  /* Tabla datos */
-  .data-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
-  .data-table th {
-    background: #12151f;
-    color: var(--muted);
-    font-size: 0.72em;
-    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 1px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 8px 12px;
-    text-align: right;
+    color: var(--muted);
     border-bottom: 1px solid var(--border);
-    position: sticky; top: 0;
+    white-space: nowrap;
   }
-  .data-table th:first-child { text-align: left; }
-  .data-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #1e2235;
-    text-align: right;
-  }
-  .data-table td:first-child { text-align: left; }
-  .data-table tr:hover td { background: #1e2235; }
+  tbody tr { border-bottom: 1px solid rgba(30,42,56,.5); transition: background .15s; }
+  tbody tr:hover { background: rgba(0,200,150,.04); }
+  tbody td { padding: 10px 16px; }
+  .num { text-align: right; }
 
-  /* Tabs */
-  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
-  .tab-btn {
-    background: none; border: none; border-bottom: 2px solid transparent;
-    color: var(--muted); cursor: pointer; padding: 10px 20px;
-    font-size: 0.85em; font-weight: 600; letter-spacing: 0.05em;
-    transition: all 0.2s; margin-bottom: -1px;
+  .badge {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 700;
   }
-  .tab-btn.active { color: var(--text); }
-  .tab-panel { display: none; max-height: 480px; overflow-y: auto; }
-  .tab-panel.active { display: block; }
+  .badge.ok { background: rgba(0,200,150,.15); color: var(--accent); }
+  .badge.warn { background: rgba(255,68,85,.15); color: var(--danger); }
 
-  /* Footer */
+  /* FOOTER */
   .footer {
     text-align: center;
     padding: 24px;
+    font-family: var(--mono);
+    font-size: 10px;
     color: var(--muted);
-    font-size: 0.8em;
     border-top: 1px solid var(--border);
-    margin-top: 8px;
+    letter-spacing: 1px;
   }
-  .sep { margin: 32px 0; }
+
+  @media (max-width: 768px) {
+    .main { padding: 16px; }
+    .header { padding: 16px; }
+    .chart-grid { grid-template-columns: 1fr; }
+    .kpi-value { font-size: 20px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div>
-    <div style="color:var(--muted);font-size:0.75em;letter-spacing:0.15em;
-                text-transform:uppercase;margin-bottom:6px">
-      Sistema de trading algorítmico
+<header class="header">
+  <div class="header-left">
+    <div class="logo">⚙ LIBERTAD_2045</div>
+    <div class="mode-badge">PAPER</div>
+  </div>
+  <div class="last-update">Actualizado: 04/05/2026 22:35</div>
+</header>
+
+<main class="main">
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Capital actual</div>
+      <div class="kpi-value" style="color:var(--accent)">1,084,005 €</div>
+      <div class="kpi-sub">Pico: 1,103,039 €</div>
     </div>
-    <h1>LIBERTAD<span>_2045</span></h1>
-    <div style="margin-top:8px">
-      <span class="badge">VERSIÓN 2 — ACTIVA</span>
+    <div class="kpi ">
+      <div class="kpi-label">Rentabilidad</div>
+      <div class="kpi-value" style="color:#00ff88">+8.36%</div>
+      <div class="kpi-sub">Desde inicio PAPER</div>
+    </div>
+    <div class="kpi warn">
+      <div class="kpi-label">Drawdown actual</div>
+      <div class="kpi-value" style="color:#ffaa00">-1.73%</div>
+      <div class="kpi-sub">Límite: -10.00%</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Sesiones</div>
+      <div class="kpi-value">34</div>
+      <div class="kpi-sub">Última: 2026-05-04</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Trades ejecutados</div>
+      <div class="kpi-value">2</div>
+      <div class="kpi-sub">Señales detectadas: 144</div>
     </div>
   </div>
-  <div class="meta">
-    <div style="font-size:1em;color:var(--text);font-weight:600;margin-bottom:4px">
-      Backtest Dashboard
+
+  <!-- GRÁFICAS -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('charts')">
+      <div class="section-title">// Gráficas</div>
+      <button class="toggle-btn" id="btn-charts">▼ ocultar</button>
     </div>
-    <div>5 mejoras implementadas · 2026-04-14</div>
-    <div>Generado: 2026-04-14 18:30</div>
-  </div>
-</div>
-
-<div class="container">
-
-  <!-- KPI CARDS -->
-  <div class="section-title">Métricas clave por período</div>
-  <div class="card">
-    
-        <div class="kpi-group">
-          <div class="kpi-title" style="color:#00d4ff; border-left: 3px solid #00d4ff; padding-left:10px">
-            DESDE 2015
-          </div>
-          <div class="kpi-row">
-            <div class="kpi-card">
-              <div class="kpi-label">Capital final</div>
-              <div class="kpi-value" style="color:#00d4ff">283,885 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Retorno total</div>
-              <div class="kpi-value" style="color:#00d4ff">6997%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Win Rate</div>
-              <div class="kpi-value" style="color:#10b981">60.3%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Profit Factor</div>
-              <div class="kpi-value">2.2484</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Max Drawdown</div>
-              <div class="kpi-value" style="color:#ef4444">8.8%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Expectativa / trade</div>
-              <div class="kpi-value">229 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Mejor trade</div>
-              <div class="kpi-value" style="color:#10b981">+9,060 € (ALK)</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Peor trade</div>
-              <div class="kpi-value" style="color:#ef4444">-2,103 € (CF)</div>
-            </div>
-          </div>
+    <div class="collapsible" id="charts" style="max-height:600px">
+      <div class="chart-grid">
+        <div class="chart-box">
+          <div class="chart-title">Evolución del capital</div>
+          <div class="chart-wrap"><canvas id="chartCapital"></canvas></div>
         </div>
-        <div class="kpi-group">
-          <div class="kpi-title" style="color:#7c3aed; border-left: 3px solid #7c3aed; padding-left:10px">
-            DESDE 2010
-          </div>
-          <div class="kpi-row">
-            <div class="kpi-card">
-              <div class="kpi-label">Capital final</div>
-              <div class="kpi-value" style="color:#7c3aed">1,357,059 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Retorno total</div>
-              <div class="kpi-value" style="color:#7c3aed">33826%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Win Rate</div>
-              <div class="kpi-value" style="color:#10b981">62.1%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Profit Factor</div>
-              <div class="kpi-value">2.2709</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Max Drawdown</div>
-              <div class="kpi-value" style="color:#ef4444">8.9%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Expectativa / trade</div>
-              <div class="kpi-value">841 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Mejor trade</div>
-              <div class="kpi-value" style="color:#10b981">+44,365 € (PCAR)</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Peor trade</div>
-              <div class="kpi-value" style="color:#ef4444">-10,115 € (MSCI)</div>
-            </div>
-          </div>
+        <div class="chart-box">
+          <div class="chart-title">Señales por sesión</div>
+          <div class="chart-wrap"><canvas id="chartSenales"></canvas></div>
         </div>
-        <div class="kpi-group">
-          <div class="kpi-title" style="color:#f59e0b; border-left: 3px solid #f59e0b; padding-left:10px">
-            DESDE 2005
-          </div>
-          <div class="kpi-row">
-            <div class="kpi-card">
-              <div class="kpi-label">Capital final</div>
-              <div class="kpi-value" style="color:#f59e0b">3,774,260 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Retorno total</div>
-              <div class="kpi-value" style="color:#f59e0b">94256%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Win Rate</div>
-              <div class="kpi-value" style="color:#10b981">60.9%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Profit Factor</div>
-              <div class="kpi-value">2.2711</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Max Drawdown</div>
-              <div class="kpi-value" style="color:#ef4444">12.2%</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Expectativa / trade</div>
-              <div class="kpi-value">1,912 €</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Mejor trade</div>
-              <div class="kpi-value" style="color:#10b981">+124,055 € (PCAR)</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Peor trade</div>
-              <div class="kpi-value" style="color:#ef4444">-28,171 € (MSCI)</div>
-            </div>
-          </div>
-        </div>
-  </div>
-
-  <!-- CURVAS DE CAPITAL -->
-  <div class="section-title">Curvas de capital — 3 períodos superpuestos</div>
-  <div class="card">
-    <div class="card-title">Capital acumulado (€) · escala logarítmica · Capital inicial 4.000 € + 4.000 €/año</div>
-    <div class="chart-container-tall">
-      <canvas id="chartCapital"></canvas>
-    </div>
-  </div>
-
-  <!-- DRAWDOWN -->
-  <div class="section-title">Drawdown</div>
-  <div class="card">
-    <div class="card-title">Drawdown máximo desde pico (%)</div>
-    <div class="chart-container">
-      <canvas id="chartDD"></canvas>
-    </div>
-  </div>
-
-  <!-- COMPARATIVA ANTES / DESPUÉS -->
-  <div class="section-title">Comparativa versión 1 vs versión 2</div>
-  <div class="card">
-    <div class="card-title">Impacto de las 5 mejoras implementadas el 2026-04-14</div>
-    <table class="compare-table">
-      <thead>
-        <tr>
-          <th>Período</th>
-          <th>Capital final</th>
-          <th>Retorno total</th>
-          <th>Trades</th>
-          <th>Win Rate</th>
-          <th>Profit Factor</th>
-          <th>Max Drawdown</th>
-        </tr>
-      </thead>
-      <tbody>
-        
-        <tr>
-          <td><span style="color:#00d4ff;font-weight:700">Desde 2015</span></td>
-          <td>283,885 €<span style="color:#10b981;font-size:0.8em"> (+102309.0)</span></td>
-          <td>6997.1%<span style="color:#10b981;font-size:0.8em"> (+6992.7%)</span></td>
-          <td>958<span style="color:#10b981;font-size:0.8em"> (+211.0)</span></td>
-          <td>60.3%<span style="color:#10b981;font-size:0.8em"> (+11.0%)</span></td>
-          <td>2.2484<span style="color:#10b981;font-size:0.8em"> (+0.0)</span></td>
-          <td>8.8%<span style="color:#10b981;font-size:0.8em"> (-0.5%)</span></td>
-        </tr>
-        <tr>
-          <td><span style="color:#7c3aed;font-weight:700">Desde 2010</span></td>
-          <td>1,357,059 €<span style="color:#10b981;font-size:0.8em"> (+782721.0)</span></td>
-          <td>33826.5%<span style="color:#10b981;font-size:0.8em"> (+33812.2%)</span></td>
-          <td>1417<span style="color:#10b981;font-size:0.8em"> (+321.0)</span></td>
-          <td>62.1%<span style="color:#10b981;font-size:0.8em"> (+10.9%)</span></td>
-          <td>2.2709<span style="color:#10b981;font-size:0.8em"> (+0.1)</span></td>
-          <td>8.9%<span style="color:#10b981;font-size:0.8em"> (-0.4%)</span></td>
-        </tr>
-        <tr>
-          <td><span style="color:#f59e0b;font-weight:700">Desde 2005</span></td>
-          <td>3,774,260 €<span style="color:#10b981;font-size:0.8em"> (+2688980.0)</span></td>
-          <td>94256.5%<span style="color:#10b981;font-size:0.8em"> (+94229.5%)</span></td>
-          <td>1780<span style="color:#10b981;font-size:0.8em"> (+412.0)</span></td>
-          <td>60.9%<span style="color:#10b981;font-size:0.8em"> (+13.0%)</span></td>
-          <td>2.2711<span style="color:#10b981;font-size:0.8em"> (+0.1)</span></td>
-          <td>12.2%<span style="color:#10b981;font-size:0.8em"> (-0.4%)</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- DISTRIBUCIÓN PnL -->
-  <div class="section-title">Distribución de resultados por trade</div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title">Histograma PnL por trade</div>
-      <div class="chart-container">
-        <canvas id="chartHist0"></canvas>
       </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Histograma PnL por trade</div>
-      <div class="chart-container">
-        <canvas id="chartHist1"></canvas>
+      <div class="chart-grid" style="grid-template-columns:1fr 1fr">
+        <div class="chart-box">
+          <div class="chart-title">Posiciones abiertas por sesión</div>
+          <div class="chart-wrap"><canvas id="chartPosiciones"></canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Drawdown desde pico</div>
+          <div class="chart-wrap"><canvas id="chartDD"></canvas></div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title">Histograma PnL — período completo 2005–2025</div>
-    <div class="chart-container">
-      <canvas id="chartHist2"></canvas>
+
+  <!-- COMPOSICIÓN DE CARTERA -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('cartera')">
+      <div class="section-title">// Composición de cartera</div>
+      <button class="toggle-btn" id="btn-cartera">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="cartera" style="max-height:500px">
+      <div class="chart-box">
+        <div class="chart-title">Distribución del capital — 1,083,924 €</div>
+        <div class="portfolio-layout">
+          <div class="pie-wrap">
+            <canvas id="chartCartera"></canvas>
+            <div class="pie-center">
+              <div class="pie-center-value" id="pieHoverValue">1,083,924 €</div>
+              <div class="pie-center-label" id="pieHoverLabel">capital total</div>
+            </div>
+          </div>
+          <div class="portfolio-legend" id="portfolioLegend"></div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- MÉTRICAS ANUALES -->
-  <div class="section-title">Métricas anuales desglosadas</div>
-  <div class="card">
-    <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('2015')" id="tab-2015" style="border-bottom: 2px solid #00d4ff"><span style="color:#00d4ff">Desde 2015</span></button><button class="tab-btn " onclick="showTab('2010')" id="tab-2010" style="border-bottom: 2px solid transparent"><span style="color:#7c3aed">Desde 2010</span></button><button class="tab-btn " onclick="showTab('2005')" id="tab-2005" style="border-bottom: 2px solid transparent"><span style="color:#f59e0b">Desde 2005</span></button>
+  <!-- TABLA SESIONES -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('sesiones')">
+      <div class="section-title">// Historial de sesiones</div>
+      <button class="toggle-btn" id="btn-sesiones">▼ ocultar</button>
     </div>
-    
-        <div class="tab-panel active" id="panel-2015">
-          <table class="data-table">
-            <thead><tr>
-              <th>Año</th><th>Cap. inicio</th><th>Cap. fin</th>
-              <th>Retorno</th><th>Trades</th><th>Wins</th>
-              <th>Win Rate</th><th>PnL</th><th>Max DD</th>
-            </tr></thead>
-            <tbody><tr>
-              <td>2015</td>
-              <td>4,000</td>
-              <td>3,879</td>
-              <td style="color:#ef4444">-3.0%</td>
-              <td>17</td>
-              <td style="color:#10b981">9</td>
-              <td>52.9%</td>
-              <td style="color:#ef4444">-128 €</td>
-              <td style="color:#ef4444">3.1%</td>
-            </tr><tr>
-              <td>2016</td>
-              <td>7,841</td>
-              <td>8,903</td>
-              <td style="color:#10b981">+13.5%</td>
-              <td>93</td>
-              <td style="color:#10b981">51</td>
-              <td>54.8%</td>
-              <td style="color:#10b981">882 €</td>
-              <td style="color:#ef4444">6.8%</td>
-            </tr><tr>
-              <td>2017</td>
-              <td>12,903</td>
-              <td>19,004</td>
-              <td style="color:#10b981">+47.3%</td>
-              <td>72</td>
-              <td style="color:#10b981">55</td>
-              <td>76.4%</td>
-              <td style="color:#10b981">5,756 €</td>
-              <td style="color:#ef4444">1.6%</td>
-            </tr><tr>
-              <td>2018</td>
-              <td>23,004</td>
-              <td>28,182</td>
-              <td style="color:#10b981">+22.5%</td>
-              <td>117</td>
-              <td style="color:#10b981">64</td>
-              <td>54.7%</td>
-              <td style="color:#10b981">4,746 €</td>
-              <td style="color:#ef4444">8.8%</td>
-            </tr><tr>
-              <td>2019</td>
-              <td>32,182</td>
-              <td>39,874</td>
-              <td style="color:#10b981">+23.9%</td>
-              <td>76</td>
-              <td style="color:#10b981">45</td>
-              <td>59.2%</td>
-              <td style="color:#10b981">7,486 €</td>
-              <td style="color:#ef4444">5.5%</td>
-            </tr><tr>
-              <td>2020</td>
-              <td>43,874</td>
-              <td>51,671</td>
-              <td style="color:#10b981">+17.8%</td>
-              <td>92</td>
-              <td style="color:#10b981">49</td>
-              <td>53.3%</td>
-              <td style="color:#10b981">6,782 €</td>
-              <td style="color:#ef4444">7.3%</td>
-            </tr><tr>
-              <td>2021</td>
-              <td>55,671</td>
-              <td>72,565</td>
-              <td style="color:#10b981">+30.3%</td>
-              <td>86</td>
-              <td style="color:#10b981">55</td>
-              <td>64.0%</td>
-              <td style="color:#10b981">14,704 €</td>
-              <td style="color:#ef4444">2.3%</td>
-            </tr><tr>
-              <td>2022</td>
-              <td>76,565</td>
-              <td>102,171</td>
-              <td style="color:#10b981">+33.4%</td>
-              <td>104</td>
-              <td style="color:#10b981">62</td>
-              <td>59.6%</td>
-              <td style="color:#10b981">23,383 €</td>
-              <td style="color:#ef4444">5.8%</td>
-            </tr><tr>
-              <td>2023</td>
-              <td>106,171</td>
-              <td>125,512</td>
-              <td style="color:#10b981">+18.2%</td>
-              <td>81</td>
-              <td style="color:#10b981">49</td>
-              <td>60.5%</td>
-              <td style="color:#10b981">18,524 €</td>
-              <td style="color:#ef4444">6.5%</td>
-            </tr><tr>
-              <td>2024</td>
-              <td>131,542</td>
-              <td>227,567</td>
-              <td style="color:#10b981">+73.0%</td>
-              <td>100</td>
-              <td style="color:#10b981">70</td>
-              <td>70.0%</td>
-              <td style="color:#10b981">92,548 €</td>
-              <td style="color:#ef4444">2.6%</td>
-            </tr><tr>
-              <td>2025</td>
-              <td>231,567</td>
-              <td>270,970</td>
-              <td style="color:#10b981">+17.0%</td>
-              <td>120</td>
-              <td style="color:#10b981">69</td>
-              <td>57.5%</td>
-              <td style="color:#10b981">44,945 €</td>
-              <td style="color:#ef4444">6.9%</td>
-            </tr></tbody>
-          </table>
-        </div>
-        <div class="tab-panel " id="panel-2010">
-          <table class="data-table">
-            <thead><tr>
-              <th>Año</th><th>Cap. inicio</th><th>Cap. fin</th>
-              <th>Retorno</th><th>Trades</th><th>Wins</th>
-              <th>Win Rate</th><th>PnL</th><th>Max DD</th>
-            </tr></thead>
-            <tbody><tr>
-              <td>2010</td>
-              <td>4,000</td>
-              <td>3,981</td>
-              <td style="color:#ef4444">-0.5%</td>
-              <td>9</td>
-              <td style="color:#10b981">3</td>
-              <td>33.3%</td>
-              <td style="color:#ef4444">-47 €</td>
-              <td style="color:#ef4444">2.3%</td>
-            </tr><tr>
-              <td>2011</td>
-              <td>7,981</td>
-              <td>8,445</td>
-              <td style="color:#10b981">+5.8%</td>
-              <td>103</td>
-              <td style="color:#10b981">62</td>
-              <td>60.2%</td>
-              <td style="color:#10b981">379 €</td>
-              <td style="color:#ef4444">8.9%</td>
-            </tr><tr>
-              <td>2012</td>
-              <td>12,445</td>
-              <td>18,132</td>
-              <td style="color:#10b981">+45.7%</td>
-              <td>77</td>
-              <td style="color:#10b981">58</td>
-              <td>75.3%</td>
-              <td style="color:#10b981">5,410 €</td>
-              <td style="color:#ef4444">1.2%</td>
-            </tr><tr>
-              <td>2013</td>
-              <td>22,132</td>
-              <td>34,897</td>
-              <td style="color:#10b981">+57.7%</td>
-              <td>86</td>
-              <td style="color:#10b981">58</td>
-              <td>67.4%</td>
-              <td style="color:#10b981">12,339 €</td>
-              <td style="color:#ef4444">6.4%</td>
-            </tr><tr>
-              <td>2014</td>
-              <td>38,897</td>
-              <td>51,871</td>
-              <td style="color:#10b981">+33.4%</td>
-              <td>101</td>
-              <td style="color:#10b981">69</td>
-              <td>68.3%</td>
-              <td style="color:#10b981">12,969 €</td>
-              <td style="color:#ef4444">3.1%</td>
-            </tr><tr>
-              <td>2015</td>
-              <td>55,871</td>
-              <td>73,148</td>
-              <td style="color:#10b981">+30.9%</td>
-              <td>101</td>
-              <td style="color:#10b981">62</td>
-              <td>61.4%</td>
-              <td style="color:#10b981">16,327 €</td>
-              <td style="color:#ef4444">4.0%</td>
-            </tr><tr>
-              <td>2016</td>
-              <td>75,244</td>
-              <td>87,731</td>
-              <td style="color:#10b981">+16.6%</td>
-              <td>93</td>
-              <td style="color:#10b981">52</td>
-              <td>55.9%</td>
-              <td style="color:#10b981">9,220 €</td>
-              <td style="color:#ef4444">5.5%</td>
-            </tr><tr>
-              <td>2017</td>
-              <td>91,731</td>
-              <td>139,506</td>
-              <td style="color:#10b981">+52.1%</td>
-              <td>72</td>
-              <td style="color:#10b981">55</td>
-              <td>76.4%</td>
-              <td style="color:#10b981">45,833 €</td>
-              <td style="color:#ef4444">1.6%</td>
-            </tr><tr>
-              <td>2018</td>
-              <td>143,506</td>
-              <td>181,011</td>
-              <td style="color:#10b981">+26.1%</td>
-              <td>117</td>
-              <td style="color:#10b981">64</td>
-              <td>54.7%</td>
-              <td style="color:#10b981">34,617 €</td>
-              <td style="color:#ef4444">8.9%</td>
-            </tr><tr>
-              <td>2019</td>
-              <td>185,011</td>
-              <td>231,294</td>
-              <td style="color:#10b981">+25.0%</td>
-              <td>76</td>
-              <td style="color:#10b981">45</td>
-              <td>59.2%</td>
-              <td style="color:#10b981">44,887 €</td>
-              <td style="color:#ef4444">5.5%</td>
-            </tr><tr>
-              <td>2020</td>
-              <td>235,294</td>
-              <td>281,793</td>
-              <td style="color:#10b981">+19.8%</td>
-              <td>92</td>
-              <td style="color:#10b981">50</td>
-              <td>54.3%</td>
-              <td style="color:#10b981">39,451 €</td>
-              <td style="color:#ef4444">7.3%</td>
-            </tr><tr>
-              <td>2021</td>
-              <td>285,793</td>
-              <td>400,238</td>
-              <td style="color:#10b981">+40.0%</td>
-              <td>86</td>
-              <td style="color:#10b981">54</td>
-              <td>62.8%</td>
-              <td style="color:#10b981">104,123 €</td>
-              <td style="color:#ef4444">3.2%</td>
-            </tr><tr>
-              <td>2022</td>
-              <td>404,238</td>
-              <td>520,440</td>
-              <td style="color:#10b981">+28.7%</td>
-              <td>103</td>
-              <td style="color:#10b981">60</td>
-              <td>58.3%</td>
-              <td style="color:#10b981">106,604 €</td>
-              <td style="color:#ef4444">5.8%</td>
-            </tr><tr>
-              <td>2023</td>
-              <td>524,440</td>
-              <td>620,764</td>
-              <td style="color:#10b981">+18.4%</td>
-              <td>81</td>
-              <td style="color:#10b981">49</td>
-              <td>60.5%</td>
-              <td style="color:#10b981">92,174 €</td>
-              <td style="color:#ef4444">6.6%</td>
-            </tr><tr>
-              <td>2024</td>
-              <td>634,815</td>
-              <td>1,103,040</td>
-              <td style="color:#10b981">+73.8%</td>
-              <td>100</td>
-              <td style="color:#10b981">70</td>
-              <td>70.0%</td>
-              <td style="color:#10b981">452,231 €</td>
-              <td style="color:#ef4444">2.6%</td>
-            </tr><tr>
-              <td>2025</td>
-              <td>1,107,040</td>
-              <td>1,295,283</td>
-              <td style="color:#10b981">+17.0%</td>
-              <td>120</td>
-              <td style="color:#10b981">69</td>
-              <td>57.5%</td>
-              <td style="color:#10b981">215,659 €</td>
-              <td style="color:#ef4444">6.9%</td>
-            </tr></tbody>
-          </table>
-        </div>
-        <div class="tab-panel " id="panel-2005">
-          <table class="data-table">
-            <thead><tr>
-              <th>Año</th><th>Cap. inicio</th><th>Cap. fin</th>
-              <th>Retorno</th><th>Trades</th><th>Wins</th>
-              <th>Win Rate</th><th>PnL</th><th>Max DD</th>
-            </tr></thead>
-            <tbody><tr>
-              <td>2005</td>
-              <td>4,000</td>
-              <td>4,215</td>
-              <td style="color:#10b981">+5.4%</td>
-              <td>9</td>
-              <td style="color:#10b981">6</td>
-              <td>66.7%</td>
-              <td style="color:#10b981">191 €</td>
-              <td style="color:#ef4444">0.4%</td>
-            </tr><tr>
-              <td>2006</td>
-              <td>8,215</td>
-              <td>10,624</td>
-              <td style="color:#10b981">+29.3%</td>
-              <td>80</td>
-              <td style="color:#10b981">47</td>
-              <td>58.8%</td>
-              <td style="color:#10b981">2,241 €</td>
-              <td style="color:#ef4444">9.7%</td>
-            </tr><tr>
-              <td>2007</td>
-              <td>14,624</td>
-              <td>17,674</td>
-              <td style="color:#10b981">+20.9%</td>
-              <td>103</td>
-              <td style="color:#10b981">55</td>
-              <td>53.4%</td>
-              <td style="color:#10b981">2,714 €</td>
-              <td style="color:#ef4444">7.7%</td>
-            </tr><tr>
-              <td>2008</td>
-              <td>21,541</td>
-              <td>18,956</td>
-              <td style="color:#ef4444">-12.0%</td>
-              <td>67</td>
-              <td style="color:#10b981">21</td>
-              <td>31.3%</td>
-              <td style="color:#ef4444">-2,792 €</td>
-              <td style="color:#ef4444">12.2%</td>
-            </tr><tr>
-              <td>2009</td>
-              <td>22,956</td>
-              <td>24,746</td>
-              <td style="color:#10b981">+7.8%</td>
-              <td>38</td>
-              <td style="color:#10b981">33</td>
-              <td>86.8%</td>
-              <td style="color:#10b981">1,763 €</td>
-              <td style="color:#ef4444">1.3%</td>
-            </tr><tr>
-              <td>2010</td>
-              <td>28,746</td>
-              <td>34,843</td>
-              <td style="color:#10b981">+21.2%</td>
-              <td>83</td>
-              <td style="color:#10b981">49</td>
-              <td>59.0%</td>
-              <td style="color:#10b981">5,394 €</td>
-              <td style="color:#ef4444">8.6%</td>
-            </tr><tr>
-              <td>2011</td>
-              <td>38,843</td>
-              <td>44,007</td>
-              <td style="color:#10b981">+13.3%</td>
-              <td>98</td>
-              <td style="color:#10b981">60</td>
-              <td>61.2%</td>
-              <td style="color:#10b981">5,006 €</td>
-              <td style="color:#ef4444">8.3%</td>
-            </tr><tr>
-              <td>2012</td>
-              <td>48,007</td>
-              <td>72,785</td>
-              <td style="color:#10b981">+51.6%</td>
-              <td>74</td>
-              <td style="color:#10b981">56</td>
-              <td>75.7%</td>
-              <td style="color:#10b981">23,711 €</td>
-              <td style="color:#ef4444">1.1%</td>
-            </tr><tr>
-              <td>2013</td>
-              <td>76,785</td>
-              <td>123,644</td>
-              <td style="color:#10b981">+61.0%</td>
-              <td>86</td>
-              <td style="color:#10b981">58</td>
-              <td>67.4%</td>
-              <td style="color:#10b981">45,274 €</td>
-              <td style="color:#ef4444">6.4%</td>
-            </tr><tr>
-              <td>2014</td>
-              <td>127,644</td>
-              <td>171,529</td>
-              <td style="color:#10b981">+34.4%</td>
-              <td>101</td>
-              <td style="color:#10b981">69</td>
-              <td>68.3%</td>
-              <td style="color:#10b981">43,900 €</td>
-              <td style="color:#ef4444">3.2%</td>
-            </tr><tr>
-              <td>2015</td>
-              <td>175,529</td>
-              <td>231,078</td>
-              <td style="color:#10b981">+31.6%</td>
-              <td>101</td>
-              <td style="color:#10b981">62</td>
-              <td>61.4%</td>
-              <td style="color:#10b981">52,489 €</td>
-              <td style="color:#ef4444">4.0%</td>
-            </tr><tr>
-              <td>2016</td>
-              <td>229,040</td>
-              <td>266,805</td>
-              <td style="color:#10b981">+16.5%</td>
-              <td>93</td>
-              <td style="color:#10b981">52</td>
-              <td>55.9%</td>
-              <td style="color:#10b981">27,615 €</td>
-              <td style="color:#ef4444">5.5%</td>
-            </tr><tr>
-              <td>2017</td>
-              <td>270,805</td>
-              <td>413,372</td>
-              <td style="color:#10b981">+52.6%</td>
-              <td>72</td>
-              <td style="color:#10b981">55</td>
-              <td>76.4%</td>
-              <td style="color:#10b981">136,777 €</td>
-              <td style="color:#ef4444">1.6%</td>
-            </tr><tr>
-              <td>2018</td>
-              <td>417,372</td>
-              <td>527,350</td>
-              <td style="color:#10b981">+26.3%</td>
-              <td>117</td>
-              <td style="color:#10b981">64</td>
-              <td>54.7%</td>
-              <td style="color:#10b981">101,154 €</td>
-              <td style="color:#ef4444">8.9%</td>
-            </tr><tr>
-              <td>2019</td>
-              <td>531,350</td>
-              <td>665,451</td>
-              <td style="color:#10b981">+25.2%</td>
-              <td>76</td>
-              <td style="color:#10b981">45</td>
-              <td>59.2%</td>
-              <td style="color:#10b981">130,091 €</td>
-              <td style="color:#ef4444">5.5%</td>
-            </tr><tr>
-              <td>2020</td>
-              <td>669,451</td>
-              <td>801,811</td>
-              <td style="color:#10b981">+19.8%</td>
-              <td>92</td>
-              <td style="color:#10b981">50</td>
-              <td>54.3%</td>
-              <td style="color:#10b981">112,401 €</td>
-              <td style="color:#ef4444">7.4%</td>
-            </tr><tr>
-              <td>2021</td>
-              <td>805,811</td>
-              <td>1,131,320</td>
-              <td style="color:#10b981">+40.4%</td>
-              <td>86</td>
-              <td style="color:#10b981">54</td>
-              <td>62.8%</td>
-              <td style="color:#10b981">295,448 €</td>
-              <td style="color:#ef4444">3.2%</td>
-            </tr><tr>
-              <td>2022</td>
-              <td>1,135,320</td>
-              <td>1,461,927</td>
-              <td style="color:#10b981">+28.8%</td>
-              <td>103</td>
-              <td style="color:#10b981">60</td>
-              <td>58.3%</td>
-              <td style="color:#10b981">299,704 €</td>
-              <td style="color:#ef4444">5.9%</td>
-            </tr><tr>
-              <td>2023</td>
-              <td>1,465,927</td>
-              <td>1,735,643</td>
-              <td style="color:#10b981">+18.4%</td>
-              <td>81</td>
-              <td style="color:#10b981">49</td>
-              <td>60.5%</td>
-              <td style="color:#10b981">258,023 €</td>
-              <td style="color:#ef4444">6.6%</td>
-            </tr><tr>
-              <td>2024</td>
-              <td>1,767,746</td>
-              <td>3,074,467</td>
-              <td style="color:#10b981">+73.9%</td>
-              <td>100</td>
-              <td style="color:#10b981">70</td>
-              <td>70.0%</td>
-              <td style="color:#10b981">1,262,232 €</td>
-              <td style="color:#ef4444">2.6%</td>
-            </tr><tr>
-              <td>2025</td>
-              <td>3,078,467</td>
-              <td>3,602,441</td>
-              <td style="color:#10b981">+17.0%</td>
-              <td>120</td>
-              <td style="color:#10b981">69</td>
-              <td>57.5%</td>
-              <td style="color:#10b981">600,084 €</td>
-              <td style="color:#ef4444">6.9%</td>
-            </tr></tbody>
-          </table>
-        </div>
+    <div class="collapsible" id="sesiones" style="max-height:600px">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th class="num">Capital</th>
+              <th class="num">Drawdown</th>
+              <th class="num">Señales</th>
+              <th class="num">Trades</th>
+              <th class="num">Posiciones</th>
+              <th class="num">Tiempo</th>
+              <th>Risk Guardian</th>
+            </tr>
+          </thead>
+          <tbody>
+        <tr>
+            <td>2026-05-04</td>
+            <td class="num">1,084,005.24 €</td>
+            <td class="num">—</td>
+            <td class="num">7</td>
+            <td class="num">0</td>
+            <td class="num">8</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-05-01</td>
+            <td class="num">1,103,039.32 €</td>
+            <td class="num">—</td>
+            <td class="num">8</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-30</td>
+            <td class="num">1,095,942.98 €</td>
+            <td class="num">—</td>
+            <td class="num">14</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-29</td>
+            <td class="num">1,076,130.17 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-28</td>
+            <td class="num">1,082,670.42 €</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-27</td>
+            <td class="num">1,085,816.16 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-24</td>
+            <td class="num">1,088,142.31 €</td>
+            <td class="num">—</td>
+            <td class="num">7</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-23</td>
+            <td class="num">1,083,304.85 €</td>
+            <td class="num">—</td>
+            <td class="num">12</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-22</td>
+            <td class="num">1,063,222.17 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-21</td>
+            <td class="num">1,064,561.42 €</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-20</td>
+            <td class="num">1,069,196.12 €</td>
+            <td class="num">—</td>
+            <td class="num">12</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-17</td>
+            <td class="num">1,069,391.70 €</td>
+            <td class="num">—</td>
+            <td class="num">15</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-16</td>
+            <td class="num">1,053,480.72 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-15</td>
+            <td class="num">1,042,560.56 €</td>
+            <td class="num">—</td>
+            <td class="num">4</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-14</td>
+            <td class="num">1,045,424.86 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-13</td>
+            <td class="num">1,046,277.70 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">1</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-12</td>
+            <td class="num">1,042,876.92 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-10</td>
+            <td class="num">1,045,892.06 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-09</td>
+            <td class="num">1,037,730.22 €</td>
+            <td class="num">—</td>
+            <td class="num">18</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-08</td>
+            <td class="num">1,008,839.02 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-06</td>
+            <td class="num">1,006,353.50 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-04</td>
+            <td class="num">1,001,869.62 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-03</td>
+            <td class="num">1,000,721.14 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-04-01</td>
+            <td class="num">1,004,036.81 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-31</td>
+            <td class="num">1,002,061.54 €</td>
+            <td class="num">—</td>
+            <td class="num">6</td>
+            <td class="num">0</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-30</td>
+            <td class="num">1,001,487.58 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-27</td>
+            <td class="num">999,068.73 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-26</td>
+            <td class="num">1,000,799.55 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-25</td>
+            <td class="num">1,000,747.74 €</td>
+            <td class="num">—</td>
+            <td class="num">3</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-24</td>
+            <td class="num">1,000,748.44 €</td>
+            <td class="num">—</td>
+            <td class="num">2</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-19</td>
+            <td class="num">1,000,544.04 €</td>
+            <td class="num">—</td>
+            <td class="num">1</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-18</td>
+            <td class="num">1,000,465.93 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-17</td>
+            <td class="num">1,000,473.28 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr>
+        <tr>
+            <td>2026-03-16</td>
+            <td class="num">1,000,351.10 €</td>
+            <td class="num">—</td>
+            <td class="num">0</td>
+            <td class="num">0</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+            <td><span class="badge ok">OK</span></td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
-</div>
+  <!-- TABLA TRADES -->
+  <div class="section">
+    <div class="section-header" onclick="toggle('trades')">
+      <div class="section-title">// Trades ejecutados</div>
+      <button class="toggle-btn" id="btn-trades">▼ ocultar</button>
+    </div>
+    <div class="collapsible" id="trades" style="max-height:500px">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Símbolo</th>
+              <th class="num">Acciones</th>
+              <th class="num">Entrada</th>
+              <th class="num">Stop</th>
+              <th class="num">PnL (€)</th>
+              <th class="num">%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+                <td>2026-04-13</td>
+                <td><strong>AAPL</strong></td>
+                <td class="num">484</td>
+                <td class="num">259.2</td>
+                <td class="num"></td>
+                <td class="num"><span style="color:#00c896">+7,277 €</span></td>
+                <td class="num"><span style="color:#00c896">+6.80%</span></td>
+            </tr>
+            <tr>
+                <td>2026-04-12</td>
+                <td><strong>AAPL</strong></td>
+                <td class="num">467</td>
+                <td class="num">260.48</td>
+                <td class="num"></td>
+                <td class="num"><span style="color:#00c896">+6,512 €</span></td>
+                <td class="num"><span style="color:#00c896">+6.28%</span></td>
+            </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-<div class="footer">
-  LIBERTAD_2045 v2 · Arquitecto: Javier Beneito · 2026-04-14 18:30
-</div>
+</main>
+
+<footer class="footer">
+  LIBERTAD_2045 · Sistema autónomo de trading · Objetivo 2045
+</footer>
 
 <script>
-const COLORES = {"2015": "#00d4ff", "2010": "#7c3aed", "2005": "#f59e0b", "win": "#10b981", "loss": "#ef4444", "bg": "#0f1117", "card": "#1a1d2e", "border": "#2d3148"};
+const fechas = ["2026-03-16", "2026-03-17", "2026-03-18", "2026-03-19", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-30", "2026-03-31", "2026-04-01", "2026-04-03", "2026-04-04", "2026-04-06", "2026-04-08", "2026-04-09", "2026-04-10", "2026-04-12", "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17", "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24", "2026-04-27", "2026-04-28", "2026-04-29", "2026-04-30", "2026-05-01", "2026-05-04"];
+const capitales = [1000351.1, 1000473.28, 1000465.93, 1000544.04, 1000748.44, 1000747.74, 1000799.55, 999068.73, 1001487.58, 1002061.54, 1004036.81, 1000721.14, 1001869.62, 1006353.5, 1008839.02, 1037730.22, 1045892.06, 1042876.92, 1046277.7, 1045424.86, 1042560.56, 1053480.72, 1069391.7, 1069196.12, 1064561.42, 1063222.17, 1083304.85, 1088142.31, 1085816.16, 1082670.42, 1076130.17, 1095942.98, 1103039.32, 1084005.24];
+const senales = [0, 0, 0, 1, 2, 3, 0, 0, 1, 6, 1, 1, 1, 2, 2, 18, 0, 0, 1, 2, 4, 2, 15, 12, 6, 4, 12, 7, 4, 6, 2, 14, 8, 7];
+const posiciones = [1, 1, 1, 1, 1, 1, 2, 2, 2, 3, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 9, 8];
 
-// ── Curvas de capital ──
-const capitalData = [{"label": "Desde 2015", "data": [{"x": "2015-01-02", "y": 4000.0}, {"x": "2015-01-08", "y": 4000.0}, {"x": "2015-01-15", "y": 4000.0}, {"x": "2015-01-22", "y": 4000.0}, {"x": "2015-01-29", "y": 4000.0}, {"x": "2015-02-05", "y": 4000.0}, {"x": "2015-02-11", "y": 4000.0}, {"x": "2015-02-19", "y": 4000.0}, {"x": "2015-02-25", "y": 4000.0}, {"x": "2015-03-04", "y": 4000.0}, {"x": "2015-03-11", "y": 4000.0}, {"x": "2015-03-17", "y": 4000.0}, {"x": "2015-03-24", "y": 4000.0}, {"x": "2015-03-30", "y": 4000.0}, {"x": "2015-04-07", "y": 4000.0}, {"x": "2015-04-14", "y": 4000.0}, {"x": "2015-04-20", "y": 4000.0}, {"x": "2015-04-27", "y": 4000.0}, {"x": "2015-05-04", "y": 4000.0}, {"x": "2015-05-08", "y": 4000.0}, {"x": "2015-05-15", "y": 4000.0}, {"x": "2015-05-21", "y": 4000.0}, {"x": "2015-05-29", "y": 4000.0}, {"x": "2015-06-05", "y": 4000.0}, {"x": "2015-06-11", "y": 4000.0}, {"x": "2015-06-18", "y": 4000.0}, {"x": "2015-06-24", "y": 4000.0}, {"x": "2015-07-01", "y": 4000.0}, {"x": "2015-07-09", "y": 4000.0}, {"x": "2015-07-15", "y": 4000.0}, {"x": "2015-07-22", "y": 4000.0}, {"x": "2015-07-29", "y": 4000.0}, {"x": "2015-08-04", "y": 4000.0}, {"x": "2015-08-11", "y": 4000.0}, {"x": "2015-08-17", "y": 4000.0}, {"x": "2015-08-24", "y": 4000.0}, {"x": "2015-08-31", "y": 4000.0}, {"x": "2015-09-04", "y": 4000.0}, {"x": "2015-09-14", "y": 4000.0}, {"x": "2015-09-18", "y": 4000.0}, {"x": "2015-09-25", "y": 4000.0}, {"x": "2015-10-02", "y": 4000.0}, {"x": "2015-10-08", "y": 4000.0}, {"x": "2015-10-15", "y": 4000.0}, {"x": "2015-10-22", "y": 4000.0}, {"x": "2015-10-28", "y": 4000.0}, {"x": "2015-11-04", "y": 3997.51}, {"x": "2015-11-10", "y": 3955.78}, {"x": "2015-11-17", "y": 3960.59}, {"x": "2015-11-24", "y": 3960.59}, {"x": "2015-12-01", "y": 3960.59}, {"x": "2015-12-08", "y": 3911.77}, {"x": "2015-12-14", "y": 3892.23}, {"x": "2015-12-21", "y": 3878.77}, {"x": "2015-12-29", "y": 3878.77}, {"x": "2016-01-05", "y": 7841.14}, {"x": "2016-01-12", "y": 7700.88}, {"x": "2016-01-20", "y": 7534.23}, {"x": "2016-01-26", "y": 7483.18}, {"x": "2016-02-02", "y": 7403.86}, {"x": "2016-02-08", "y": 7348.1}, {"x": "2016-02-16", "y": 7311.22}, {"x": "2016-02-23", "y": 7311.22}, {"x": "2016-02-29", "y": 7361.8}, {"x": "2016-03-07", "y": 7361.8}, {"x": "2016-03-11", "y": 7361.8}, {"x": "2016-03-18", "y": 7361.8}, {"x": "2016-03-28", "y": 7361.8}, {"x": "2016-04-01", "y": 7323.44}, {"x": "2016-04-08", "y": 7323.44}, {"x": "2016-04-15", "y": 7469.96}, {"x": "2016-04-21", "y": 7600.35}, {"x": "2016-04-28", "y": 7600.35}, {"x": "2016-05-04", "y": 7895.54}, {"x": "2016-05-11", "y": 7895.54}, {"x": "2016-05-18", "y": 7884.0}, {"x": "2016-05-24", "y": 7823.3}, {"x": "2016-06-01", "y": 7823.3}, {"x": "2016-06-07", "y": 7823.3}, {"x": "2016-06-14", "y": 7831.4}, {"x": "2016-06-21", "y": 7903.78}, {"x": "2016-06-27", "y": 7893.21}, {"x": "2016-07-05", "y": 8245.11}, {"x": "2016-07-11", "y": 8255.17}, {"x": "2016-07-18", "y": 8255.17}, {"x": "2016-07-25", "y": 8547.54}, {"x": "2016-07-29", "y": 8529.78}, {"x": "2016-08-05", "y": 8559.33}, {"x": "2016-08-12", "y": 8559.33}, {"x": "2016-08-18", "y": 8888.28}, {"x": "2016-08-25", "y": 8895.32}, {"x": "2016-08-31", "y": 8827.71}, {"x": "2016-09-08", "y": 8656.42}, {"x": "2016-09-15", "y": 8563.93}, {"x": "2016-09-21", "y": 8563.93}, {"x": "2016-09-28", "y": 8576.51}, {"x": "2016-10-04", "y": 8587.72}, {"x": "2016-10-11", "y": 8587.72}, {"x": "2016-10-18", "y": 8600.08}, {"x": "2016-10-24", "y": 8611.33}, {"x": "2016-10-31", "y": 8777.45}, {"x": "2016-11-07", "y": 8532.8}, {"x": "2016-11-11", "y": 8532.8}, {"x": "2016-11-18", "y": 8547.65}, {"x": "2016-11-25", "y": 8547.65}, {"x": "2016-12-02", "y": 8662.86}, {"x": "2016-12-09", "y": 8739.25}, {"x": "2016-12-15", "y": 8729.49}, {"x": "2016-12-22", "y": 8974.0}, {"x": "2016-12-29", "y": 8974.0}, {"x": "2017-01-06", "y": 12912.83}, {"x": "2017-01-13", "y": 12912.83}, {"x": "2017-01-20", "y": 12908.59}, {"x": "2017-01-27", "y": 12874.69}, {"x": "2017-02-03", "y": 13141.8}, {"x": "2017-02-09", "y": 13319.32}, {"x": "2017-02-16", "y": 13334.26}, {"x": "2017-02-23", "y": 13356.96}, {"x": "2017-03-02", "y": 13437.52}, {"x": "2017-03-09", "y": 13437.52}, {"x": "2017-03-15", "y": 13437.52}, {"x": "2017-03-22", "y": 14131.41}, {"x": "2017-03-28", "y": 14078.0}, {"x": "2017-04-04", "y": 14021.02}, {"x": "2017-04-11", "y": 14021.02}, {"x": "2017-04-18", "y": 14021.02}, {"x": "2017-04-25", "y": 14021.02}, {"x": "2017-05-02", "y": 14021.02}, {"x": "2017-05-08", "y": 13903.08}, {"x": "2017-05-15", "y": 13903.08}, {"x": "2017-05-19", "y": 13903.08}, {"x": "2017-05-26", "y": 14310.48}, {"x": "2017-06-05", "y": 14391.58}, {"x": "2017-06-09", "y": 14909.6}, {"x": "2017-06-16", "y": 14816.36}, {"x": "2017-06-22", "y": 14755.83}, {"x": "2017-06-29", "y": 14879.79}, {"x": "2017-07-07", "y": 15140.38}, {"x": "2017-07-13", "y": 15511.26}, {"x": "2017-07-20", "y": 15480.57}, {"x": "2017-07-27", "y": 15480.57}, {"x": "2017-08-02", "y": 15461.7}, {"x": "2017-08-09", "y": 15751.4}, {"x": "2017-08-15", "y": 15719.73}, {"x": "2017-08-22", "y": 16009.47}, {"x": "2017-08-29", "y": 16113.75}, {"x": "2017-09-05", "y": 16113.75}, {"x": "2017-09-12", "y": 16249.69}, {"x": "2017-09-18", "y": 16268.15}, {"x": "2017-09-25", "y": 16444.7}, {"x": "2017-10-02", "y": 16823.45}, {"x": "2017-10-06", "y": 16823.45}, {"x": "2017-10-13", "y": 16719.68}, {"x": "2017-10-19", "y": 16719.68}, {"x": "2017-10-26", "y": 16854.93}, {"x": "2017-11-02", "y": 16675.31}, {"x": "2017-11-08", "y": 16682.31}, {"x": "2017-11-15", "y": 17608.49}, {"x": "2017-11-22", "y": 18116.38}, {"x": "2017-11-29", "y": 18707.57}, {"x": "2017-12-06", "y": 18921.83}, {"x": "2017-12-12", "y": 18984.61}, {"x": "2017-12-19", "y": 18901.35}, {"x": "2017-12-27", "y": 19004.25}, {"x": "2018-01-03", "y": 23004.25}, {"x": "2018-01-10", "y": 23004.25}, {"x": "2018-01-17", "y": 23004.25}, {"x": "2018-01-24", "y": 23004.25}, {"x": "2018-01-31", "y": 24968.97}, {"x": "2018-02-06", "y": 27051.95}, {"x": "2018-02-13", "y": 26088.26}, {"x": "2018-02-21", "y": 26200.5}, {"x": "2018-02-27", "y": 26254.29}, {"x": "2018-03-06", "y": 26299.17}, {"x": "2018-03-12", "y": 26388.96}, {"x": "2018-03-19", "y": 26268.0}, {"x": "2018-03-26", "y": 26536.02}, {"x": "2018-04-02", "y": 26323.95}, {"x": "2018-04-09", "y": 26134.33}, {"x": "2018-04-13", "y": 26203.54}, {"x": "2018-04-20", "y": 26243.81}, {"x": "2018-04-27", "y": 26290.12}, {"x": "2018-05-03", "y": 26397.15}, {"x": "2018-05-10", "y": 26570.12}, {"x": "2018-05-17", "y": 26570.12}, {"x": "2018-05-23", "y": 26570.12}, {"x": "2018-05-31", "y": 27257.72}, {"x": "2018-06-06", "y": 27145.42}, {"x": "2018-06-13", "y": 28609.18}, {"x": "2018-06-20", "y": 28889.68}, {"x": "2018-06-26", "y": 29551.7}, {"x": "2018-07-03", "y": 29637.51}, {"x": "2018-07-10", "y": 29784.79}, {"x": "2018-07-17", "y": 29645.13}, {"x": "2018-07-24", "y": 29540.6}, {"x": "2018-07-30", "y": 29977.03}, {"x": "2018-08-06", "y": 29977.03}, {"x": "2018-08-13", "y": 29877.4}, {"x": "2018-08-17", "y": 29676.41}, {"x": "2018-08-24", "y": 29676.41}, {"x": "2018-08-30", "y": 29601.35}, {"x": "2018-09-07", "y": 29620.78}, {"x": "2018-09-14", "y": 29620.78}, {"x": "2018-09-20", "y": 29483.3}, {"x": "2018-09-27", "y": 29777.64}, {"x": "2018-10-03", "y": 29907.33}, {"x": "2018-10-10", "y": 30908.34}, {"x": "2018-10-17", "y": 30423.39}, {"x": "2018-10-23", "y": 29647.12}, {"x": "2018-10-30", "y": 29047.09}, {"x": "2018-11-06", "y": 29175.28}, {"x": "2018-11-12", "y": 29175.28}, {"x": "2018-11-19", "y": 28590.78}, {"x": "2018-11-26", "y": 28552.68}, {"x": "2018-12-03", "y": 28324.4}, {"x": "2018-12-11", "y": 28689.01}, {"x": "2018-12-17", "y": 28789.84}, {"x": "2018-12-24", "y": 28182.43}, {"x": "2018-12-31", "y": 28182.43}, {"x": "2019-01-08", "y": 32237.16}, {"x": "2019-01-15", "y": 32237.16}, {"x": "2019-01-22", "y": 32237.16}, {"x": "2019-01-29", "y": 32288.59}, {"x": "2019-02-05", "y": 32328.01}, {"x": "2019-02-11", "y": 32328.01}, {"x": "2019-02-19", "y": 32328.01}, {"x": "2019-02-25", "y": 32328.01}, {"x": "2019-03-04", "y": 32328.01}, {"x": "2019-03-11", "y": 33028.95}, {"x": "2019-03-15", "y": 33028.95}, {"x": "2019-03-22", "y": 33028.95}, {"x": "2019-03-28", "y": 33028.95}, {"x": "2019-04-04", "y": 33075.78}, {"x": "2019-04-11", "y": 33932.9}, {"x": "2019-04-17", "y": 34516.97}, {"x": "2019-04-25", "y": 35911.86}, {"x": "2019-05-01", "y": 36383.2}, {"x": "2019-05-08", "y": 37047.71}, {"x": "2019-05-15", "y": 35924.15}, {"x": "2019-05-21", "y": 35653.34}, {"x": "2019-05-29", "y": 35011.16}, {"x": "2019-06-05", "y": 35011.16}, {"x": "2019-06-11", "y": 35011.16}, {"x": "2019-06-18", "y": 35011.16}, {"x": "2019-06-24", "y": 35321.12}, {"x": "2019-07-01", "y": 35626.59}, {"x": "2019-07-09", "y": 35545.03}, {"x": "2019-07-15", "y": 35308.59}, {"x": "2019-07-22", "y": 35915.57}, {"x": "2019-07-26", "y": 35915.57}, {"x": "2019-08-02", "y": 36235.28}, {"x": "2019-08-09", "y": 37640.94}, {"x": "2019-08-15", "y": 37545.63}, {"x": "2019-08-22", "y": 37545.63}, {"x": "2019-08-29", "y": 38012.71}, {"x": "2019-09-05", "y": 38483.76}, {"x": "2019-09-12", "y": 39667.26}, {"x": "2019-09-18", "y": 39667.26}, {"x": "2019-09-25", "y": 39392.72}, {"x": "2019-10-02", "y": 38219.88}, {"x": "2019-10-08", "y": 38275.37}, {"x": "2019-10-15", "y": 38275.37}, {"x": "2019-10-21", "y": 38337.87}, {"x": "2019-10-28", "y": 38038.37}, {"x": "2019-11-04", "y": 39711.22}, {"x": "2019-11-08", "y": 39434.54}, {"x": "2019-11-15", "y": 39853.27}, {"x": "2019-11-22", "y": 40067.28}, {"x": "2019-11-29", "y": 40067.28}, {"x": "2019-12-06", "y": 39873.61}, {"x": "2019-12-12", "y": 39873.61}, {"x": "2019-12-19", "y": 39873.61}, {"x": "2019-12-27", "y": 39873.61}, {"x": "2020-01-03", "y": 43873.61}, {"x": "2020-01-10", "y": 43690.54}, {"x": "2020-01-16", "y": 43690.54}, {"x": "2020-01-24", "y": 44294.07}, {"x": "2020-01-31", "y": 46011.01}, {"x": "2020-02-06", "y": 46091.39}, {"x": "2020-02-13", "y": 46434.2}, {"x": "2020-02-21", "y": 46171.22}, {"x": "2020-02-27", "y": 48162.85}, {"x": "2020-03-05", "y": 48216.66}, {"x": "2020-03-11", "y": 46931.62}, {"x": "2020-03-18", "y": 46696.92}, {"x": "2020-03-25", "y": 44805.47}, {"x": "2020-03-31", "y": 44805.47}, {"x": "2020-04-07", "y": 44805.47}, {"x": "2020-04-14", "y": 44805.47}, {"x": "2020-04-21", "y": 44805.47}, {"x": "2020-04-28", "y": 45288.53}, {"x": "2020-05-04", "y": 45157.37}, {"x": "2020-05-11", "y": 45230.28}, {"x": "2020-05-18", "y": 45230.28}, {"x": "2020-05-22", "y": 45566.26}, {"x": "2020-06-01", "y": 46750.38}, {"x": "2020-06-05", "y": 46597.47}, {"x": "2020-06-12", "y": 47763.67}, {"x": "2020-06-19", "y": 47636.02}, {"x": "2020-06-25", "y": 47636.02}, {"x": "2020-07-02", "y": 47636.02}, {"x": "2020-07-09", "y": 47636.02}, {"x": "2020-07-16", "y": 47709.85}, {"x": "2020-07-23", "y": 47709.85}, {"x": "2020-07-29", "y": 47472.95}, {"x": "2020-08-05", "y": 48099.57}, {"x": "2020-08-11", "y": 48199.09}, {"x": "2020-08-18", "y": 48199.09}, {"x": "2020-08-25", "y": 48287.09}, {"x": "2020-08-31", "y": 48287.09}, {"x": "2020-09-08", "y": 51329.12}, {"x": "2020-09-15", "y": 51329.12}, {"x": "2020-09-21", "y": 50598.8}, {"x": "2020-09-28", "y": 51429.5}, {"x": "2020-10-02", "y": 51066.63}, {"x": "2020-10-09", "y": 50886.77}, {"x": "2020-10-16", "y": 51040.31}, {"x": "2020-10-22", "y": 50389.11}, {"x": "2020-10-29", "y": 50189.36}, {"x": "2020-11-04", "y": 49794.03}, {"x": "2020-11-11", "y": 51077.24}, {"x": "2020-11-18", "y": 51230.73}, {"x": "2020-11-24", "y": 51230.73}, {"x": "2020-12-02", "y": 51475.8}, {"x": "2020-12-09", "y": 51475.8}, {"x": "2020-12-15", "y": 51475.8}, {"x": "2020-12-22", "y": 51607.41}, {"x": "2020-12-29", "y": 51607.41}, {"x": "2021-01-06", "y": 55670.8}, {"x": "2021-01-13", "y": 55741.22}, {"x": "2021-01-20", "y": 56428.61}, {"x": "2021-01-27", "y": 64264.45}, {"x": "2021-02-02", "y": 64820.58}, {"x": "2021-02-09", "y": 64820.58}, {"x": "2021-02-17", "y": 64276.53}, {"x": "2021-02-23", "y": 64292.08}, {"x": "2021-03-02", "y": 63820.93}, {"x": "2021-03-09", "y": 64066.42}, {"x": "2021-03-15", "y": 64066.42}, {"x": "2021-03-22", "y": 64183.16}, {"x": "2021-03-26", "y": 64772.6}, {"x": "2021-04-05", "y": 64772.6}, {"x": "2021-04-12", "y": 64772.6}, {"x": "2021-04-16", "y": 64772.6}, {"x": "2021-04-23", "y": 64918.74}, {"x": "2021-04-29", "y": 64430.98}, {"x": "2021-05-06", "y": 63954.07}, {"x": "2021-05-13", "y": 63905.19}, {"x": "2021-05-19", "y": 64403.14}, {"x": "2021-05-26", "y": 64188.14}, {"x": "2021-06-03", "y": 64188.14}, {"x": "2021-06-09", "y": 64188.14}, {"x": "2021-06-16", "y": 64340.6}, {"x": "2021-06-22", "y": 65517.04}, {"x": "2021-06-29", "y": 65517.04}, {"x": "2021-07-07", "y": 65517.04}, {"x": "2021-07-13", "y": 65217.3}, {"x": "2021-07-20", "y": 65108.39}, {"x": "2021-07-26", "y": 65108.39}, {"x": "2021-08-02", "y": 65592.38}, {"x": "2021-08-09", "y": 65168.9}, {"x": "2021-08-13", "y": 65244.16}, {"x": "2021-08-20", "y": 65087.56}, {"x": "2021-08-27", "y": 65253.07}, {"x": "2021-09-02", "y": 65253.07}, {"x": "2021-09-10", "y": 64345.48}, {"x": "2021-09-16", "y": 64463.59}, {"x": "2021-09-23", "y": 64454.88}, {"x": "2021-09-30", "y": 72106.05}, {"x": "2021-10-06", "y": 72339.48}, {"x": "2021-10-13", "y": 72336.91}, {"x": "2021-10-19", "y": 72336.91}, {"x": "2021-10-26", "y": 71891.76}, {"x": "2021-11-02", "y": 71182.26}, {"x": "2021-11-08", "y": 71182.26}, {"x": "2021-11-15", "y": 70667.86}, {"x": "2021-11-19", "y": 70950.65}, {"x": "2021-11-29", "y": 70864.14}, {"x": "2021-12-06", "y": 72607.1}, {"x": "2021-12-10", "y": 72573.02}, {"x": "2021-12-17", "y": 72299.68}, {"x": "2021-12-27", "y": 72564.65}, {"x": "2021-12-31", "y": 72564.65}, {"x": "2022-01-07", "y": 78207.26}, {"x": "2022-01-13", "y": 78246.2}, {"x": "2022-01-21", "y": 77202.7}, {"x": "2022-01-28", "y": 76496.96}, {"x": "2022-02-03", "y": 76496.96}, {"x": "2022-02-10", "y": 78100.53}, {"x": "2022-02-16", "y": 77910.13}, {"x": "2022-02-24", "y": 77904.35}, {"x": "2022-03-03", "y": 78672.24}, {"x": "2022-03-09", "y": 80595.47}, {"x": "2022-03-16", "y": 81869.57}, {"x": "2022-03-23", "y": 81869.57}, {"x": "2022-03-29", "y": 81869.57}, {"x": "2022-04-05", "y": 82147.73}, {"x": "2022-04-11", "y": 82262.42}, {"x": "2022-04-19", "y": 82389.27}, {"x": "2022-04-26", "y": 86927.18}, {"x": "2022-05-02", "y": 90297.17}, {"x": "2022-05-09", "y": 89905.36}, {"x": "2022-05-13", "y": 88621.56}, {"x": "2022-05-20", "y": 87457.79}, {"x": "2022-05-27", "y": 87457.79}, {"x": "2022-06-03", "y": 87457.79}, {"x": "2022-06-10", "y": 85059.8}, {"x": "2022-06-17", "y": 87593.91}, {"x": "2022-06-24", "y": 87593.91}, {"x": "2022-07-01", "y": 87918.94}, {"x": "2022-07-08", "y": 87918.94}, {"x": "2022-07-15", "y": 87327.85}, {"x": "2022-07-22", "y": 86923.7}, {"x": "2022-07-28", "y": 87039.02}, {"x": "2022-08-04", "y": 86750.03}, {"x": "2022-08-10", "y": 86750.03}, {"x": "2022-08-17", "y": 86750.03}, {"x": "2022-08-24", "y": 86750.03}, {"x": "2022-08-30", "y": 86750.03}, {"x": "2022-09-07", "y": 88565.84}, {"x": "2022-09-14", "y": 89961.8}, {"x": "2022-09-20", "y": 89961.8}, {"x": "2022-09-27", "y": 91321.14}, {"x": "2022-10-03", "y": 90776.42}, {"x": "2022-10-10", "y": 90776.42}, {"x": "2022-10-17", "y": 90765.14}, {"x": "2022-10-21", "y": 90765.14}, {"x": "2022-10-28", "y": 90962.78}, {"x": "2022-11-03", "y": 90962.78}, {"x": "2022-11-10", "y": 92674.08}, {"x": "2022-11-17", "y": 97647.51}, {"x": "2022-11-23", "y": 97647.51}, {"x": "2022-12-01", "y": 99703.05}, {"x": "2022-12-08", "y": 102297.69}, {"x": "2022-12-14", "y": 102444.56}, {"x": "2022-12-21", "y": 102171.33}, {"x": "2022-12-28", "y": 102171.33}, {"x": "2023-01-05", "y": 107499.73}, {"x": "2023-01-12", "y": 107648.34}, {"x": "2023-01-19", "y": 107751.08}, {"x": "2023-01-26", "y": 107751.08}, {"x": "2023-02-01", "y": 108984.89}, {"x": "2023-02-08", "y": 109944.61}, {"x": "2023-02-15", "y": 108755.23}, {"x": "2023-02-22", "y": 107560.66}, {"x": "2023-03-01", "y": 107560.66}, {"x": "2023-03-08", "y": 107221.39}, {"x": "2023-03-14", "y": 103365.19}, {"x": "2023-03-21", "y": 102787.33}, {"x": "2023-03-27", "y": 102787.33}, {"x": "2023-04-03", "y": 102787.33}, {"x": "2023-04-11", "y": 102787.33}, {"x": "2023-04-17", "y": 102939.23}, {"x": "2023-04-24", "y": 102939.23}, {"x": "2023-04-28", "y": 103593.83}, {"x": "2023-05-05", "y": 102853.21}, {"x": "2023-05-12", "y": 103100.48}, {"x": "2023-05-18", "y": 103100.48}, {"x": "2023-05-25", "y": 110575.59}, {"x": "2023-06-01", "y": 110152.65}, {"x": "2023-06-08", "y": 113953.61}, {"x": "2023-06-15", "y": 113953.61}, {"x": "2023-06-22", "y": 114103.04}, {"x": "2023-06-29", "y": 116171.63}, {"x": "2023-07-07", "y": 117478.59}, {"x": "2023-07-13", "y": 117478.59}, {"x": "2023-07-20", "y": 117478.59}, {"x": "2023-07-26", "y": 119685.79}, {"x": "2023-08-02", "y": 122292.26}, {"x": "2023-08-09", "y": 122787.06}, {"x": "2023-08-15", "y": 122787.06}, {"x": "2023-08-22", "y": 123171.19}, {"x": "2023-08-28", "y": 123440.89}, {"x": "2023-09-05", "y": 122619.64}, {"x": "2023-09-12", "y": 123335.6}, {"x": "2023-09-18", "y": 124054.65}, {"x": "2023-09-25", "y": 123195.64}, {"x": "2023-10-02", "y": 122685.6}, {"x": "2023-10-06", "y": 121707.29}, {"x": "2023-10-13", "y": 120784.06}, {"x": "2023-10-19", "y": 119292.4}, {"x": "2023-10-26", "y": 119468.1}, {"x": "2023-11-02", "y": 119921.09}, {"x": "2023-11-08", "y": 119921.09}, {"x": "2023-11-15", "y": 121044.47}, {"x": "2023-11-21", "y": 122028.68}, {"x": "2023-11-29", "y": 122028.68}, {"x": "2023-12-06", "y": 123210.21}, {"x": "2023-12-12", "y": 123210.21}, {"x": "2023-12-19", "y": 125511.61}, {"x": "2023-12-27", "y": 125511.61}, {"x": "2024-01-03", "y": 134566.35}, {"x": "2024-01-10", "y": 136748.22}, {"x": "2024-01-17", "y": 136005.72}, {"x": "2024-01-24", "y": 136005.72}, {"x": "2024-01-31", "y": 136005.72}, {"x": "2024-02-06", "y": 137287.69}, {"x": "2024-02-13", "y": 140936.88}, {"x": "2024-02-20", "y": 140936.88}, {"x": "2024-02-27", "y": 140936.88}, {"x": "2024-03-05", "y": 142298.44}, {"x": "2024-03-11", "y": 143687.48}, {"x": "2024-03-18", "y": 142581.01}, {"x": "2024-03-25", "y": 142581.01}, {"x": "2024-04-01", "y": 142581.01}, {"x": "2024-04-08", "y": 158888.66}, {"x": "2024-04-12", "y": 172196.31}, {"x": "2024-04-19", "y": 169163.36}, {"x": "2024-04-26", "y": 168204.32}, {"x": "2024-05-02", "y": 168204.32}, {"x": "2024-05-09", "y": 168204.32}, {"x": "2024-05-15", "y": 168204.32}, {"x": "2024-05-22", "y": 167681.57}, {"x": "2024-05-30", "y": 177782.96}, {"x": "2024-06-05", "y": 176734.72}, {"x": "2024-06-12", "y": 178030.55}, {"x": "2024-06-20", "y": 178591.62}, {"x": "2024-06-26", "y": 180037.96}, {"x": "2024-07-03", "y": 178826.41}, {"x": "2024-07-10", "y": 179040.51}, {"x": "2024-07-17", "y": 178392.75}, {"x": "2024-07-24", "y": 184883.37}, {"x": "2024-07-30", "y": 185982.2}, {"x": "2024-08-06", "y": 187302.39}, {"x": "2024-08-12", "y": 186059.69}, {"x": "2024-08-19", "y": 186059.69}, {"x": "2024-08-26", "y": 186059.69}, {"x": "2024-08-30", "y": 189810.47}, {"x": "2024-09-09", "y": 189168.68}, {"x": "2024-09-13", "y": 189168.68}, {"x": "2024-09-20", "y": 188355.77}, {"x": "2024-09-27", "y": 191822.01}, {"x": "2024-10-03", "y": 191822.01}, {"x": "2024-10-10", "y": 199712.61}, {"x": "2024-10-17", "y": 199712.61}, {"x": "2024-10-23", "y": 198949.31}, {"x": "2024-10-30", "y": 203412.54}, {"x": "2024-11-05", "y": 209369.23}, {"x": "2024-11-12", "y": 208387.73}, {"x": "2024-11-19", "y": 208485.51}, {"x": "2024-11-25", "y": 208809.11}, {"x": "2024-12-03", "y": 209133.63}, {"x": "2024-12-09", "y": 215538.77}, {"x": "2024-12-16", "y": 216017.93}, {"x": "2024-12-23", "y": 227567.2}, {"x": "2024-12-30", "y": 227567.2}, {"x": "2025-01-07", "y": 227558.97}, {"x": "2025-01-15", "y": 222367.1}, {"x": "2025-01-22", "y": 223588.79}, {"x": "2025-01-29", "y": 230884.05}, {"x": "2025-02-04", "y": 230884.05}, {"x": "2025-02-11", "y": 228956.19}, {"x": "2025-02-19", "y": 233458.24}, {"x": "2025-02-25", "y": 252452.7}, {"x": "2025-03-04", "y": 249941.66}, {"x": "2025-03-10", "y": 249273.06}, {"x": "2025-03-17", "y": 248738.28}, {"x": "2025-03-24", "y": 248738.28}, {"x": "2025-03-28", "y": 248738.28}, {"x": "2025-04-04", "y": 238784.77}, {"x": "2025-04-11", "y": 238784.77}, {"x": "2025-04-17", "y": 239083.76}, {"x": "2025-04-25", "y": 235692.87}, {"x": "2025-05-01", "y": 235692.87}, {"x": "2025-05-08", "y": 235964.22}, {"x": "2025-05-15", "y": 235964.22}, {"x": "2025-05-21", "y": 235021.15}, {"x": "2025-05-29", "y": 235721.35}, {"x": "2025-06-04", "y": 236066.31}, {"x": "2025-06-11", "y": 236329.01}, {"x": "2025-06-18", "y": 237004.61}, {"x": "2025-06-25", "y": 238939.78}, {"x": "2025-07-02", "y": 239303.59}, {"x": "2025-07-10", "y": 238761.92}, {"x": "2025-07-16", "y": 239447.22}, {"x": "2025-07-23", "y": 245893.11}, {"x": "2025-07-29", "y": 250262.52}, {"x": "2025-08-05", "y": 250191.95}, {"x": "2025-08-12", "y": 248237.67}, {"x": "2025-08-18", "y": 250934.68}, {"x": "2025-08-25", "y": 251674.36}, {"x": "2025-08-29", "y": 256485.55}, {"x": "2025-09-08", "y": 256307.74}, {"x": "2025-09-15", "y": 256307.74}, {"x": "2025-09-19", "y": 256672.39}, {"x": "2025-09-26", "y": 255509.73}, {"x": "2025-10-03", "y": 255509.73}, {"x": "2025-10-09", "y": 260308.92}, {"x": "2025-10-16", "y": 262290.99}, {"x": "2025-10-22", "y": 260596.93}, {"x": "2025-10-29", "y": 259427.16}, {"x": "2025-11-05", "y": 264498.24}, {"x": "2025-11-11", "y": 264498.24}, {"x": "2025-11-18", "y": 265307.3}, {"x": "2025-11-24", "y": 266282.18}, {"x": "2025-12-02", "y": 264550.06}, {"x": "2025-12-09", "y": 266145.23}, {"x": "2025-12-15", "y": 266610.32}, {"x": "2025-12-22", "y": 269161.71}, {"x": "2025-12-30", "y": 270970.29}], "borderColor": "#00d4ff", "backgroundColor": "#00d4ff18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}, {"label": "Desde 2010", "data": [{"x": "2010-01-04", "y": 4000.0}, {"x": "2010-01-12", "y": 4000.0}, {"x": "2010-01-22", "y": 4000.0}, {"x": "2010-02-02", "y": 4000.0}, {"x": "2010-02-10", "y": 4000.0}, {"x": "2010-02-22", "y": 4000.0}, {"x": "2010-03-03", "y": 4000.0}, {"x": "2010-03-12", "y": 4000.0}, {"x": "2010-03-22", "y": 4000.0}, {"x": "2010-03-31", "y": 4000.0}, {"x": "2010-04-12", "y": 4000.0}, {"x": "2010-04-20", "y": 4000.0}, {"x": "2010-04-29", "y": 4000.0}, {"x": "2010-05-10", "y": 4000.0}, {"x": "2010-05-19", "y": 4000.0}, {"x": "2010-05-27", "y": 4000.0}, {"x": "2010-06-08", "y": 4000.0}, {"x": "2010-06-17", "y": 4000.0}, {"x": "2010-06-25", "y": 4000.0}, {"x": "2010-07-07", "y": 4000.0}, {"x": "2010-07-16", "y": 4000.0}, {"x": "2010-07-27", "y": 4000.0}, {"x": "2010-08-04", "y": 4000.0}, {"x": "2010-08-13", "y": 4000.0}, {"x": "2010-08-24", "y": 4000.0}, {"x": "2010-09-01", "y": 4000.0}, {"x": "2010-09-13", "y": 4000.0}, {"x": "2010-09-22", "y": 4000.0}, {"x": "2010-10-01", "y": 4000.0}, {"x": "2010-10-11", "y": 4000.0}, {"x": "2010-10-20", "y": 4000.0}, {"x": "2010-10-29", "y": 4000.0}, {"x": "2010-11-08", "y": 4000.0}, {"x": "2010-11-17", "y": 3956.97}, {"x": "2010-11-29", "y": 3909.31}, {"x": "2010-12-08", "y": 3926.91}, {"x": "2010-12-16", "y": 4001.61}, {"x": "2010-12-28", "y": 3980.7}, {"x": "2011-01-06", "y": 7992.32}, {"x": "2011-01-14", "y": 7997.77}, {"x": "2011-01-26", "y": 8065.91}, {"x": "2011-02-04", "y": 8150.04}, {"x": "2011-02-15", "y": 8150.04}, {"x": "2011-02-24", "y": 8398.85}, {"x": "2011-03-07", "y": 8339.84}, {"x": "2011-03-16", "y": 8315.59}, {"x": "2011-03-24", "y": 8315.59}, {"x": "2011-04-04", "y": 8315.59}, {"x": "2011-04-13", "y": 8342.99}, {"x": "2011-04-25", "y": 8301.07}, {"x": "2011-05-03", "y": 8307.21}, {"x": "2011-05-12", "y": 8307.21}, {"x": "2011-05-23", "y": 8525.94}, {"x": "2011-06-01", "y": 8558.71}, {"x": "2011-06-10", "y": 8858.08}, {"x": "2011-06-21", "y": 8969.28}, {"x": "2011-06-30", "y": 8992.49}, {"x": "2011-07-11", "y": 9033.91}, {"x": "2011-07-20", "y": 8999.67}, {"x": "2011-07-29", "y": 8867.58}, {"x": "2011-08-08", "y": 8698.86}, {"x": "2011-08-17", "y": 8698.86}, {"x": "2011-08-26", "y": 8582.24}, {"x": "2011-09-07", "y": 8596.26}, {"x": "2011-09-15", "y": 8558.23}, {"x": "2011-09-26", "y": 8607.1}, {"x": "2011-10-05", "y": 8246.65}, {"x": "2011-10-13", "y": 8246.65}, {"x": "2011-10-24", "y": 8246.65}, {"x": "2011-11-02", "y": 8354.06}, {"x": "2011-11-11", "y": 8336.59}, {"x": "2011-11-21", "y": 8342.03}, {"x": "2011-12-01", "y": 8428.7}, {"x": "2011-12-12", "y": 8420.95}, {"x": "2011-12-20", "y": 8445.25}, {"x": "2011-12-30", "y": 8445.25}, {"x": "2012-01-11", "y": 12479.73}, {"x": "2012-01-23", "y": 12588.99}, {"x": "2012-01-31", "y": 12605.71}, {"x": "2012-02-09", "y": 12605.71}, {"x": "2012-02-21", "y": 13080.69}, {"x": "2012-02-29", "y": 13080.69}, {"x": "2012-03-09", "y": 13182.4}, {"x": "2012-03-20", "y": 13116.94}, {"x": "2012-03-29", "y": 13116.94}, {"x": "2012-04-09", "y": 13217.79}, {"x": "2012-04-18", "y": 14215.11}, {"x": "2012-04-27", "y": 14123.39}, {"x": "2012-05-07", "y": 14499.91}, {"x": "2012-05-16", "y": 14750.27}, {"x": "2012-05-25", "y": 14642.62}, {"x": "2012-06-06", "y": 14752.16}, {"x": "2012-06-14", "y": 14752.16}, {"x": "2012-06-25", "y": 14773.48}, {"x": "2012-07-05", "y": 14818.05}, {"x": "2012-07-13", "y": 14918.34}, {"x": "2012-07-24", "y": 15343.48}, {"x": "2012-08-02", "y": 15963.28}, {"x": "2012-08-13", "y": 16295.91}, {"x": "2012-08-21", "y": 16797.57}, {"x": "2012-08-30", "y": 16821.51}, {"x": "2012-09-11", "y": 16710.92}, {"x": "2012-09-19", "y": 17295.25}, {"x": "2012-09-28", "y": 17708.61}, {"x": "2012-10-09", "y": 17755.28}, {"x": "2012-10-18", "y": 17976.02}, {"x": "2012-10-26", "y": 17882.59}, {"x": "2012-11-08", "y": 18132.89}, {"x": "2012-11-19", "y": 18045.04}, {"x": "2012-11-28", "y": 18071.36}, {"x": "2012-12-07", "y": 18104.04}, {"x": "2012-12-18", "y": 18125.8}, {"x": "2012-12-28", "y": 18132.29}, {"x": "2013-01-08", "y": 22054.79}, {"x": "2013-01-17", "y": 22085.64}, {"x": "2013-01-29", "y": 22119.62}, {"x": "2013-02-06", "y": 22936.93}, {"x": "2013-02-15", "y": 22936.93}, {"x": "2013-02-27", "y": 23749.12}, {"x": "2013-03-08", "y": 23749.12}, {"x": "2013-03-18", "y": 23749.12}, {"x": "2013-03-27", "y": 23749.12}, {"x": "2013-04-08", "y": 25146.34}, {"x": "2013-04-16", "y": 25146.34}, {"x": "2013-04-25", "y": 26063.01}, {"x": "2013-05-06", "y": 26623.87}, {"x": "2013-05-15", "y": 27206.04}, {"x": "2013-05-23", "y": 29221.48}, {"x": "2013-06-04", "y": 31031.0}, {"x": "2013-06-13", "y": 30574.53}, {"x": "2013-06-21", "y": 29334.99}, {"x": "2013-07-02", "y": 29151.49}, {"x": "2013-07-12", "y": 29039.29}, {"x": "2013-07-23", "y": 29039.29}, {"x": "2013-07-31", "y": 29674.36}, {"x": "2013-08-09", "y": 30665.66}, {"x": "2013-08-20", "y": 31887.14}, {"x": "2013-08-28", "y": 31420.0}, {"x": "2013-09-09", "y": 30914.63}, {"x": "2013-09-18", "y": 30658.22}, {"x": "2013-09-27", "y": 30787.04}, {"x": "2013-10-07", "y": 31186.94}, {"x": "2013-10-16", "y": 31750.77}, {"x": "2013-10-25", "y": 31785.68}, {"x": "2013-11-04", "y": 32043.51}, {"x": "2013-11-13", "y": 32671.77}, {"x": "2013-11-22", "y": 32671.77}, {"x": "2013-12-04", "y": 34264.43}, {"x": "2013-12-12", "y": 35004.2}, {"x": "2013-12-23", "y": 34896.76}, {"x": "2014-01-03", "y": 38953.71}, {"x": "2014-01-13", "y": 38890.48}, {"x": "2014-01-23", "y": 40151.22}, {"x": "2014-02-03", "y": 41424.3}, {"x": "2014-02-12", "y": 41442.45}, {"x": "2014-02-21", "y": 41442.45}, {"x": "2014-03-04", "y": 41231.98}, {"x": "2014-03-13", "y": 42044.6}, {"x": "2014-03-21", "y": 42662.68}, {"x": "2014-04-01", "y": 42299.51}, {"x": "2014-04-10", "y": 44199.98}, {"x": "2014-04-22", "y": 44088.04}, {"x": "2014-04-30", "y": 43965.92}, {"x": "2014-05-09", "y": 44098.63}, {"x": "2014-05-20", "y": 43803.54}, {"x": "2014-05-29", "y": 43803.54}, {"x": "2014-06-09", "y": 43803.54}, {"x": "2014-06-18", "y": 43856.08}, {"x": "2014-06-27", "y": 44432.08}, {"x": "2014-07-08", "y": 45373.04}, {"x": "2014-07-17", "y": 45640.99}, {"x": "2014-07-28", "y": 46312.14}, {"x": "2014-08-05", "y": 45781.79}, {"x": "2014-08-14", "y": 45425.78}, {"x": "2014-08-25", "y": 45425.78}, {"x": "2014-09-04", "y": 45513.07}, {"x": "2014-09-12", "y": 45439.73}, {"x": "2014-09-23", "y": 46088.84}, {"x": "2014-10-02", "y": 45651.34}, {"x": "2014-10-10", "y": 45012.71}, {"x": "2014-10-21", "y": 45688.23}, {"x": "2014-10-30", "y": 45688.23}, {"x": "2014-11-10", "y": 46197.48}, {"x": "2014-11-18", "y": 47619.52}, {"x": "2014-11-28", "y": 48733.95}, {"x": "2014-12-09", "y": 48833.86}, {"x": "2014-12-17", "y": 51383.88}, {"x": "2014-12-29", "y": 51383.88}, {"x": "2015-01-08", "y": 55783.44}, {"x": "2015-01-20", "y": 55071.42}, {"x": "2015-01-28", "y": 54855.46}, {"x": "2015-02-06", "y": 56718.08}, {"x": "2015-02-18", "y": 56718.08}, {"x": "2015-02-26", "y": 57125.24}, {"x": "2015-03-09", "y": 57469.8}, {"x": "2015-03-18", "y": 57599.03}, {"x": "2015-03-27", "y": 61349.11}, {"x": "2015-04-07", "y": 61327.59}, {"x": "2015-04-16", "y": 60909.92}, {"x": "2015-04-27", "y": 60300.15}, {"x": "2015-05-05", "y": 59314.73}, {"x": "2015-05-14", "y": 60014.75}, {"x": "2015-05-26", "y": 60014.75}, {"x": "2015-06-04", "y": 60925.9}, {"x": "2015-06-12", "y": 61687.67}, {"x": "2015-06-23", "y": 61687.67}, {"x": "2015-07-02", "y": 62503.81}, {"x": "2015-07-13", "y": 61774.51}, {"x": "2015-07-22", "y": 61774.51}, {"x": "2015-07-31", "y": 63726.21}, {"x": "2015-08-11", "y": 63830.25}, {"x": "2015-08-19", "y": 63830.25}, {"x": "2015-08-28", "y": 69973.26}, {"x": "2015-09-09", "y": 69825.87}, {"x": "2015-09-17", "y": 69825.87}, {"x": "2015-09-28", "y": 69364.61}, {"x": "2015-10-07", "y": 69082.38}, {"x": "2015-10-16", "y": 68835.93}, {"x": "2015-10-26", "y": 68968.01}, {"x": "2015-11-04", "y": 69183.24}, {"x": "2015-11-13", "y": 69102.45}, {"x": "2015-11-23", "y": 69102.45}, {"x": "2015-12-03", "y": 69510.62}, {"x": "2015-12-14", "y": 73948.37}, {"x": "2015-12-23", "y": 73148.34}, {"x": "2016-01-04", "y": 75243.81}, {"x": "2016-01-13", "y": 74393.7}, {"x": "2016-01-25", "y": 72052.48}, {"x": "2016-02-02", "y": 71834.43}, {"x": "2016-02-11", "y": 71779.59}, {"x": "2016-02-23", "y": 71180.34}, {"x": "2016-03-03", "y": 71677.38}, {"x": "2016-03-11", "y": 71677.38}, {"x": "2016-03-22", "y": 71677.38}, {"x": "2016-04-01", "y": 71255.42}, {"x": "2016-04-11", "y": 71255.42}, {"x": "2016-04-20", "y": 72203.22}, {"x": "2016-04-29", "y": 74378.9}, {"x": "2016-05-10", "y": 77103.64}, {"x": "2016-05-18", "y": 76987.35}, {"x": "2016-05-27", "y": 76392.29}, {"x": "2016-06-08", "y": 76392.29}, {"x": "2016-06-16", "y": 77303.77}, {"x": "2016-06-27", "y": 77203.95}, {"x": "2016-07-07", "y": 80148.56}, {"x": "2016-07-18", "y": 80148.56}, {"x": "2016-07-26", "y": 83933.14}, {"x": "2016-08-04", "y": 83832.86}, {"x": "2016-08-15", "y": 83832.86}, {"x": "2016-08-23", "y": 87219.17}, {"x": "2016-09-01", "y": 86013.24}, {"x": "2016-09-13", "y": 84024.21}, {"x": "2016-09-22", "y": 84022.9}, {"x": "2016-09-30", "y": 84258.37}, {"x": "2016-10-11", "y": 84258.37}, {"x": "2016-10-20", "y": 84496.99}, {"x": "2016-10-28", "y": 86032.07}, {"x": "2016-11-08", "y": 83674.92}, {"x": "2016-11-17", "y": 84337.45}, {"x": "2016-11-29", "y": 85698.33}, {"x": "2016-12-07", "y": 85314.33}, {"x": "2016-12-16", "y": 85976.85}, {"x": "2016-12-28", "y": 88448.77}, {"x": "2017-01-06", "y": 91867.48}, {"x": "2017-01-18", "y": 91836.71}, {"x": "2017-01-27", "y": 92002.98}, {"x": "2017-02-07", "y": 96891.72}, {"x": "2017-02-15", "y": 96891.72}, {"x": "2017-02-27", "y": 97162.12}, {"x": "2017-03-08", "y": 97736.9}, {"x": "2017-03-16", "y": 97736.9}, {"x": "2017-03-27", "y": 102416.9}, {"x": "2017-04-05", "y": 102127.88}, {"x": "2017-04-17", "y": 102127.88}, {"x": "2017-04-25", "y": 102127.88}, {"x": "2017-05-04", "y": 101684.24}, {"x": "2017-05-15", "y": 101263.99}, {"x": "2017-05-23", "y": 101263.99}, {"x": "2017-06-02", "y": 104812.13}, {"x": "2017-06-13", "y": 108645.11}, {"x": "2017-06-22", "y": 107518.33}, {"x": "2017-06-30", "y": 107678.28}, {"x": "2017-07-12", "y": 112939.93}, {"x": "2017-07-21", "y": 112703.07}, {"x": "2017-07-31", "y": 112901.26}, {"x": "2017-08-09", "y": 115142.66}, {"x": "2017-08-18", "y": 115352.51}, {"x": "2017-08-29", "y": 117805.53}, {"x": "2017-09-07", "y": 117805.53}, {"x": "2017-09-18", "y": 119235.77}, {"x": "2017-09-27", "y": 122909.35}, {"x": "2017-10-05", "y": 123071.33}, {"x": "2017-10-16", "y": 122268.84}, {"x": "2017-10-25", "y": 123286.11}, {"x": "2017-11-03", "y": 121445.2}, {"x": "2017-11-13", "y": 123820.18}, {"x": "2017-11-22", "y": 132672.72}, {"x": "2017-12-04", "y": 137182.95}, {"x": "2017-12-12", "y": 139069.18}, {"x": "2017-12-21", "y": 139506.28}, {"x": "2018-01-03", "y": 143506.28}, {"x": "2018-01-12", "y": 143506.28}, {"x": "2018-01-23", "y": 143610.69}, {"x": "2018-02-01", "y": 156195.97}, {"x": "2018-02-12", "y": 167589.07}, {"x": "2018-02-21", "y": 168371.97}, {"x": "2018-03-02", "y": 168947.29}, {"x": "2018-03-13", "y": 169527.07}, {"x": "2018-03-22", "y": 171219.0}, {"x": "2018-04-02", "y": 169143.23}, {"x": "2018-04-11", "y": 168391.75}, {"x": "2018-04-20", "y": 168651.14}, {"x": "2018-04-30", "y": 169300.77}, {"x": "2018-05-09", "y": 170758.53}, {"x": "2018-05-18", "y": 170758.53}, {"x": "2018-05-30", "y": 175165.99}, {"x": "2018-06-07", "y": 174365.85}, {"x": "2018-06-18", "y": 185686.85}, {"x": "2018-06-27", "y": 190202.4}, {"x": "2018-07-06", "y": 190502.72}, {"x": "2018-07-17", "y": 190540.82}, {"x": "2018-07-26", "y": 189871.23}, {"x": "2018-08-06", "y": 192691.51}, {"x": "2018-08-14", "y": 192044.75}, {"x": "2018-08-23", "y": 190753.65}, {"x": "2018-09-04", "y": 190270.24}, {"x": "2018-09-12", "y": 190412.35}, {"x": "2018-09-21", "y": 189509.21}, {"x": "2018-10-02", "y": 192248.66}, {"x": "2018-10-11", "y": 195174.17}, {"x": "2018-10-19", "y": 195584.59}, {"x": "2018-10-30", "y": 186633.76}, {"x": "2018-11-08", "y": 187462.65}, {"x": "2018-11-16", "y": 187819.63}, {"x": "2018-11-28", "y": 181959.3}, {"x": "2018-12-10", "y": 184322.74}, {"x": "2018-12-19", "y": 183527.76}, {"x": "2018-12-28", "y": 181011.31}, {"x": "2019-01-09", "y": 185369.92}, {"x": "2019-01-18", "y": 185369.92}, {"x": "2019-01-29", "y": 185702.21}, {"x": "2019-02-07", "y": 185947.49}, {"x": "2019-02-19", "y": 185947.49}, {"x": "2019-02-28", "y": 185947.49}, {"x": "2019-03-08", "y": 188180.55}, {"x": "2019-03-19", "y": 190693.99}, {"x": "2019-03-28", "y": 190693.99}, {"x": "2019-04-05", "y": 190965.15}, {"x": "2019-04-16", "y": 199978.09}, {"x": "2019-04-26", "y": 208290.82}, {"x": "2019-05-07", "y": 210890.83}, {"x": "2019-05-15", "y": 208092.14}, {"x": "2019-05-24", "y": 204911.97}, {"x": "2019-06-05", "y": 202760.82}, {"x": "2019-06-13", "y": 202760.82}, {"x": "2019-06-24", "y": 204567.29}, {"x": "2019-07-03", "y": 206340.58}, {"x": "2019-07-15", "y": 204499.42}, {"x": "2019-07-23", "y": 208112.52}, {"x": "2019-08-01", "y": 210137.26}, {"x": "2019-08-12", "y": 219162.04}, {"x": "2019-08-20", "y": 218032.22}, {"x": "2019-08-29", "y": 220756.83}, {"x": "2019-09-10", "y": 230252.68}, {"x": "2019-09-19", "y": 230252.68}, {"x": "2019-09-27", "y": 226882.26}, {"x": "2019-10-08", "y": 222007.14}, {"x": "2019-10-17", "y": 222371.76}, {"x": "2019-10-25", "y": 220605.92}, {"x": "2019-11-05", "y": 228731.03}, {"x": "2019-11-14", "y": 228731.03}, {"x": "2019-11-25", "y": 232429.38}, {"x": "2019-12-04", "y": 231293.54}, {"x": "2019-12-13", "y": 231293.54}, {"x": "2019-12-24", "y": 231293.54}, {"x": "2020-01-03", "y": 235293.54}, {"x": "2020-01-14", "y": 234465.55}, {"x": "2020-01-24", "y": 238303.95}, {"x": "2020-02-04", "y": 248459.62}, {"x": "2020-02-12", "y": 250463.74}, {"x": "2020-02-24", "y": 259222.79}, {"x": "2020-03-04", "y": 261195.5}, {"x": "2020-03-12", "y": 254514.54}, {"x": "2020-03-23", "y": 243947.66}, {"x": "2020-04-01", "y": 242733.7}, {"x": "2020-04-13", "y": 242733.7}, {"x": "2020-04-21", "y": 242733.7}, {"x": "2020-04-30", "y": 245862.19}, {"x": "2020-05-11", "y": 244734.17}, {"x": "2020-05-19", "y": 246849.64}, {"x": "2020-05-29", "y": 254527.42}, {"x": "2020-06-09", "y": 253693.28}, {"x": "2020-06-18", "y": 260041.91}, {"x": "2020-06-26", "y": 259345.47}, {"x": "2020-07-08", "y": 259345.47}, {"x": "2020-07-17", "y": 259754.57}, {"x": "2020-07-27", "y": 258459.86}, {"x": "2020-08-05", "y": 261904.68}, {"x": "2020-08-14", "y": 262444.76}, {"x": "2020-08-25", "y": 262929.36}, {"x": "2020-09-02", "y": 262929.36}, {"x": "2020-09-14", "y": 279583.06}, {"x": "2020-09-23", "y": 280067.93}, {"x": "2020-10-01", "y": 280067.93}, {"x": "2020-10-12", "y": 277079.62}, {"x": "2020-10-21", "y": 275817.89}, {"x": "2020-10-30", "y": 272241.62}, {"x": "2020-11-09", "y": 276459.33}, {"x": "2020-11-18", "y": 279386.97}, {"x": "2020-11-30", "y": 280725.69}, {"x": "2020-12-08", "y": 280725.69}, {"x": "2020-12-17", "y": 280725.69}, {"x": "2020-12-29", "y": 281446.14}, {"x": "2021-01-08", "y": 289271.83}, {"x": "2021-01-19", "y": 289271.83}, {"x": "2021-01-28", "y": 334009.23}, {"x": "2021-02-08", "y": 336155.55}, {"x": "2021-02-17", "y": 333301.53}, {"x": "2021-02-26", "y": 332512.46}, {"x": "2021-03-09", "y": 338931.45}, {"x": "2021-03-18", "y": 338931.45}, {"x": "2021-03-26", "y": 342049.42}, {"x": "2021-04-07", "y": 342049.42}, {"x": "2021-04-16", "y": 342049.42}, {"x": "2021-04-26", "y": 340515.55}, {"x": "2021-05-05", "y": 339095.31}, {"x": "2021-05-14", "y": 346384.35}, {"x": "2021-05-25", "y": 345231.78}, {"x": "2021-06-03", "y": 345231.78}, {"x": "2021-06-14", "y": 346118.17}, {"x": "2021-06-23", "y": 354582.72}, {"x": "2021-07-01", "y": 354582.72}, {"x": "2021-07-13", "y": 352775.99}, {"x": "2021-07-22", "y": 351583.25}, {"x": "2021-08-02", "y": 352059.22}, {"x": "2021-08-10", "y": 349748.03}, {"x": "2021-08-19", "y": 347145.12}, {"x": "2021-08-30", "y": 345282.08}, {"x": "2021-09-08", "y": 343160.48}, {"x": "2021-09-17", "y": 343799.55}, {"x": "2021-09-28", "y": 392742.15}, {"x": "2021-10-07", "y": 395788.1}, {"x": "2021-10-15", "y": 398161.21}, {"x": "2021-10-26", "y": 395719.2}, {"x": "2021-11-04", "y": 391772.73}, {"x": "2021-11-12", "y": 391982.23}, {"x": "2021-11-23", "y": 400045.51}, {"x": "2021-12-03", "y": 403682.53}, {"x": "2021-12-14", "y": 403306.87}, {"x": "2021-12-22", "y": 400238.33}, {"x": "2022-01-03", "y": 404238.33}, {"x": "2022-01-12", "y": 401522.65}, {"x": "2022-01-21", "y": 398460.54}, {"x": "2022-02-01", "y": 394747.5}, {"x": "2022-02-10", "y": 403431.61}, {"x": "2022-02-22", "y": 403213.11}, {"x": "2022-03-02", "y": 403355.09}, {"x": "2022-03-11", "y": 409355.88}, {"x": "2022-03-22", "y": 412024.4}, {"x": "2022-03-30", "y": 412815.68}, {"x": "2022-04-08", "y": 413402.55}, {"x": "2022-04-20", "y": 414060.98}, {"x": "2022-04-29", "y": 458371.01}, {"x": "2022-05-09", "y": 458201.42}, {"x": "2022-05-18", "y": 450279.53}, {"x": "2022-05-27", "y": 445542.8}, {"x": "2022-06-07", "y": 445542.8}, {"x": "2022-06-16", "y": 446247.79}, {"x": "2022-06-28", "y": 447126.54}, {"x": "2022-07-08", "y": 447913.77}, {"x": "2022-07-18", "y": 442720.25}, {"x": "2022-07-27", "y": 443497.7}, {"x": "2022-08-05", "y": 441994.33}, {"x": "2022-08-15", "y": 441994.33}, {"x": "2022-08-24", "y": 441994.33}, {"x": "2022-09-02", "y": 443553.0}, {"x": "2022-09-14", "y": 458440.68}, {"x": "2022-09-22", "y": 457692.39}, {"x": "2022-10-03", "y": 462636.35}, {"x": "2022-10-12", "y": 462636.35}, {"x": "2022-10-20", "y": 462636.35}, {"x": "2022-10-31", "y": 463646.51}, {"x": "2022-11-09", "y": 472435.43}, {"x": "2022-11-18", "y": 497874.49}, {"x": "2022-11-29", "y": 508382.39}, {"x": "2022-12-08", "y": 521084.74}, {"x": "2022-12-19", "y": 520439.52}, {"x": "2022-12-28", "y": 520439.52}, {"x": "2023-01-09", "y": 531993.25}, {"x": "2023-01-19", "y": 532517.51}, {"x": "2023-01-30", "y": 533150.88}, {"x": "2023-02-07", "y": 543688.66}, {"x": "2023-02-16", "y": 533495.81}, {"x": "2023-02-28", "y": 531702.48}, {"x": "2023-03-08", "y": 530026.56}, {"x": "2023-03-17", "y": 507904.04}, {"x": "2023-03-28", "y": 507904.04}, {"x": "2023-04-06", "y": 507904.04}, {"x": "2023-04-17", "y": 508658.23}, {"x": "2023-04-26", "y": 509433.99}, {"x": "2023-05-05", "y": 508347.46}, {"x": "2023-05-15", "y": 509582.36}, {"x": "2023-05-24", "y": 527810.84}, {"x": "2023-06-05", "y": 547428.91}, {"x": "2023-06-14", "y": 563203.33}, {"x": "2023-06-23", "y": 563953.41}, {"x": "2023-07-05", "y": 574192.14}, {"x": "2023-07-14", "y": 580710.43}, {"x": "2023-07-24", "y": 580710.43}, {"x": "2023-08-02", "y": 604612.07}, {"x": "2023-08-11", "y": 607062.23}, {"x": "2023-08-22", "y": 608967.71}, {"x": "2023-08-30", "y": 610300.25}, {"x": "2023-09-11", "y": 608098.71}, {"x": "2023-09-20", "y": 614125.57}, {"x": "2023-09-28", "y": 586796.55}, {"x": "2023-10-09", "y": 601657.87}, {"x": "2023-10-18", "y": 597886.41}, {"x": "2023-10-27", "y": 592792.19}, {"x": "2023-11-06", "y": 592792.19}, {"x": "2023-11-15", "y": 598384.17}, {"x": "2023-11-27", "y": 603256.04}, {"x": "2023-12-05", "y": 603256.04}, {"x": "2023-12-14", "y": 620764.09}, {"x": "2023-12-26", "y": 620764.09}, {"x": "2024-01-05", "y": 649761.22}, {"x": "2024-01-16", "y": 656928.53}, {"x": "2024-01-25", "y": 656928.53}, {"x": "2024-02-05", "y": 663282.89}, {"x": "2024-02-13", "y": 681290.32}, {"x": "2024-02-23", "y": 681290.32}, {"x": "2024-03-05", "y": 687882.48}, {"x": "2024-03-14", "y": 694602.34}, {"x": "2024-03-22", "y": 689222.05}, {"x": "2024-04-03", "y": 736850.08}, {"x": "2024-04-12", "y": 835976.75}, {"x": "2024-04-22", "y": 821216.42}, {"x": "2024-05-01", "y": 816550.82}, {"x": "2024-05-10", "y": 816550.82}, {"x": "2024-05-21", "y": 814014.6}, {"x": "2024-05-30", "y": 863110.94}, {"x": "2024-06-10", "y": 859257.1}, {"x": "2024-06-20", "y": 867057.08}, {"x": "2024-06-28", "y": 868175.83}, {"x": "2024-07-10", "y": 869215.48}, {"x": "2024-07-19", "y": 896773.78}, {"x": "2024-07-30", "y": 902950.48}, {"x": "2024-08-07", "y": 903345.52}, {"x": "2024-08-16", "y": 903345.52}, {"x": "2024-08-27", "y": 903348.26}, {"x": "2024-09-05", "y": 921632.61}, {"x": "2024-09-16", "y": 918511.43}, {"x": "2024-09-25", "y": 914526.57}, {"x": "2024-10-04", "y": 931356.65}, {"x": "2024-10-14", "y": 969851.28}, {"x": "2024-10-23", "y": 966137.94}, {"x": "2024-11-01", "y": 987385.05}, {"x": "2024-11-11", "y": 1009633.27}, {"x": "2024-11-20", "y": 1009183.96}, {"x": "2024-12-02", "y": 1012324.79}, {"x": "2024-12-11", "y": 1040486.46}, {"x": "2024-12-19", "y": 1103040.06}, {"x": "2024-12-31", "y": 1103040.06}, {"x": "2025-01-13", "y": 1066595.21}, {"x": "2025-01-22", "y": 1067394.27}, {"x": "2025-01-31", "y": 1102538.45}, {"x": "2025-02-11", "y": 1093339.6}, {"x": "2025-02-21", "y": 1184411.94}, {"x": "2025-03-03", "y": 1201378.01}, {"x": "2025-03-12", "y": 1194116.86}, {"x": "2025-03-21", "y": 1188938.53}, {"x": "2025-03-31", "y": 1188938.53}, {"x": "2025-04-09", "y": 1141292.18}, {"x": "2025-04-21", "y": 1136636.52}, {"x": "2025-04-30", "y": 1126508.68}, {"x": "2025-05-08", "y": 1127828.86}, {"x": "2025-05-19", "y": 1127828.86}, {"x": "2025-05-29", "y": 1126655.49}, {"x": "2025-06-06", "y": 1128306.91}, {"x": "2025-06-17", "y": 1132804.63}, {"x": "2025-06-27", "y": 1142096.5}, {"x": "2025-07-09", "y": 1139914.8}, {"x": "2025-07-17", "y": 1175336.68}, {"x": "2025-07-28", "y": 1196274.65}, {"x": "2025-08-06", "y": 1195934.39}, {"x": "2025-08-14", "y": 1186589.26}, {"x": "2025-08-25", "y": 1203033.68}, {"x": "2025-09-04", "y": 1226123.94}, {"x": "2025-09-15", "y": 1225250.54}, {"x": "2025-09-23", "y": 1219732.8}, {"x": "2025-10-02", "y": 1221378.22}, {"x": "2025-10-13", "y": 1263937.54}, {"x": "2025-10-21", "y": 1245724.87}, {"x": "2025-10-30", "y": 1256257.86}, {"x": "2025-11-10", "y": 1264356.02}, {"x": "2025-11-19", "y": 1272884.0}, {"x": "2025-11-28", "y": 1272923.72}, {"x": "2025-12-09", "y": 1272175.36}, {"x": "2025-12-18", "y": 1286583.62}, {"x": "2025-12-30", "y": 1295283.41}], "borderColor": "#7c3aed", "backgroundColor": "#7c3aed18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}, {"label": "Desde 2005", "data": [{"x": "2005-01-03", "y": 4000.0}, {"x": "2005-01-13", "y": 4000.0}, {"x": "2005-01-27", "y": 4000.0}, {"x": "2005-02-09", "y": 4000.0}, {"x": "2005-02-23", "y": 4000.0}, {"x": "2005-03-08", "y": 4000.0}, {"x": "2005-03-18", "y": 4000.0}, {"x": "2005-04-01", "y": 4000.0}, {"x": "2005-04-14", "y": 4000.0}, {"x": "2005-04-27", "y": 4000.0}, {"x": "2005-05-10", "y": 4000.0}, {"x": "2005-05-20", "y": 4000.0}, {"x": "2005-06-03", "y": 4000.0}, {"x": "2005-06-16", "y": 4000.0}, {"x": "2005-06-29", "y": 4000.0}, {"x": "2005-07-13", "y": 4000.0}, {"x": "2005-07-26", "y": 4000.0}, {"x": "2005-08-05", "y": 4000.0}, {"x": "2005-08-18", "y": 4000.0}, {"x": "2005-08-31", "y": 4000.0}, {"x": "2005-09-14", "y": 4000.0}, {"x": "2005-09-27", "y": 4000.0}, {"x": "2005-10-07", "y": 4000.0}, {"x": "2005-10-20", "y": 4000.05}, {"x": "2005-11-02", "y": 4016.37}, {"x": "2005-11-15", "y": 4016.37}, {"x": "2005-11-29", "y": 4052.98}, {"x": "2005-12-12", "y": 4093.89}, {"x": "2005-12-22", "y": 4229.9}, {"x": "2006-01-06", "y": 8190.74}, {"x": "2006-01-20", "y": 8213.83}, {"x": "2006-02-02", "y": 8600.85}, {"x": "2006-02-15", "y": 8493.05}, {"x": "2006-02-28", "y": 8493.05}, {"x": "2006-03-13", "y": 8665.43}, {"x": "2006-03-24", "y": 8726.96}, {"x": "2006-04-06", "y": 8710.92}, {"x": "2006-04-20", "y": 8830.62}, {"x": "2006-05-03", "y": 9384.11}, {"x": "2006-05-15", "y": 9277.03}, {"x": "2006-05-26", "y": 9227.33}, {"x": "2006-06-09", "y": 9006.52}, {"x": "2006-06-22", "y": 8731.36}, {"x": "2006-07-06", "y": 8569.31}, {"x": "2006-07-18", "y": 8558.64}, {"x": "2006-07-31", "y": 8684.01}, {"x": "2006-08-11", "y": 8700.96}, {"x": "2006-08-24", "y": 8912.77}, {"x": "2006-09-07", "y": 9162.74}, {"x": "2006-09-20", "y": 9121.68}, {"x": "2006-10-02", "y": 9181.97}, {"x": "2006-10-13", "y": 9181.97}, {"x": "2006-10-26", "y": 9228.62}, {"x": "2006-11-08", "y": 9811.13}, {"x": "2006-11-21", "y": 9970.98}, {"x": "2006-12-04", "y": 10670.96}, {"x": "2006-12-15", "y": 10670.96}, {"x": "2006-12-29", "y": 10623.79}, {"x": "2007-01-16", "y": 14552.42}, {"x": "2007-01-29", "y": 14947.84}, {"x": "2007-02-08", "y": 14947.84}, {"x": "2007-02-22", "y": 15907.93}, {"x": "2007-03-07", "y": 15770.17}, {"x": "2007-03-20", "y": 15515.26}, {"x": "2007-04-02", "y": 15549.5}, {"x": "2007-04-16", "y": 15567.85}, {"x": "2007-04-26", "y": 15584.48}, {"x": "2007-05-09", "y": 15755.82}, {"x": "2007-05-22", "y": 15771.43}, {"x": "2007-06-05", "y": 16882.04}, {"x": "2007-06-18", "y": 17132.64}, {"x": "2007-06-28", "y": 17746.01}, {"x": "2007-07-12", "y": 17688.27}, {"x": "2007-07-25", "y": 17589.0}, {"x": "2007-08-07", "y": 17650.39}, {"x": "2007-08-20", "y": 16926.23}, {"x": "2007-08-31", "y": 16841.02}, {"x": "2007-09-13", "y": 16843.04}, {"x": "2007-09-26", "y": 16714.33}, {"x": "2007-10-09", "y": 16892.81}, {"x": "2007-10-22", "y": 17351.55}, {"x": "2007-11-02", "y": 17599.29}, {"x": "2007-11-14", "y": 17636.32}, {"x": "2007-11-28", "y": 17271.94}, {"x": "2007-12-11", "y": 17490.45}, {"x": "2007-12-24", "y": 17553.93}, {"x": "2008-01-08", "y": 21418.8}, {"x": "2008-01-22", "y": 21150.54}, {"x": "2008-02-01", "y": 21150.54}, {"x": "2008-02-14", "y": 20829.82}, {"x": "2008-02-28", "y": 20829.82}, {"x": "2008-03-12", "y": 20356.0}, {"x": "2008-03-26", "y": 20048.28}, {"x": "2008-04-07", "y": 20048.28}, {"x": "2008-04-18", "y": 19830.95}, {"x": "2008-05-01", "y": 19764.71}, {"x": "2008-05-14", "y": 19579.71}, {"x": "2008-05-28", "y": 19823.52}, {"x": "2008-06-10", "y": 20531.33}, {"x": "2008-06-20", "y": 20055.58}, {"x": "2008-07-03", "y": 19421.98}, {"x": "2008-07-17", "y": 19128.43}, {"x": "2008-07-30", "y": 18911.92}, {"x": "2008-08-12", "y": 18955.84}, {"x": "2008-08-22", "y": 18955.84}, {"x": "2008-09-05", "y": 18955.84}, {"x": "2008-09-18", "y": 18955.84}, {"x": "2008-10-01", "y": 18955.84}, {"x": "2008-10-14", "y": 18955.84}, {"x": "2008-10-24", "y": 18955.84}, {"x": "2008-11-06", "y": 18955.84}, {"x": "2008-11-19", "y": 18955.84}, {"x": "2008-12-03", "y": 18955.84}, {"x": "2008-12-16", "y": 18955.84}, {"x": "2008-12-30", "y": 18955.84}, {"x": "2009-01-12", "y": 22955.84}, {"x": "2009-01-26", "y": 22955.84}, {"x": "2009-02-06", "y": 22955.84}, {"x": "2009-02-20", "y": 22955.84}, {"x": "2009-03-05", "y": 22663.91}, {"x": "2009-03-17", "y": 22663.91}, {"x": "2009-03-30", "y": 22663.91}, {"x": "2009-04-13", "y": 22663.91}, {"x": "2009-04-24", "y": 22663.91}, {"x": "2009-05-07", "y": 22663.91}, {"x": "2009-05-20", "y": 22663.91}, {"x": "2009-06-02", "y": 22663.91}, {"x": "2009-06-15", "y": 22663.91}, {"x": "2009-06-26", "y": 22663.91}, {"x": "2009-07-10", "y": 22663.91}, {"x": "2009-07-23", "y": 22663.91}, {"x": "2009-08-04", "y": 22739.41}, {"x": "2009-08-17", "y": 22837.41}, {"x": "2009-08-28", "y": 22837.41}, {"x": "2009-09-11", "y": 22746.89}, {"x": "2009-09-24", "y": 22802.98}, {"x": "2009-10-07", "y": 23431.13}, {"x": "2009-10-19", "y": 23482.07}, {"x": "2009-10-30", "y": 24542.65}, {"x": "2009-11-12", "y": 24542.65}, {"x": "2009-11-25", "y": 24662.06}, {"x": "2009-12-09", "y": 24678.19}, {"x": "2009-12-21", "y": 24705.73}, {"x": "2010-01-05", "y": 28746.2}, {"x": "2010-01-19", "y": 29171.85}, {"x": "2010-02-01", "y": 29726.83}, {"x": "2010-02-12", "y": 29220.91}, {"x": "2010-02-26", "y": 29255.18}, {"x": "2010-03-10", "y": 29288.86}, {"x": "2010-03-23", "y": 29094.24}, {"x": "2010-04-06", "y": 29094.24}, {"x": "2010-04-19", "y": 29455.34}, {"x": "2010-04-30", "y": 30938.86}, {"x": "2010-05-12", "y": 33031.31}, {"x": "2010-05-25", "y": 30996.32}, {"x": "2010-06-08", "y": 30547.68}, {"x": "2010-06-21", "y": 30547.68}, {"x": "2010-07-02", "y": 30228.41}, {"x": "2010-07-15", "y": 30228.41}, {"x": "2010-07-28", "y": 30408.9}, {"x": "2010-08-10", "y": 30241.29}, {"x": "2010-08-23", "y": 30561.28}, {"x": "2010-09-03", "y": 30607.97}, {"x": "2010-09-17", "y": 30659.2}, {"x": "2010-09-29", "y": 30708.13}, {"x": "2010-10-12", "y": 31138.76}, {"x": "2010-10-25", "y": 31272.07}, {"x": "2010-11-05", "y": 31233.13}, {"x": "2010-11-18", "y": 34160.2}, {"x": "2010-12-01", "y": 33989.96}, {"x": "2010-12-14", "y": 34801.57}, {"x": "2010-12-28", "y": 34843.16}, {"x": "2011-01-10", "y": 39128.21}, {"x": "2011-01-24", "y": 39128.21}, {"x": "2011-02-04", "y": 39802.23}, {"x": "2011-02-16", "y": 39802.23}, {"x": "2011-03-02", "y": 41544.13}, {"x": "2011-03-15", "y": 42977.99}, {"x": "2011-03-28", "y": 42782.45}, {"x": "2011-04-08", "y": 42924.1}, {"x": "2011-04-20", "y": 42583.21}, {"x": "2011-05-04", "y": 42670.8}, {"x": "2011-05-17", "y": 42670.8}, {"x": "2011-05-31", "y": 43927.69}, {"x": "2011-06-13", "y": 45441.45}, {"x": "2011-06-24", "y": 46376.16}, {"x": "2011-07-07", "y": 46494.26}, {"x": "2011-07-20", "y": 46472.6}, {"x": "2011-08-02", "y": 45545.36}, {"x": "2011-08-15", "y": 45342.44}, {"x": "2011-08-26", "y": 44638.49}, {"x": "2011-09-08", "y": 44712.68}, {"x": "2011-09-21", "y": 45055.96}, {"x": "2011-10-04", "y": 42885.06}, {"x": "2011-10-17", "y": 42885.06}, {"x": "2011-10-28", "y": 43045.59}, {"x": "2011-11-10", "y": 43377.68}, {"x": "2011-11-22", "y": 43460.27}, {"x": "2011-12-06", "y": 43915.54}, {"x": "2011-12-19", "y": 44006.73}, {"x": "2012-01-03", "y": 48006.73}, {"x": "2012-01-17", "y": 48837.73}, {"x": "2012-01-27", "y": 48903.29}, {"x": "2012-02-09", "y": 48903.29}, {"x": "2012-02-23", "y": 50665.22}, {"x": "2012-03-07", "y": 51064.62}, {"x": "2012-03-20", "y": 50810.24}, {"x": "2012-03-30", "y": 50810.24}, {"x": "2012-04-13", "y": 52834.49}, {"x": "2012-04-26", "y": 55665.65}, {"x": "2012-05-09", "y": 56944.16}, {"x": "2012-05-22", "y": 58405.79}, {"x": "2012-06-05", "y": 58753.93}, {"x": "2012-06-15", "y": 58753.93}, {"x": "2012-06-28", "y": 58532.54}, {"x": "2012-07-12", "y": 59377.52}, {"x": "2012-07-25", "y": 64390.07}, {"x": "2012-08-07", "y": 64211.5}, {"x": "2012-08-17", "y": 67474.25}, {"x": "2012-08-30", "y": 67566.31}, {"x": "2012-09-13", "y": 69199.47}, {"x": "2012-09-26", "y": 71175.9}, {"x": "2012-10-09", "y": 71363.2}, {"x": "2012-10-22", "y": 72101.09}, {"x": "2012-11-05", "y": 73080.91}, {"x": "2012-11-16", "y": 72416.4}, {"x": "2012-11-30", "y": 72658.38}, {"x": "2012-12-13", "y": 72743.82}, {"x": "2012-12-27", "y": 72785.13}, {"x": "2013-01-09", "y": 76596.79}, {"x": "2013-01-23", "y": 76596.79}, {"x": "2013-02-05", "y": 79997.04}, {"x": "2013-02-19", "y": 79997.04}, {"x": "2013-03-04", "y": 83538.92}, {"x": "2013-03-15", "y": 83538.92}, {"x": "2013-03-27", "y": 83578.05}, {"x": "2013-04-10", "y": 88703.83}, {"x": "2013-04-23", "y": 89507.95}, {"x": "2013-05-06", "y": 93934.05}, {"x": "2013-05-17", "y": 97523.59}, {"x": "2013-05-30", "y": 107876.7}, {"x": "2013-06-12", "y": 108311.34}, {"x": "2013-06-25", "y": 103261.03}, {"x": "2013-07-09", "y": 102860.08}, {"x": "2013-07-22", "y": 102860.08}, {"x": "2013-08-02", "y": 105989.15}, {"x": "2013-08-14", "y": 110518.12}, {"x": "2013-08-27", "y": 111297.39}, {"x": "2013-09-10", "y": 108588.86}, {"x": "2013-09-23", "y": 108629.06}, {"x": "2013-10-04", "y": 110457.64}, {"x": "2013-10-16", "y": 112499.29}, {"x": "2013-10-29", "y": 112623.7}, {"x": "2013-11-11", "y": 115767.85}, {"x": "2013-11-22", "y": 115767.85}, {"x": "2013-12-06", "y": 122497.22}, {"x": "2013-12-18", "y": 123450.97}, {"x": "2014-01-02", "y": 127644.29}, {"x": "2014-01-15", "y": 127618.24}, {"x": "2014-01-29", "y": 132654.46}, {"x": "2014-02-11", "y": 136814.51}, {"x": "2014-02-25", "y": 136814.51}, {"x": "2014-03-07", "y": 136121.29}, {"x": "2014-03-20", "y": 140120.13}, {"x": "2014-04-02", "y": 139801.67}, {"x": "2014-04-15", "y": 146330.14}, {"x": "2014-04-29", "y": 145322.44}, {"x": "2014-05-09", "y": 145761.32}, {"x": "2014-05-22", "y": 144786.9}, {"x": "2014-06-05", "y": 144786.9}, {"x": "2014-06-18", "y": 144960.86}, {"x": "2014-07-01", "y": 148444.03}, {"x": "2014-07-15", "y": 151586.52}, {"x": "2014-07-25", "y": 151318.38}, {"x": "2014-08-07", "y": 150194.59}, {"x": "2014-08-20", "y": 150226.49}, {"x": "2014-09-03", "y": 150533.62}, {"x": "2014-09-16", "y": 150492.14}, {"x": "2014-09-26", "y": 152400.86}, {"x": "2014-10-09", "y": 149434.07}, {"x": "2014-10-22", "y": 151055.87}, {"x": "2014-11-04", "y": 152746.72}, {"x": "2014-11-17", "y": 157452.44}, {"x": "2014-12-01", "y": 161138.45}, {"x": "2014-12-11", "y": 162667.96}, {"x": "2014-12-24", "y": 169919.96}, {"x": "2015-01-08", "y": 175239.5}, {"x": "2015-01-22", "y": 173012.96}, {"x": "2015-02-04", "y": 172679.82}, {"x": "2015-02-17", "y": 178543.37}, {"x": "2015-03-02", "y": 179824.35}, {"x": "2015-03-13", "y": 181322.03}, {"x": "2015-03-26", "y": 193719.77}, {"x": "2015-04-09", "y": 192328.51}, {"x": "2015-04-22", "y": 191977.4}, {"x": "2015-05-04", "y": 187273.05}, {"x": "2015-05-15", "y": 189480.33}, {"x": "2015-05-29", "y": 189480.33}, {"x": "2015-06-11", "y": 194774.73}, {"x": "2015-06-24", "y": 194774.73}, {"x": "2015-07-07", "y": 197360.25}, {"x": "2015-07-20", "y": 195057.32}, {"x": "2015-07-31", "y": 201233.41}, {"x": "2015-08-13", "y": 201565.42}, {"x": "2015-08-26", "y": 220990.0}, {"x": "2015-09-08", "y": 220533.69}, {"x": "2015-09-21", "y": 218950.95}, {"x": "2015-10-02", "y": 219216.95}, {"x": "2015-10-15", "y": 217464.5}, {"x": "2015-10-28", "y": 218902.29}, {"x": "2015-11-10", "y": 218304.29}, {"x": "2015-11-20", "y": 218304.29}, {"x": "2015-12-04", "y": 222221.76}, {"x": "2015-12-17", "y": 232501.83}, {"x": "2015-12-31", "y": 231077.62}, {"x": "2016-01-14", "y": 226408.06}, {"x": "2016-01-27", "y": 219226.66}, {"x": "2016-02-09", "y": 216931.98}, {"x": "2016-02-23", "y": 216538.59}, {"x": "2016-03-07", "y": 218052.29}, {"x": "2016-03-18", "y": 218052.29}, {"x": "2016-04-01", "y": 216769.97}, {"x": "2016-04-13", "y": 216769.97}, {"x": "2016-04-26", "y": 225630.71}, {"x": "2016-05-09", "y": 234588.24}, {"x": "2016-05-20", "y": 233851.48}, {"x": "2016-06-03", "y": 232457.88}, {"x": "2016-06-15", "y": 235198.52}, {"x": "2016-06-28", "y": 235005.46}, {"x": "2016-07-12", "y": 243858.63}, {"x": "2016-07-25", "y": 254684.29}, {"x": "2016-08-05", "y": 255079.8}, {"x": "2016-08-18", "y": 265386.47}, {"x": "2016-08-30", "y": 263461.87}, {"x": "2016-09-13", "y": 255486.69}, {"x": "2016-09-26", "y": 255866.3}, {"x": "2016-10-07", "y": 256205.86}, {"x": "2016-10-20", "y": 256933.28}, {"x": "2016-11-01", "y": 260789.61}, {"x": "2016-11-14", "y": 256003.59}, {"x": "2016-11-28", "y": 260641.16}, {"x": "2016-12-09", "y": 261761.54}, {"x": "2016-12-22", "y": 268985.97}, {"x": "2017-01-06", "y": 271220.06}, {"x": "2017-01-19", "y": 271129.75}, {"x": "2017-02-01", "y": 281798.42}, {"x": "2017-02-14", "y": 286594.1}, {"x": "2017-02-28", "y": 287391.06}, {"x": "2017-03-13", "y": 289090.05}, {"x": "2017-03-23", "y": 303178.38}, {"x": "2017-04-05", "y": 302324.58}, {"x": "2017-04-19", "y": 302324.58}, {"x": "2017-05-02", "y": 302324.58}, {"x": "2017-05-15", "y": 299765.08}, {"x": "2017-05-25", "y": 308501.04}, {"x": "2017-06-08", "y": 316800.42}, {"x": "2017-06-21", "y": 318314.78}, {"x": "2017-07-05", "y": 318775.2}, {"x": "2017-07-18", "y": 334329.05}, {"x": "2017-07-31", "y": 334213.03}, {"x": "2017-08-10", "y": 340465.01}, {"x": "2017-08-23", "y": 346725.58}, {"x": "2017-09-06", "y": 349041.93}, {"x": "2017-09-19", "y": 353286.24}, {"x": "2017-10-02", "y": 364656.69}, {"x": "2017-10-12", "y": 364656.69}, {"x": "2017-10-25", "y": 365280.64}, {"x": "2017-11-07", "y": 359921.73}, {"x": "2017-11-20", "y": 384044.34}, {"x": "2017-12-04", "y": 406499.41}, {"x": "2017-12-15", "y": 409678.43}, {"x": "2017-12-28", "y": 413372.49}, {"x": "2018-01-11", "y": 417454.68}, {"x": "2018-01-25", "y": 417901.5}, {"x": "2018-02-07", "y": 507365.32}, {"x": "2018-02-21", "y": 491142.76}, {"x": "2018-03-05", "y": 492817.84}, {"x": "2018-03-16", "y": 489202.74}, {"x": "2018-03-29", "y": 497404.64}, {"x": "2018-04-12", "y": 491183.44}, {"x": "2018-04-25", "y": 492813.85}, {"x": "2018-05-08", "y": 498089.17}, {"x": "2018-05-18", "y": 498089.17}, {"x": "2018-06-01", "y": 511000.14}, {"x": "2018-06-14", "y": 543098.53}, {"x": "2018-06-27", "y": 554177.4}, {"x": "2018-07-11", "y": 557832.88}, {"x": "2018-07-23", "y": 555173.22}, {"x": "2018-08-03", "y": 561445.86}, {"x": "2018-08-16", "y": 555792.09}, {"x": "2018-08-29", "y": 553246.23}, {"x": "2018-09-12", "y": 554788.35}, {"x": "2018-09-25", "y": 557675.68}, {"x": "2018-10-05", "y": 572009.08}, {"x": "2018-10-18", "y": 569892.24}, {"x": "2018-10-31", "y": 548327.82}, {"x": "2018-11-13", "y": 546184.31}, {"x": "2018-11-27", "y": 530134.4}, {"x": "2018-12-10", "y": 537032.34}, {"x": "2018-12-21", "y": 531024.64}, {"x": "2019-01-07", "y": 532393.76}, {"x": "2019-01-18", "y": 532393.76}, {"x": "2019-02-01", "y": 534073.81}, {"x": "2019-02-13", "y": 534073.81}, {"x": "2019-02-27", "y": 534073.81}, {"x": "2019-03-12", "y": 548008.62}, {"x": "2019-03-25", "y": 548008.62}, {"x": "2019-04-05", "y": 548787.98}, {"x": "2019-04-18", "y": 572872.26}, {"x": "2019-05-01", "y": 607011.7}, {"x": "2019-05-14", "y": 598588.46}, {"x": "2019-05-28", "y": 590317.02}, {"x": "2019-06-10", "y": 583251.51}, {"x": "2019-06-21", "y": 588448.16}, {"x": "2019-07-03", "y": 593550.92}, {"x": "2019-07-17", "y": 589093.96}, {"x": "2019-07-30", "y": 598640.1}, {"x": "2019-08-12", "y": 630498.4}, {"x": "2019-08-23", "y": 635107.9}, {"x": "2019-09-06", "y": 645501.2}, {"x": "2019-09-18", "y": 662452.27}, {"x": "2019-10-01", "y": 649316.83}, {"x": "2019-10-14", "y": 638730.55}, {"x": "2019-10-25", "y": 634688.57}, {"x": "2019-11-07", "y": 658076.3}, {"x": "2019-11-19", "y": 665114.4}, {"x": "2019-12-03", "y": 665450.92}, {"x": "2019-12-16", "y": 665450.92}, {"x": "2019-12-30", "y": 665450.92}, {"x": "2020-01-13", "y": 667066.38}, {"x": "2020-01-27", "y": 683588.95}, {"x": "2020-02-06", "y": 707207.81}, {"x": "2020-02-20", "y": 707399.41}, {"x": "2020-03-04", "y": 743953.49}, {"x": "2020-03-17", "y": 721134.98}, {"x": "2020-03-30", "y": 691286.7}, {"x": "2020-04-09", "y": 691286.7}, {"x": "2020-04-23", "y": 693549.55}, {"x": "2020-05-06", "y": 695852.27}, {"x": "2020-05-19", "y": 703035.44}, {"x": "2020-06-02", "y": 724289.09}, {"x": "2020-06-15", "y": 739999.83}, {"x": "2020-06-25", "y": 738016.71}, {"x": "2020-07-09", "y": 738016.71}, {"x": "2020-07-22", "y": 739184.08}, {"x": "2020-08-04", "y": 745322.54}, {"x": "2020-08-17", "y": 746858.35}, {"x": "2020-08-27", "y": 748236.56}, {"x": "2020-09-10", "y": 795731.36}, {"x": "2020-09-23", "y": 797091.88}, {"x": "2020-10-06", "y": 791405.5}, {"x": "2020-10-19", "y": 790967.68}, {"x": "2020-10-29", "y": 777644.47}, {"x": "2020-11-11", "y": 793002.75}, {"x": "2020-11-24", "y": 794957.92}, {"x": "2020-12-08", "y": 798776.55}, {"x": "2020-12-21", "y": 800823.21}, {"x": "2021-01-05", "y": 805811.11}, {"x": "2021-01-15", "y": 816077.06}, {"x": "2021-01-29", "y": 949675.81}, {"x": "2021-02-11", "y": 949675.81}, {"x": "2021-02-25", "y": 943454.18}, {"x": "2021-03-10", "y": 957663.06}, {"x": "2021-03-22", "y": 957663.06}, {"x": "2021-04-05", "y": 966516.35}, {"x": "2021-04-16", "y": 966516.35}, {"x": "2021-04-29", "y": 962183.13}, {"x": "2021-05-12", "y": 978796.8}, {"x": "2021-05-25", "y": 975544.26}, {"x": "2021-06-07", "y": 975544.26}, {"x": "2021-06-18", "y": 1001916.26}, {"x": "2021-07-01", "y": 1001916.26}, {"x": "2021-07-15", "y": 996781.19}, {"x": "2021-07-28", "y": 993403.38}, {"x": "2021-08-09", "y": 988213.78}, {"x": "2021-08-20", "y": 980855.69}, {"x": "2021-09-02", "y": 975590.84}, {"x": "2021-09-16", "y": 971402.98}, {"x": "2021-09-29", "y": 1109812.17}, {"x": "2021-10-12", "y": 1125137.51}, {"x": "2021-10-22", "y": 1118231.2}, {"x": "2021-11-04", "y": 1107075.77}, {"x": "2021-11-17", "y": 1107992.16}, {"x": "2021-12-01", "y": 1150595.94}, {"x": "2021-12-14", "y": 1139999.31}, {"x": "2021-12-27", "y": 1131319.79}, {"x": "2022-01-07", "y": 1124830.92}, {"x": "2022-01-21", "y": 1119126.26}, {"x": "2022-02-03", "y": 1108678.94}, {"x": "2022-02-16", "y": 1130419.29}, {"x": "2022-03-02", "y": 1132985.47}, {"x": "2022-03-14", "y": 1154560.89}, {"x": "2022-03-25", "y": 1157321.22}, {"x": "2022-04-07", "y": 1161197.85}, {"x": "2022-04-21", "y": 1184360.08}, {"x": "2022-05-04", "y": 1292811.69}, {"x": "2022-05-16", "y": 1268686.73}, {"x": "2022-05-27", "y": 1251526.4}, {"x": "2022-06-10", "y": 1217119.12}, {"x": "2022-06-24", "y": 1253505.47}, {"x": "2022-07-08", "y": 1258191.66}, {"x": "2022-07-20", "y": 1248364.03}, {"x": "2022-08-02", "y": 1245825.41}, {"x": "2022-08-15", "y": 1241615.58}, {"x": "2022-08-26", "y": 1241615.58}, {"x": "2022-09-09", "y": 1267697.25}, {"x": "2022-09-22", "y": 1285666.44}, {"x": "2022-10-04", "y": 1299553.04}, {"x": "2022-10-17", "y": 1299553.04}, {"x": "2022-10-28", "y": 1302402.35}, {"x": "2022-11-10", "y": 1327100.05}, {"x": "2022-11-23", "y": 1398541.93}, {"x": "2022-12-06", "y": 1456077.26}, {"x": "2022-12-19", "y": 1461926.96}, {"x": "2023-01-03", "y": 1465926.96}, {"x": "2023-01-17", "y": 1487161.44}, {"x": "2023-01-30", "y": 1490413.03}, {"x": "2023-02-10", "y": 1502975.56}, {"x": "2023-02-23", "y": 1486412.42}, {"x": "2023-03-08", "y": 1481726.11}, {"x": "2023-03-21", "y": 1419831.51}, {"x": "2023-04-03", "y": 1419831.51}, {"x": "2023-04-17", "y": 1421940.86}, {"x": "2023-04-27", "y": 1431009.73}, {"x": "2023-05-10", "y": 1431204.11}, {"x": "2023-05-23", "y": 1475530.89}, {"x": "2023-06-06", "y": 1530389.51}, {"x": "2023-06-20", "y": 1574500.3}, {"x": "2023-07-03", "y": 1605229.39}, {"x": "2023-07-14", "y": 1623481.03}, {"x": "2023-07-27", "y": 1656479.8}, {"x": "2023-08-09", "y": 1697236.1}, {"x": "2023-08-22", "y": 1702575.89}, {"x": "2023-09-05", "y": 1694921.24}, {"x": "2023-09-15", "y": 1712736.87}, {"x": "2023-09-28", "y": 1640646.13}, {"x": "2023-10-11", "y": 1682187.87}, {"x": "2023-10-24", "y": 1651099.77}, {"x": "2023-11-06", "y": 1657384.05}, {"x": "2023-11-17", "y": 1677144.73}, {"x": "2023-11-30", "y": 1686695.21}, {"x": "2023-12-13", "y": 1703077.91}, {"x": "2023-12-27", "y": 1735643.07}, {"x": "2024-01-10", "y": 1839731.61}, {"x": "2024-01-24", "y": 1829626.35}, {"x": "2024-02-05", "y": 1847401.51}, {"x": "2024-02-16", "y": 1897686.95}, {"x": "2024-03-01", "y": 1901763.57}, {"x": "2024-03-14", "y": 1934779.05}, {"x": "2024-03-27", "y": 1919786.86}, {"x": "2024-04-09", "y": 2147163.12}, {"x": "2024-04-22", "y": 2288799.0}, {"x": "2024-05-03", "y": 2275795.8}, {"x": "2024-05-16", "y": 2275795.8}, {"x": "2024-05-30", "y": 2405583.64}, {"x": "2024-06-12", "y": 2408935.75}, {"x": "2024-06-25", "y": 2436172.48}, {"x": "2024-07-09", "y": 2422613.13}, {"x": "2024-07-22", "y": 2499459.84}, {"x": "2024-08-02", "y": 2520793.45}, {"x": "2024-08-15", "y": 2517746.16}, {"x": "2024-08-27", "y": 2517753.56}, {"x": "2024-09-10", "y": 2560030.85}, {"x": "2024-09-23", "y": 2548920.2}, {"x": "2024-10-04", "y": 2595835.64}, {"x": "2024-10-17", "y": 2703176.01}, {"x": "2024-10-30", "y": 2746671.9}, {"x": "2024-11-11", "y": 2814043.85}, {"x": "2024-11-22", "y": 2812743.88}, {"x": "2024-12-06", "y": 2827499.87}, {"x": "2024-12-19", "y": 3074466.73}, {"x": "2025-01-03", "y": 3078466.73}, {"x": "2025-01-16", "y": 2954514.38}, {"x": "2025-01-30", "y": 3065792.8}, {"x": "2025-02-12", "y": 3067758.02}, {"x": "2025-02-26", "y": 3356161.62}, {"x": "2025-03-11", "y": 3299839.32}, {"x": "2025-03-24", "y": 3306458.57}, {"x": "2025-04-03", "y": 3256683.22}, {"x": "2025-04-16", "y": 3177925.95}, {"x": "2025-04-30", "y": 3132814.67}, {"x": "2025-05-13", "y": 3136479.82}, {"x": "2025-05-27", "y": 3133209.52}, {"x": "2025-06-06", "y": 3137810.16}, {"x": "2025-06-20", "y": 3176173.34}, {"x": "2025-07-03", "y": 3165754.1}, {"x": "2025-07-17", "y": 3268615.35}, {"x": "2025-07-30", "y": 3305423.45}, {"x": "2025-08-12", "y": 3299933.85}, {"x": "2025-08-22", "y": 3345683.88}, {"x": "2025-09-05", "y": 3382549.63}, {"x": "2025-09-18", "y": 3407622.09}, {"x": "2025-10-01", "y": 3396858.9}, {"x": "2025-10-14", "y": 3515276.95}, {"x": "2025-10-24", "y": 3464600.68}, {"x": "2025-11-06", "y": 3516420.91}, {"x": "2025-11-19", "y": 3540140.98}, {"x": "2025-12-03", "y": 3516913.06}, {"x": "2025-12-16", "y": 3544386.04}, {"x": "2025-12-30", "y": 3602440.94}], "borderColor": "#f59e0b", "backgroundColor": "#f59e0b18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}];
-new Chart(document.getElementById('chartCapital'), {
-  type: 'line',
-  data: { datasets: capitalData },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    scales: {
-      x: {
-        type: 'time',
-        time: { unit: 'year', tooltipFormat: 'yyyy-MM-dd' },
-        grid: { color: '#2d314820' },
-        ticks: { color: '#94a3b8', maxTicksLimit: 12 },
-      },
-      y: {
-        type: 'logarithmic',
-        grid: { color: '#2d314840' },
-        ticks: {
-          color: '#94a3b8',
-          callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'k' : v
-        },
-      }
-    },
-    plugins: {
-      legend: { labels: { color: '#e2e8f0', boxWidth: 14, padding: 20 } },
-      tooltip: {
-        backgroundColor: '#1a1d2e',
-        borderColor: '#2d3148',
-        borderWidth: 1,
-        titleColor: '#94a3b8',
-        bodyColor: '#e2e8f0',
-        callbacks: {
-          label: ctx => ctx.dataset.label + ': ' +
-            new Intl.NumberFormat('es-ES', {style:'currency',currency:'EUR',maximumFractionDigits:0})
-            .format(ctx.parsed.y)
-        }
-      }
-    }
-  }
+// Drawdown desde pico
+const dds = capitales.map((c, i) => {
+  const pico = Math.max(...capitales.slice(0, i+1));
+  return pico > 0 ? ((c - pico) / pico * 100) : 0;
 });
 
-// ── Drawdown ──
-const ddData = [{"label": "Desde 2015", "data": [{"x": "2015-01-02", "y": 0.0}, {"x": "2015-01-08", "y": 0.0}, {"x": "2015-01-15", "y": 0.0}, {"x": "2015-01-22", "y": 0.0}, {"x": "2015-01-29", "y": 0.0}, {"x": "2015-02-05", "y": 0.0}, {"x": "2015-02-11", "y": 0.0}, {"x": "2015-02-19", "y": 0.0}, {"x": "2015-02-25", "y": 0.0}, {"x": "2015-03-04", "y": 0.0}, {"x": "2015-03-11", "y": 0.0}, {"x": "2015-03-17", "y": 0.0}, {"x": "2015-03-24", "y": 0.0}, {"x": "2015-03-30", "y": 0.0}, {"x": "2015-04-07", "y": 0.0}, {"x": "2015-04-14", "y": 0.0}, {"x": "2015-04-20", "y": 0.0}, {"x": "2015-04-27", "y": 0.0}, {"x": "2015-05-04", "y": 0.0}, {"x": "2015-05-08", "y": 0.0}, {"x": "2015-05-15", "y": 0.0}, {"x": "2015-05-21", "y": 0.0}, {"x": "2015-05-29", "y": 0.0}, {"x": "2015-06-05", "y": 0.0}, {"x": "2015-06-11", "y": 0.0}, {"x": "2015-06-18", "y": 0.0}, {"x": "2015-06-24", "y": 0.0}, {"x": "2015-07-01", "y": 0.0}, {"x": "2015-07-09", "y": 0.0}, {"x": "2015-07-15", "y": 0.0}, {"x": "2015-07-22", "y": 0.0}, {"x": "2015-07-29", "y": 0.0}, {"x": "2015-08-04", "y": 0.0}, {"x": "2015-08-11", "y": 0.0}, {"x": "2015-08-17", "y": 0.0}, {"x": "2015-08-24", "y": 0.0}, {"x": "2015-08-31", "y": 0.0}, {"x": "2015-09-04", "y": 0.0}, {"x": "2015-09-14", "y": 0.0}, {"x": "2015-09-18", "y": 0.0}, {"x": "2015-09-25", "y": 0.0}, {"x": "2015-10-02", "y": 0.0}, {"x": "2015-10-08", "y": 0.0}, {"x": "2015-10-15", "y": 0.0}, {"x": "2015-10-22", "y": 0.0}, {"x": "2015-10-28", "y": 0.0}, {"x": "2015-11-04", "y": 0.06}, {"x": "2015-11-10", "y": 1.21}, {"x": "2015-11-17", "y": 1.09}, {"x": "2015-11-24", "y": 1.09}, {"x": "2015-12-01", "y": 1.09}, {"x": "2015-12-08", "y": 2.31}, {"x": "2015-12-14", "y": 2.8}, {"x": "2015-12-21", "y": 3.14}, {"x": "2015-12-29", "y": 3.14}, {"x": "2016-01-05", "y": 0.0}, {"x": "2016-01-12", "y": 1.79}, {"x": "2016-01-20", "y": 3.91}, {"x": "2016-01-26", "y": 4.57}, {"x": "2016-02-02", "y": 5.58}, {"x": "2016-02-08", "y": 6.29}, {"x": "2016-02-16", "y": 6.76}, {"x": "2016-02-23", "y": 6.76}, {"x": "2016-02-29", "y": 6.11}, {"x": "2016-03-07", "y": 6.11}, {"x": "2016-03-11", "y": 6.11}, {"x": "2016-03-18", "y": 6.11}, {"x": "2016-03-28", "y": 6.11}, {"x": "2016-04-01", "y": 6.6}, {"x": "2016-04-08", "y": 6.6}, {"x": "2016-04-15", "y": 4.73}, {"x": "2016-04-21", "y": 3.07}, {"x": "2016-04-28", "y": 3.07}, {"x": "2016-05-04", "y": 0.0}, {"x": "2016-05-11", "y": 0.0}, {"x": "2016-05-18", "y": 0.44}, {"x": "2016-05-24", "y": 1.2}, {"x": "2016-06-01", "y": 1.2}, {"x": "2016-06-07", "y": 1.2}, {"x": "2016-06-14", "y": 1.1}, {"x": "2016-06-21", "y": 0.18}, {"x": "2016-06-27", "y": 0.32}, {"x": "2016-07-05", "y": 0.0}, {"x": "2016-07-11", "y": 0.0}, {"x": "2016-07-18", "y": 0.0}, {"x": "2016-07-25", "y": 0.0}, {"x": "2016-07-29", "y": 0.47}, {"x": "2016-08-05", "y": 0.12}, {"x": "2016-08-12", "y": 0.12}, {"x": "2016-08-18", "y": 0.0}, {"x": "2016-08-25", "y": 0.0}, {"x": "2016-08-31", "y": 0.76}, {"x": "2016-09-08", "y": 2.69}, {"x": "2016-09-15", "y": 3.72}, {"x": "2016-09-21", "y": 3.72}, {"x": "2016-09-28", "y": 3.58}, {"x": "2016-10-04", "y": 3.46}, {"x": "2016-10-11", "y": 3.46}, {"x": "2016-10-18", "y": 3.32}, {"x": "2016-10-24", "y": 3.19}, {"x": "2016-10-31", "y": 1.32}, {"x": "2016-11-07", "y": 4.08}, {"x": "2016-11-11", "y": 4.08}, {"x": "2016-11-18", "y": 3.91}, {"x": "2016-11-25", "y": 3.91}, {"x": "2016-12-02", "y": 2.61}, {"x": "2016-12-09", "y": 1.76}, {"x": "2016-12-15", "y": 1.86}, {"x": "2016-12-22", "y": 0.0}, {"x": "2016-12-29", "y": 0.0}, {"x": "2017-01-06", "y": 0.0}, {"x": "2017-01-13", "y": 0.0}, {"x": "2017-01-20", "y": 0.03}, {"x": "2017-01-27", "y": 0.66}, {"x": "2017-02-03", "y": 0.0}, {"x": "2017-02-09", "y": 0.0}, {"x": "2017-02-16", "y": 0.0}, {"x": "2017-02-23", "y": 0.0}, {"x": "2017-03-02", "y": 0.0}, {"x": "2017-03-09", "y": 0.0}, {"x": "2017-03-15", "y": 0.0}, {"x": "2017-03-22", "y": 0.0}, {"x": "2017-03-28", "y": 0.38}, {"x": "2017-04-04", "y": 0.78}, {"x": "2017-04-11", "y": 0.78}, {"x": "2017-04-18", "y": 0.78}, {"x": "2017-04-25", "y": 0.78}, {"x": "2017-05-02", "y": 0.78}, {"x": "2017-05-08", "y": 1.62}, {"x": "2017-05-15", "y": 1.62}, {"x": "2017-05-19", "y": 1.62}, {"x": "2017-05-26", "y": 0.0}, {"x": "2017-06-05", "y": 0.0}, {"x": "2017-06-09", "y": 0.0}, {"x": "2017-06-16", "y": 0.62}, {"x": "2017-06-22", "y": 1.03}, {"x": "2017-06-29", "y": 0.2}, {"x": "2017-07-07", "y": 0.0}, {"x": "2017-07-13", "y": 0.0}, {"x": "2017-07-20", "y": 0.2}, {"x": "2017-07-27", "y": 0.2}, {"x": "2017-08-02", "y": 0.44}, {"x": "2017-08-09", "y": 0.0}, {"x": "2017-08-15", "y": 0.2}, {"x": "2017-08-22", "y": 0.0}, {"x": "2017-08-29", "y": 0.0}, {"x": "2017-09-05", "y": 0.0}, {"x": "2017-09-12", "y": 0.0}, {"x": "2017-09-18", "y": 0.0}, {"x": "2017-09-25", "y": 0.0}, {"x": "2017-10-02", "y": 0.0}, {"x": "2017-10-06", "y": 0.0}, {"x": "2017-10-13", "y": 0.62}, {"x": "2017-10-19", "y": 0.62}, {"x": "2017-10-26", "y": 0.0}, {"x": "2017-11-02", "y": 1.07}, {"x": "2017-11-08", "y": 1.02}, {"x": "2017-11-15", "y": 0.0}, {"x": "2017-11-22", "y": 0.0}, {"x": "2017-11-29", "y": 0.0}, {"x": "2017-12-06", "y": 0.0}, {"x": "2017-12-12", "y": 0.0}, {"x": "2017-12-19", "y": 0.44}, {"x": "2017-12-27", "y": 0.0}, {"x": "2018-01-03", "y": 0.0}, {"x": "2018-01-10", "y": 0.0}, {"x": "2018-01-17", "y": 0.0}, {"x": "2018-01-24", "y": 0.0}, {"x": "2018-01-31", "y": 0.0}, {"x": "2018-02-06", "y": 0.45}, {"x": "2018-02-13", "y": 4.0}, {"x": "2018-02-21", "y": 3.58}, {"x": "2018-02-27", "y": 3.39}, {"x": "2018-03-06", "y": 3.22}, {"x": "2018-03-12", "y": 2.89}, {"x": "2018-03-19", "y": 3.34}, {"x": "2018-03-26", "y": 2.35}, {"x": "2018-04-02", "y": 3.13}, {"x": "2018-04-09", "y": 3.83}, {"x": "2018-04-13", "y": 3.57}, {"x": "2018-04-20", "y": 3.43}, {"x": "2018-04-27", "y": 3.26}, {"x": "2018-05-03", "y": 2.86}, {"x": "2018-05-10", "y": 2.22}, {"x": "2018-05-17", "y": 2.22}, {"x": "2018-05-23", "y": 2.22}, {"x": "2018-05-31", "y": 0.0}, {"x": "2018-06-06", "y": 1.47}, {"x": "2018-06-13", "y": 0.0}, {"x": "2018-06-20", "y": 0.24}, {"x": "2018-06-26", "y": 0.0}, {"x": "2018-07-03", "y": 0.2}, {"x": "2018-07-10", "y": 0.0}, {"x": "2018-07-17", "y": 0.64}, {"x": "2018-07-24", "y": 0.99}, {"x": "2018-07-30", "y": 0.0}, {"x": "2018-08-06", "y": 0.0}, {"x": "2018-08-13", "y": 0.49}, {"x": "2018-08-17", "y": 1.16}, {"x": "2018-08-24", "y": 1.16}, {"x": "2018-08-30", "y": 1.4}, {"x": "2018-09-07", "y": 1.34}, {"x": "2018-09-14", "y": 1.34}, {"x": "2018-09-20", "y": 1.8}, {"x": "2018-09-27", "y": 0.82}, {"x": "2018-10-03", "y": 0.39}, {"x": "2018-10-10", "y": 0.0}, {"x": "2018-10-17", "y": 1.57}, {"x": "2018-10-23", "y": 4.08}, {"x": "2018-10-30", "y": 6.02}, {"x": "2018-11-06", "y": 5.61}, {"x": "2018-11-12", "y": 5.61}, {"x": "2018-11-19", "y": 7.5}, {"x": "2018-11-26", "y": 7.62}, {"x": "2018-12-03", "y": 8.36}, {"x": "2018-12-11", "y": 7.18}, {"x": "2018-12-17", "y": 6.85}, {"x": "2018-12-24", "y": 8.82}, {"x": "2018-12-31", "y": 8.82}, {"x": "2019-01-08", "y": 0.0}, {"x": "2019-01-15", "y": 0.0}, {"x": "2019-01-22", "y": 0.0}, {"x": "2019-01-29", "y": 0.0}, {"x": "2019-02-05", "y": 0.0}, {"x": "2019-02-11", "y": 0.0}, {"x": "2019-02-19", "y": 0.0}, {"x": "2019-02-25", "y": 0.0}, {"x": "2019-03-04", "y": 0.0}, {"x": "2019-03-11", "y": 0.0}, {"x": "2019-03-15", "y": 0.0}, {"x": "2019-03-22", "y": 0.0}, {"x": "2019-03-28", "y": 0.0}, {"x": "2019-04-04", "y": 0.0}, {"x": "2019-04-11", "y": 0.0}, {"x": "2019-04-17", "y": 0.4}, {"x": "2019-04-25", "y": 0.0}, {"x": "2019-05-01", "y": 0.0}, {"x": "2019-05-08", "y": 0.0}, {"x": "2019-05-15", "y": 3.03}, {"x": "2019-05-21", "y": 3.76}, {"x": "2019-05-29", "y": 5.5}, {"x": "2019-06-05", "y": 5.5}, {"x": "2019-06-11", "y": 5.5}, {"x": "2019-06-18", "y": 5.5}, {"x": "2019-06-24", "y": 4.66}, {"x": "2019-07-01", "y": 3.84}, {"x": "2019-07-09", "y": 4.06}, {"x": "2019-07-15", "y": 4.69}, {"x": "2019-07-22", "y": 3.06}, {"x": "2019-07-26", "y": 3.06}, {"x": "2019-08-02", "y": 2.19}, {"x": "2019-08-09", "y": 0.0}, {"x": "2019-08-15", "y": 0.52}, {"x": "2019-08-22", "y": 0.52}, {"x": "2019-08-29", "y": 0.0}, {"x": "2019-09-05", "y": 0.0}, {"x": "2019-09-12", "y": 0.0}, {"x": "2019-09-18", "y": 0.0}, {"x": "2019-09-25", "y": 0.69}, {"x": "2019-10-02", "y": 3.65}, {"x": "2019-10-08", "y": 3.51}, {"x": "2019-10-15", "y": 3.51}, {"x": "2019-10-21", "y": 3.35}, {"x": "2019-10-28", "y": 4.11}, {"x": "2019-11-04", "y": 0.0}, {"x": "2019-11-08", "y": 0.7}, {"x": "2019-11-15", "y": 0.0}, {"x": "2019-11-22", "y": 0.0}, {"x": "2019-11-29", "y": 0.0}, {"x": "2019-12-06", "y": 0.48}, {"x": "2019-12-12", "y": 0.48}, {"x": "2019-12-19", "y": 0.48}, {"x": "2019-12-27", "y": 0.48}, {"x": "2020-01-03", "y": 0.0}, {"x": "2020-01-10", "y": 0.42}, {"x": "2020-01-16", "y": 0.42}, {"x": "2020-01-24", "y": 0.0}, {"x": "2020-01-31", "y": 0.0}, {"x": "2020-02-06", "y": 0.0}, {"x": "2020-02-13", "y": 0.0}, {"x": "2020-02-21", "y": 0.57}, {"x": "2020-02-27", "y": 0.0}, {"x": "2020-03-05", "y": 0.0}, {"x": "2020-03-11", "y": 2.89}, {"x": "2020-03-18", "y": 3.38}, {"x": "2020-03-25", "y": 7.29}, {"x": "2020-03-31", "y": 7.29}, {"x": "2020-04-07", "y": 7.29}, {"x": "2020-04-14", "y": 7.29}, {"x": "2020-04-21", "y": 7.29}, {"x": "2020-04-28", "y": 6.29}, {"x": "2020-05-04", "y": 6.56}, {"x": "2020-05-11", "y": 6.41}, {"x": "2020-05-18", "y": 6.41}, {"x": "2020-05-22", "y": 5.72}, {"x": "2020-06-01", "y": 3.27}, {"x": "2020-06-05", "y": 3.58}, {"x": "2020-06-12", "y": 1.17}, {"x": "2020-06-19", "y": 1.43}, {"x": "2020-06-25", "y": 1.43}, {"x": "2020-07-02", "y": 1.43}, {"x": "2020-07-09", "y": 1.43}, {"x": "2020-07-16", "y": 1.28}, {"x": "2020-07-23", "y": 1.28}, {"x": "2020-07-29", "y": 1.77}, {"x": "2020-08-05", "y": 0.47}, {"x": "2020-08-11", "y": 0.27}, {"x": "2020-08-18", "y": 0.27}, {"x": "2020-08-25", "y": 0.09}, {"x": "2020-08-31", "y": 0.09}, {"x": "2020-09-08", "y": 0.0}, {"x": "2020-09-15", "y": 0.0}, {"x": "2020-09-21", "y": 1.42}, {"x": "2020-09-28", "y": 0.0}, {"x": "2020-10-02", "y": 0.71}, {"x": "2020-10-09", "y": 1.06}, {"x": "2020-10-16", "y": 0.76}, {"x": "2020-10-22", "y": 2.02}, {"x": "2020-10-29", "y": 2.41}, {"x": "2020-11-04", "y": 3.18}, {"x": "2020-11-11", "y": 0.68}, {"x": "2020-11-18", "y": 0.39}, {"x": "2020-11-24", "y": 0.39}, {"x": "2020-12-02", "y": 0.0}, {"x": "2020-12-09", "y": 0.0}, {"x": "2020-12-15", "y": 0.0}, {"x": "2020-12-22", "y": 0.0}, {"x": "2020-12-29", "y": 0.0}, {"x": "2021-01-06", "y": 0.0}, {"x": "2021-01-13", "y": 0.0}, {"x": "2021-01-20", "y": 0.0}, {"x": "2021-01-27", "y": 0.0}, {"x": "2021-02-02", "y": 0.0}, {"x": "2021-02-09", "y": 0.0}, {"x": "2021-02-17", "y": 0.84}, {"x": "2021-02-23", "y": 0.82}, {"x": "2021-03-02", "y": 1.54}, {"x": "2021-03-09", "y": 1.16}, {"x": "2021-03-15", "y": 1.16}, {"x": "2021-03-22", "y": 0.98}, {"x": "2021-03-26", "y": 0.07}, {"x": "2021-04-05", "y": 0.07}, {"x": "2021-04-12", "y": 0.07}, {"x": "2021-04-16", "y": 0.07}, {"x": "2021-04-23", "y": 0.0}, {"x": "2021-04-29", "y": 0.75}, {"x": "2021-05-06", "y": 1.49}, {"x": "2021-05-13", "y": 1.56}, {"x": "2021-05-19", "y": 0.79}, {"x": "2021-05-26", "y": 1.12}, {"x": "2021-06-03", "y": 1.12}, {"x": "2021-06-09", "y": 1.12}, {"x": "2021-06-16", "y": 0.89}, {"x": "2021-06-22", "y": 0.0}, {"x": "2021-06-29", "y": 0.0}, {"x": "2021-07-07", "y": 0.0}, {"x": "2021-07-13", "y": 0.46}, {"x": "2021-07-20", "y": 0.62}, {"x": "2021-07-26", "y": 0.62}, {"x": "2021-08-02", "y": 0.0}, {"x": "2021-08-09", "y": 0.65}, {"x": "2021-08-13", "y": 0.53}, {"x": "2021-08-20", "y": 0.77}, {"x": "2021-08-27", "y": 0.52}, {"x": "2021-09-02", "y": 0.52}, {"x": "2021-09-10", "y": 1.9}, {"x": "2021-09-16", "y": 1.72}, {"x": "2021-09-23", "y": 1.73}, {"x": "2021-09-30", "y": 0.0}, {"x": "2021-10-06", "y": 0.0}, {"x": "2021-10-13", "y": 0.0}, {"x": "2021-10-19", "y": 0.0}, {"x": "2021-10-26", "y": 0.62}, {"x": "2021-11-02", "y": 1.6}, {"x": "2021-11-08", "y": 1.6}, {"x": "2021-11-15", "y": 2.31}, {"x": "2021-11-19", "y": 1.92}, {"x": "2021-11-29", "y": 2.04}, {"x": "2021-12-06", "y": 0.19}, {"x": "2021-12-10", "y": 0.24}, {"x": "2021-12-17", "y": 0.61}, {"x": "2021-12-27", "y": 0.25}, {"x": "2021-12-31", "y": 0.25}, {"x": "2022-01-07", "y": 0.83}, {"x": "2022-01-13", "y": 0.78}, {"x": "2022-01-21", "y": 2.1}, {"x": "2022-01-28", "y": 3.0}, {"x": "2022-02-03", "y": 3.0}, {"x": "2022-02-10", "y": 0.97}, {"x": "2022-02-16", "y": 1.21}, {"x": "2022-02-24", "y": 1.22}, {"x": "2022-03-03", "y": 0.24}, {"x": "2022-03-09", "y": 0.0}, {"x": "2022-03-16", "y": 0.0}, {"x": "2022-03-23", "y": 0.0}, {"x": "2022-03-29", "y": 0.0}, {"x": "2022-04-05", "y": 0.0}, {"x": "2022-04-11", "y": 0.0}, {"x": "2022-04-19", "y": 0.0}, {"x": "2022-04-26", "y": 0.0}, {"x": "2022-05-02", "y": 0.0}, {"x": "2022-05-09", "y": 0.43}, {"x": "2022-05-13", "y": 1.86}, {"x": "2022-05-20", "y": 3.14}, {"x": "2022-05-27", "y": 3.14}, {"x": "2022-06-03", "y": 3.14}, {"x": "2022-06-10", "y": 5.8}, {"x": "2022-06-17", "y": 2.99}, {"x": "2022-06-24", "y": 2.99}, {"x": "2022-07-01", "y": 2.63}, {"x": "2022-07-08", "y": 2.63}, {"x": "2022-07-15", "y": 3.29}, {"x": "2022-07-22", "y": 3.74}, {"x": "2022-07-28", "y": 3.61}, {"x": "2022-08-04", "y": 3.93}, {"x": "2022-08-10", "y": 3.93}, {"x": "2022-08-17", "y": 3.93}, {"x": "2022-08-24", "y": 3.93}, {"x": "2022-08-30", "y": 3.93}, {"x": "2022-09-07", "y": 1.92}, {"x": "2022-09-14", "y": 0.37}, {"x": "2022-09-20", "y": 0.37}, {"x": "2022-09-27", "y": 0.0}, {"x": "2022-10-03", "y": 0.6}, {"x": "2022-10-10", "y": 0.6}, {"x": "2022-10-17", "y": 0.61}, {"x": "2022-10-21", "y": 0.61}, {"x": "2022-10-28", "y": 0.39}, {"x": "2022-11-03", "y": 0.39}, {"x": "2022-11-10", "y": 0.0}, {"x": "2022-11-17", "y": 0.0}, {"x": "2022-11-23", "y": 0.0}, {"x": "2022-12-01", "y": 0.0}, {"x": "2022-12-08", "y": 0.0}, {"x": "2022-12-14", "y": 0.0}, {"x": "2022-12-21", "y": 0.27}, {"x": "2022-12-28", "y": 0.27}, {"x": "2023-01-05", "y": 0.0}, {"x": "2023-01-12", "y": 0.0}, {"x": "2023-01-19", "y": 0.0}, {"x": "2023-01-26", "y": 0.0}, {"x": "2023-02-01", "y": 0.0}, {"x": "2023-02-08", "y": 0.0}, {"x": "2023-02-15", "y": 1.08}, {"x": "2023-02-22", "y": 2.17}, {"x": "2023-03-01", "y": 2.17}, {"x": "2023-03-08", "y": 2.48}, {"x": "2023-03-14", "y": 5.98}, {"x": "2023-03-21", "y": 6.51}, {"x": "2023-03-27", "y": 6.51}, {"x": "2023-04-03", "y": 6.51}, {"x": "2023-04-11", "y": 6.51}, {"x": "2023-04-17", "y": 6.37}, {"x": "2023-04-24", "y": 6.37}, {"x": "2023-04-28", "y": 5.78}, {"x": "2023-05-05", "y": 6.45}, {"x": "2023-05-12", "y": 6.22}, {"x": "2023-05-18", "y": 6.22}, {"x": "2023-05-25", "y": 0.0}, {"x": "2023-06-01", "y": 0.38}, {"x": "2023-06-08", "y": 0.0}, {"x": "2023-06-15", "y": 0.0}, {"x": "2023-06-22", "y": 0.0}, {"x": "2023-06-29", "y": 0.0}, {"x": "2023-07-07", "y": 0.6}, {"x": "2023-07-13", "y": 0.6}, {"x": "2023-07-20", "y": 0.6}, {"x": "2023-07-26", "y": 0.0}, {"x": "2023-08-02", "y": 0.0}, {"x": "2023-08-09", "y": 0.39}, {"x": "2023-08-15", "y": 0.39}, {"x": "2023-08-22", "y": 0.76}, {"x": "2023-08-28", "y": 0.54}, {"x": "2023-09-05", "y": 1.2}, {"x": "2023-09-12", "y": 0.62}, {"x": "2023-09-18", "y": 0.27}, {"x": "2023-09-25", "y": 0.96}, {"x": "2023-10-02", "y": 1.37}, {"x": "2023-10-06", "y": 2.16}, {"x": "2023-10-13", "y": 2.9}, {"x": "2023-10-19", "y": 4.1}, {"x": "2023-10-26", "y": 3.96}, {"x": "2023-11-02", "y": 3.6}, {"x": "2023-11-08", "y": 3.6}, {"x": "2023-11-15", "y": 2.69}, {"x": "2023-11-21", "y": 1.9}, {"x": "2023-11-29", "y": 1.9}, {"x": "2023-12-06", "y": 0.95}, {"x": "2023-12-12", "y": 0.95}, {"x": "2023-12-19", "y": 0.0}, {"x": "2023-12-27", "y": 0.0}, {"x": "2024-01-03", "y": 0.0}, {"x": "2024-01-10", "y": 0.0}, {"x": "2024-01-17", "y": 0.54}, {"x": "2024-01-24", "y": 0.54}, {"x": "2024-01-31", "y": 0.54}, {"x": "2024-02-06", "y": 0.0}, {"x": "2024-02-13", "y": 0.0}, {"x": "2024-02-20", "y": 0.0}, {"x": "2024-02-27", "y": 0.0}, {"x": "2024-03-05", "y": 0.0}, {"x": "2024-03-11", "y": 0.0}, {"x": "2024-03-18", "y": 0.77}, {"x": "2024-03-25", "y": 0.77}, {"x": "2024-04-01", "y": 0.77}, {"x": "2024-04-08", "y": 0.0}, {"x": "2024-04-12", "y": 0.0}, {"x": "2024-04-19", "y": 1.76}, {"x": "2024-04-26", "y": 2.32}, {"x": "2024-05-02", "y": 2.32}, {"x": "2024-05-09", "y": 2.32}, {"x": "2024-05-15", "y": 2.32}, {"x": "2024-05-22", "y": 2.62}, {"x": "2024-05-30", "y": 0.0}, {"x": "2024-06-05", "y": 0.59}, {"x": "2024-06-12", "y": 0.0}, {"x": "2024-06-20", "y": 0.0}, {"x": "2024-06-26", "y": 0.0}, {"x": "2024-07-03", "y": 0.67}, {"x": "2024-07-10", "y": 0.55}, {"x": "2024-07-17", "y": 0.91}, {"x": "2024-07-24", "y": 0.0}, {"x": "2024-07-30", "y": 0.0}, {"x": "2024-08-06", "y": 0.83}, {"x": "2024-08-12", "y": 1.48}, {"x": "2024-08-19", "y": 1.48}, {"x": "2024-08-26", "y": 1.48}, {"x": "2024-08-30", "y": 0.0}, {"x": "2024-09-09", "y": 0.35}, {"x": "2024-09-13", "y": 0.35}, {"x": "2024-09-20", "y": 0.78}, {"x": "2024-09-27", "y": 0.0}, {"x": "2024-10-03", "y": 0.0}, {"x": "2024-10-10", "y": 0.0}, {"x": "2024-10-17", "y": 0.0}, {"x": "2024-10-23", "y": 0.38}, {"x": "2024-10-30", "y": 0.0}, {"x": "2024-11-05", "y": 0.0}, {"x": "2024-11-12", "y": 0.47}, {"x": "2024-11-19", "y": 0.42}, {"x": "2024-11-25", "y": 0.27}, {"x": "2024-12-03", "y": 0.11}, {"x": "2024-12-09", "y": 0.0}, {"x": "2024-12-16", "y": 0.0}, {"x": "2024-12-23", "y": 0.0}, {"x": "2024-12-30", "y": 0.0}, {"x": "2025-01-07", "y": 1.73}, {"x": "2025-01-15", "y": 3.97}, {"x": "2025-01-22", "y": 3.44}, {"x": "2025-01-29", "y": 0.3}, {"x": "2025-02-04", "y": 0.3}, {"x": "2025-02-11", "y": 1.16}, {"x": "2025-02-19", "y": 0.0}, {"x": "2025-02-25", "y": 0.0}, {"x": "2025-03-04", "y": 1.0}, {"x": "2025-03-10", "y": 1.26}, {"x": "2025-03-17", "y": 1.47}, {"x": "2025-03-24", "y": 1.47}, {"x": "2025-03-28", "y": 1.47}, {"x": "2025-04-04", "y": 5.41}, {"x": "2025-04-11", "y": 5.41}, {"x": "2025-04-17", "y": 5.3}, {"x": "2025-04-25", "y": 6.64}, {"x": "2025-05-01", "y": 6.64}, {"x": "2025-05-08", "y": 6.53}, {"x": "2025-05-15", "y": 6.53}, {"x": "2025-05-21", "y": 6.9}, {"x": "2025-05-29", "y": 6.63}, {"x": "2025-06-04", "y": 6.49}, {"x": "2025-06-11", "y": 6.39}, {"x": "2025-06-18", "y": 6.12}, {"x": "2025-06-25", "y": 5.35}, {"x": "2025-07-02", "y": 5.21}, {"x": "2025-07-10", "y": 5.42}, {"x": "2025-07-16", "y": 5.15}, {"x": "2025-07-23", "y": 2.6}, {"x": "2025-07-29", "y": 0.87}, {"x": "2025-08-05", "y": 0.9}, {"x": "2025-08-12", "y": 1.67}, {"x": "2025-08-18", "y": 0.6}, {"x": "2025-08-25", "y": 0.31}, {"x": "2025-08-29", "y": 0.0}, {"x": "2025-09-08", "y": 0.07}, {"x": "2025-09-15", "y": 0.07}, {"x": "2025-09-19", "y": 0.0}, {"x": "2025-09-26", "y": 0.45}, {"x": "2025-10-03", "y": 0.45}, {"x": "2025-10-09", "y": 0.0}, {"x": "2025-10-16", "y": 1.42}, {"x": "2025-10-22", "y": 2.06}, {"x": "2025-10-29", "y": 2.5}, {"x": "2025-11-05", "y": 0.6}, {"x": "2025-11-11", "y": 0.6}, {"x": "2025-11-18", "y": 0.29}, {"x": "2025-11-24", "y": 0.0}, {"x": "2025-12-02", "y": 0.78}, {"x": "2025-12-09", "y": 0.18}, {"x": "2025-12-15", "y": 0.0}, {"x": "2025-12-22", "y": 0.54}, {"x": "2025-12-30", "y": 0.0}], "borderColor": "#00d4ff", "backgroundColor": "#00d4ff18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}, {"label": "Desde 2010", "data": [{"x": "2010-01-04", "y": 0.0}, {"x": "2010-01-12", "y": 0.0}, {"x": "2010-01-22", "y": 0.0}, {"x": "2010-02-02", "y": 0.0}, {"x": "2010-02-10", "y": 0.0}, {"x": "2010-02-22", "y": 0.0}, {"x": "2010-03-03", "y": 0.0}, {"x": "2010-03-12", "y": 0.0}, {"x": "2010-03-22", "y": 0.0}, {"x": "2010-03-31", "y": 0.0}, {"x": "2010-04-12", "y": 0.0}, {"x": "2010-04-20", "y": 0.0}, {"x": "2010-04-29", "y": 0.0}, {"x": "2010-05-10", "y": 0.0}, {"x": "2010-05-19", "y": 0.0}, {"x": "2010-05-27", "y": 0.0}, {"x": "2010-06-08", "y": 0.0}, {"x": "2010-06-17", "y": 0.0}, {"x": "2010-06-25", "y": 0.0}, {"x": "2010-07-07", "y": 0.0}, {"x": "2010-07-16", "y": 0.0}, {"x": "2010-07-27", "y": 0.0}, {"x": "2010-08-04", "y": 0.0}, {"x": "2010-08-13", "y": 0.0}, {"x": "2010-08-24", "y": 0.0}, {"x": "2010-09-01", "y": 0.0}, {"x": "2010-09-13", "y": 0.0}, {"x": "2010-09-22", "y": 0.0}, {"x": "2010-10-01", "y": 0.0}, {"x": "2010-10-11", "y": 0.0}, {"x": "2010-10-20", "y": 0.0}, {"x": "2010-10-29", "y": 0.0}, {"x": "2010-11-08", "y": 0.0}, {"x": "2010-11-17", "y": 1.08}, {"x": "2010-11-29", "y": 2.27}, {"x": "2010-12-08", "y": 1.83}, {"x": "2010-12-16", "y": 0.0}, {"x": "2010-12-28", "y": 0.52}, {"x": "2011-01-06", "y": 0.0}, {"x": "2011-01-14", "y": 0.0}, {"x": "2011-01-26", "y": 0.0}, {"x": "2011-02-04", "y": 0.0}, {"x": "2011-02-15", "y": 0.0}, {"x": "2011-02-24", "y": 0.53}, {"x": "2011-03-07", "y": 1.23}, {"x": "2011-03-16", "y": 1.51}, {"x": "2011-03-24", "y": 1.51}, {"x": "2011-04-04", "y": 1.51}, {"x": "2011-04-13", "y": 1.19}, {"x": "2011-04-25", "y": 1.68}, {"x": "2011-05-03", "y": 1.61}, {"x": "2011-05-12", "y": 1.61}, {"x": "2011-05-23", "y": 0.0}, {"x": "2011-06-01", "y": 0.0}, {"x": "2011-06-10", "y": 0.42}, {"x": "2011-06-21", "y": 0.0}, {"x": "2011-06-30", "y": 0.0}, {"x": "2011-07-11", "y": 0.0}, {"x": "2011-07-20", "y": 0.54}, {"x": "2011-07-29", "y": 2.0}, {"x": "2011-08-08", "y": 3.86}, {"x": "2011-08-17", "y": 3.86}, {"x": "2011-08-26", "y": 5.15}, {"x": "2011-09-07", "y": 4.99}, {"x": "2011-09-15", "y": 5.41}, {"x": "2011-09-26", "y": 4.87}, {"x": "2011-10-05", "y": 8.86}, {"x": "2011-10-13", "y": 8.86}, {"x": "2011-10-24", "y": 8.86}, {"x": "2011-11-02", "y": 7.67}, {"x": "2011-11-11", "y": 7.86}, {"x": "2011-11-21", "y": 7.8}, {"x": "2011-12-01", "y": 6.84}, {"x": "2011-12-12", "y": 6.93}, {"x": "2011-12-20", "y": 6.66}, {"x": "2011-12-30", "y": 6.66}, {"x": "2012-01-11", "y": 0.24}, {"x": "2012-01-23", "y": 0.0}, {"x": "2012-01-31", "y": 0.0}, {"x": "2012-02-09", "y": 0.0}, {"x": "2012-02-21", "y": 0.0}, {"x": "2012-02-29", "y": 0.0}, {"x": "2012-03-09", "y": 0.0}, {"x": "2012-03-20", "y": 0.5}, {"x": "2012-03-29", "y": 0.5}, {"x": "2012-04-09", "y": 0.0}, {"x": "2012-04-18", "y": 0.0}, {"x": "2012-04-27", "y": 0.64}, {"x": "2012-05-07", "y": 0.0}, {"x": "2012-05-16", "y": 0.0}, {"x": "2012-05-25", "y": 1.19}, {"x": "2012-06-06", "y": 0.63}, {"x": "2012-06-14", "y": 0.63}, {"x": "2012-06-25", "y": 0.49}, {"x": "2012-07-05", "y": 0.19}, {"x": "2012-07-13", "y": 0.0}, {"x": "2012-07-24", "y": 0.0}, {"x": "2012-08-02", "y": 0.0}, {"x": "2012-08-13", "y": 0.0}, {"x": "2012-08-21", "y": 0.0}, {"x": "2012-08-30", "y": 0.0}, {"x": "2012-09-11", "y": 0.66}, {"x": "2012-09-19", "y": 0.0}, {"x": "2012-09-28", "y": 0.0}, {"x": "2012-10-09", "y": 0.0}, {"x": "2012-10-18", "y": 0.0}, {"x": "2012-10-26", "y": 0.52}, {"x": "2012-11-08", "y": 0.65}, {"x": "2012-11-19", "y": 1.13}, {"x": "2012-11-28", "y": 0.99}, {"x": "2012-12-07", "y": 0.81}, {"x": "2012-12-18", "y": 0.69}, {"x": "2012-12-28", "y": 0.65}, {"x": "2013-01-08", "y": 0.35}, {"x": "2013-01-17", "y": 0.21}, {"x": "2013-01-29", "y": 0.06}, {"x": "2013-02-06", "y": 0.0}, {"x": "2013-02-15", "y": 0.0}, {"x": "2013-02-27", "y": 0.0}, {"x": "2013-03-08", "y": 0.0}, {"x": "2013-03-18", "y": 0.0}, {"x": "2013-03-27", "y": 0.0}, {"x": "2013-04-08", "y": 0.0}, {"x": "2013-04-16", "y": 0.0}, {"x": "2013-04-25", "y": 0.0}, {"x": "2013-05-06", "y": 0.0}, {"x": "2013-05-15", "y": 0.0}, {"x": "2013-05-23", "y": 0.0}, {"x": "2013-06-04", "y": 0.0}, {"x": "2013-06-13", "y": 1.47}, {"x": "2013-06-21", "y": 5.47}, {"x": "2013-07-02", "y": 6.06}, {"x": "2013-07-12", "y": 6.42}, {"x": "2013-07-23", "y": 6.42}, {"x": "2013-07-31", "y": 4.37}, {"x": "2013-08-09", "y": 1.18}, {"x": "2013-08-20", "y": 0.0}, {"x": "2013-08-28", "y": 1.46}, {"x": "2013-09-09", "y": 3.05}, {"x": "2013-09-18", "y": 3.85}, {"x": "2013-09-27", "y": 3.45}, {"x": "2013-10-07", "y": 2.2}, {"x": "2013-10-16", "y": 0.71}, {"x": "2013-10-25", "y": 0.6}, {"x": "2013-11-04", "y": 0.0}, {"x": "2013-11-13", "y": 0.0}, {"x": "2013-11-22", "y": 0.0}, {"x": "2013-12-04", "y": 0.0}, {"x": "2013-12-12", "y": 0.0}, {"x": "2013-12-23", "y": 0.31}, {"x": "2014-01-03", "y": 0.0}, {"x": "2014-01-13", "y": 0.16}, {"x": "2014-01-23", "y": 0.0}, {"x": "2014-02-03", "y": 0.0}, {"x": "2014-02-12", "y": 0.0}, {"x": "2014-02-21", "y": 0.0}, {"x": "2014-03-04", "y": 0.51}, {"x": "2014-03-13", "y": 0.0}, {"x": "2014-03-21", "y": 0.0}, {"x": "2014-04-01", "y": 0.85}, {"x": "2014-04-10", "y": 0.0}, {"x": "2014-04-22", "y": 0.42}, {"x": "2014-04-30", "y": 0.7}, {"x": "2014-05-09", "y": 0.4}, {"x": "2014-05-20", "y": 1.06}, {"x": "2014-05-29", "y": 1.06}, {"x": "2014-06-09", "y": 1.06}, {"x": "2014-06-18", "y": 0.94}, {"x": "2014-06-27", "y": 0.72}, {"x": "2014-07-08", "y": 0.0}, {"x": "2014-07-17", "y": 0.82}, {"x": "2014-07-28", "y": 0.0}, {"x": "2014-08-05", "y": 1.34}, {"x": "2014-08-14", "y": 2.11}, {"x": "2014-08-25", "y": 2.11}, {"x": "2014-09-04", "y": 1.92}, {"x": "2014-09-12", "y": 2.08}, {"x": "2014-09-23", "y": 0.68}, {"x": "2014-10-02", "y": 1.76}, {"x": "2014-10-10", "y": 3.14}, {"x": "2014-10-21", "y": 1.68}, {"x": "2014-10-30", "y": 1.68}, {"x": "2014-11-10", "y": 0.59}, {"x": "2014-11-18", "y": 0.0}, {"x": "2014-11-28", "y": 0.0}, {"x": "2014-12-09", "y": 0.0}, {"x": "2014-12-17", "y": 0.0}, {"x": "2014-12-29", "y": 0.0}, {"x": "2015-01-08", "y": 0.64}, {"x": "2015-01-20", "y": 1.91}, {"x": "2015-01-28", "y": 2.29}, {"x": "2015-02-06", "y": 0.0}, {"x": "2015-02-18", "y": 0.0}, {"x": "2015-02-26", "y": 0.0}, {"x": "2015-03-09", "y": 0.46}, {"x": "2015-03-18", "y": 0.23}, {"x": "2015-03-27", "y": 0.0}, {"x": "2015-04-07", "y": 0.73}, {"x": "2015-04-16", "y": 1.4}, {"x": "2015-04-27", "y": 2.39}, {"x": "2015-05-05", "y": 3.99}, {"x": "2015-05-14", "y": 2.85}, {"x": "2015-05-26", "y": 2.85}, {"x": "2015-06-04", "y": 1.38}, {"x": "2015-06-12", "y": 0.14}, {"x": "2015-06-23", "y": 0.14}, {"x": "2015-07-02", "y": 0.0}, {"x": "2015-07-13", "y": 1.17}, {"x": "2015-07-22", "y": 1.17}, {"x": "2015-07-31", "y": 0.0}, {"x": "2015-08-11", "y": 0.0}, {"x": "2015-08-19", "y": 0.0}, {"x": "2015-08-28", "y": 0.0}, {"x": "2015-09-09", "y": 0.4}, {"x": "2015-09-17", "y": 0.4}, {"x": "2015-09-28", "y": 1.09}, {"x": "2015-10-07", "y": 1.49}, {"x": "2015-10-16", "y": 1.84}, {"x": "2015-10-26", "y": 1.65}, {"x": "2015-11-04", "y": 1.34}, {"x": "2015-11-13", "y": 1.46}, {"x": "2015-11-23", "y": 1.46}, {"x": "2015-12-03", "y": 0.88}, {"x": "2015-12-14", "y": 0.35}, {"x": "2015-12-23", "y": 1.43}, {"x": "2016-01-04", "y": 0.0}, {"x": "2016-01-13", "y": 1.18}, {"x": "2016-01-25", "y": 4.29}, {"x": "2016-02-02", "y": 4.58}, {"x": "2016-02-11", "y": 4.66}, {"x": "2016-02-23", "y": 5.45}, {"x": "2016-03-03", "y": 4.79}, {"x": "2016-03-11", "y": 4.79}, {"x": "2016-03-22", "y": 4.79}, {"x": "2016-04-01", "y": 5.35}, {"x": "2016-04-11", "y": 5.35}, {"x": "2016-04-20", "y": 4.09}, {"x": "2016-04-29", "y": 1.2}, {"x": "2016-05-10", "y": 0.0}, {"x": "2016-05-18", "y": 0.44}, {"x": "2016-05-27", "y": 1.21}, {"x": "2016-06-08", "y": 1.21}, {"x": "2016-06-16", "y": 0.03}, {"x": "2016-06-27", "y": 0.16}, {"x": "2016-07-07", "y": 0.0}, {"x": "2016-07-18", "y": 0.0}, {"x": "2016-07-26", "y": 0.0}, {"x": "2016-08-04", "y": 0.12}, {"x": "2016-08-15", "y": 0.12}, {"x": "2016-08-23", "y": 0.0}, {"x": "2016-09-01", "y": 1.49}, {"x": "2016-09-13", "y": 3.76}, {"x": "2016-09-22", "y": 3.77}, {"x": "2016-09-30", "y": 3.5}, {"x": "2016-10-11", "y": 3.5}, {"x": "2016-10-20", "y": 3.22}, {"x": "2016-10-28", "y": 1.46}, {"x": "2016-11-08", "y": 4.16}, {"x": "2016-11-17", "y": 3.41}, {"x": "2016-11-29", "y": 1.85}, {"x": "2016-12-07", "y": 2.29}, {"x": "2016-12-16", "y": 1.53}, {"x": "2016-12-28", "y": 0.0}, {"x": "2017-01-06", "y": 0.0}, {"x": "2017-01-18", "y": 0.03}, {"x": "2017-01-27", "y": 0.65}, {"x": "2017-02-07", "y": 0.0}, {"x": "2017-02-15", "y": 0.0}, {"x": "2017-02-27", "y": 0.0}, {"x": "2017-03-08", "y": 0.0}, {"x": "2017-03-16", "y": 0.0}, {"x": "2017-03-27", "y": 0.5}, {"x": "2017-04-05", "y": 0.78}, {"x": "2017-04-17", "y": 0.78}, {"x": "2017-04-25", "y": 0.78}, {"x": "2017-05-04", "y": 1.22}, {"x": "2017-05-15", "y": 1.62}, {"x": "2017-05-23", "y": 1.62}, {"x": "2017-06-02", "y": 0.0}, {"x": "2017-06-13", "y": 0.0}, {"x": "2017-06-22", "y": 1.04}, {"x": "2017-06-30", "y": 0.89}, {"x": "2017-07-12", "y": 0.0}, {"x": "2017-07-21", "y": 0.21}, {"x": "2017-07-31", "y": 0.03}, {"x": "2017-08-09", "y": 0.0}, {"x": "2017-08-18", "y": 0.0}, {"x": "2017-08-29", "y": 0.0}, {"x": "2017-09-07", "y": 0.0}, {"x": "2017-09-18", "y": 0.0}, {"x": "2017-09-27", "y": 0.0}, {"x": "2017-10-05", "y": 0.0}, {"x": "2017-10-16", "y": 0.65}, {"x": "2017-10-25", "y": 0.0}, {"x": "2017-11-03", "y": 1.49}, {"x": "2017-11-13", "y": 0.0}, {"x": "2017-11-22", "y": 0.0}, {"x": "2017-12-04", "y": 0.0}, {"x": "2017-12-12", "y": 0.0}, {"x": "2017-12-21", "y": 0.0}, {"x": "2018-01-03", "y": 0.0}, {"x": "2018-01-12", "y": 0.0}, {"x": "2018-01-23", "y": 0.0}, {"x": "2018-02-01", "y": 0.78}, {"x": "2018-02-12", "y": 4.07}, {"x": "2018-02-21", "y": 3.62}, {"x": "2018-03-02", "y": 3.29}, {"x": "2018-03-13", "y": 2.96}, {"x": "2018-03-22", "y": 1.99}, {"x": "2018-04-02", "y": 3.18}, {"x": "2018-04-11", "y": 3.61}, {"x": "2018-04-20", "y": 3.46}, {"x": "2018-04-30", "y": 3.09}, {"x": "2018-05-09", "y": 2.25}, {"x": "2018-05-18", "y": 2.25}, {"x": "2018-05-30", "y": 0.0}, {"x": "2018-06-07", "y": 1.48}, {"x": "2018-06-18", "y": 0.25}, {"x": "2018-06-27", "y": 0.0}, {"x": "2018-07-06", "y": 0.2}, {"x": "2018-07-17", "y": 0.65}, {"x": "2018-07-26", "y": 1.0}, {"x": "2018-08-06", "y": 0.0}, {"x": "2018-08-14", "y": 0.49}, {"x": "2018-08-23", "y": 1.16}, {"x": "2018-09-04", "y": 1.41}, {"x": "2018-09-12", "y": 1.34}, {"x": "2018-09-21", "y": 1.8}, {"x": "2018-10-02", "y": 0.38}, {"x": "2018-10-11", "y": 1.8}, {"x": "2018-10-19", "y": 1.59}, {"x": "2018-10-30", "y": 6.09}, {"x": "2018-11-08", "y": 5.68}, {"x": "2018-11-16", "y": 5.5}, {"x": "2018-11-28", "y": 8.44}, {"x": "2018-12-10", "y": 7.26}, {"x": "2018-12-19", "y": 7.66}, {"x": "2018-12-28", "y": 8.92}, {"x": "2019-01-09", "y": 6.73}, {"x": "2019-01-18", "y": 6.73}, {"x": "2019-01-29", "y": 6.56}, {"x": "2019-02-07", "y": 6.44}, {"x": "2019-02-19", "y": 6.44}, {"x": "2019-02-28", "y": 6.44}, {"x": "2019-03-08", "y": 5.31}, {"x": "2019-03-19", "y": 4.05}, {"x": "2019-03-28", "y": 4.05}, {"x": "2019-04-05", "y": 3.91}, {"x": "2019-04-16", "y": 0.0}, {"x": "2019-04-26", "y": 0.0}, {"x": "2019-05-07", "y": 0.07}, {"x": "2019-05-15", "y": 3.06}, {"x": "2019-05-24", "y": 4.54}, {"x": "2019-06-05", "y": 5.54}, {"x": "2019-06-13", "y": 5.54}, {"x": "2019-06-24", "y": 4.7}, {"x": "2019-07-03", "y": 3.88}, {"x": "2019-07-15", "y": 4.73}, {"x": "2019-07-23", "y": 3.05}, {"x": "2019-08-01", "y": 2.11}, {"x": "2019-08-12", "y": 0.0}, {"x": "2019-08-20", "y": 0.52}, {"x": "2019-08-29", "y": 0.0}, {"x": "2019-09-10", "y": 0.0}, {"x": "2019-09-19", "y": 0.0}, {"x": "2019-09-27", "y": 1.46}, {"x": "2019-10-08", "y": 3.58}, {"x": "2019-10-17", "y": 3.42}, {"x": "2019-10-25", "y": 4.19}, {"x": "2019-11-05", "y": 0.7}, {"x": "2019-11-14", "y": 0.7}, {"x": "2019-11-25", "y": 0.0}, {"x": "2019-12-04", "y": 0.49}, {"x": "2019-12-13", "y": 0.49}, {"x": "2019-12-24", "y": 0.49}, {"x": "2020-01-03", "y": 0.0}, {"x": "2020-01-14", "y": 0.43}, {"x": "2020-01-24", "y": 0.0}, {"x": "2020-02-04", "y": 0.0}, {"x": "2020-02-12", "y": 0.0}, {"x": "2020-02-24", "y": 0.0}, {"x": "2020-03-04", "y": 0.0}, {"x": "2020-03-12", "y": 2.85}, {"x": "2020-03-23", "y": 6.88}, {"x": "2020-04-01", "y": 7.35}, {"x": "2020-04-13", "y": 7.35}, {"x": "2020-04-21", "y": 7.35}, {"x": "2020-04-30", "y": 6.15}, {"x": "2020-05-11", "y": 6.58}, {"x": "2020-05-19", "y": 5.78}, {"x": "2020-05-29", "y": 2.84}, {"x": "2020-06-09", "y": 3.16}, {"x": "2020-06-18", "y": 0.74}, {"x": "2020-06-26", "y": 1.0}, {"x": "2020-07-08", "y": 1.0}, {"x": "2020-07-17", "y": 0.85}, {"x": "2020-07-27", "y": 1.34}, {"x": "2020-08-05", "y": 0.03}, {"x": "2020-08-14", "y": 0.0}, {"x": "2020-08-25", "y": 0.0}, {"x": "2020-09-02", "y": 0.0}, {"x": "2020-09-14", "y": 0.0}, {"x": "2020-09-23", "y": 0.0}, {"x": "2020-10-01", "y": 0.0}, {"x": "2020-10-12", "y": 1.07}, {"x": "2020-10-21", "y": 1.52}, {"x": "2020-10-30", "y": 2.79}, {"x": "2020-11-09", "y": 1.29}, {"x": "2020-11-18", "y": 0.24}, {"x": "2020-11-30", "y": 0.0}, {"x": "2020-12-08", "y": 0.0}, {"x": "2020-12-17", "y": 0.0}, {"x": "2020-12-29", "y": 0.0}, {"x": "2021-01-08", "y": 0.0}, {"x": "2021-01-19", "y": 0.0}, {"x": "2021-01-28", "y": 0.0}, {"x": "2021-02-08", "y": 0.0}, {"x": "2021-02-17", "y": 0.85}, {"x": "2021-02-26", "y": 1.08}, {"x": "2021-03-09", "y": 0.0}, {"x": "2021-03-18", "y": 0.0}, {"x": "2021-03-26", "y": 0.0}, {"x": "2021-04-07", "y": 0.0}, {"x": "2021-04-16", "y": 0.0}, {"x": "2021-04-26", "y": 0.75}, {"x": "2021-05-05", "y": 1.16}, {"x": "2021-05-14", "y": 0.0}, {"x": "2021-05-25", "y": 0.47}, {"x": "2021-06-03", "y": 0.47}, {"x": "2021-06-14", "y": 0.22}, {"x": "2021-06-23", "y": 0.0}, {"x": "2021-07-01", "y": 0.0}, {"x": "2021-07-13", "y": 0.51}, {"x": "2021-07-22", "y": 0.85}, {"x": "2021-08-02", "y": 0.71}, {"x": "2021-08-10", "y": 1.36}, {"x": "2021-08-19", "y": 2.1}, {"x": "2021-08-30", "y": 2.62}, {"x": "2021-09-08", "y": 3.22}, {"x": "2021-09-17", "y": 3.04}, {"x": "2021-09-28", "y": 0.0}, {"x": "2021-10-07", "y": 0.0}, {"x": "2021-10-15", "y": 0.0}, {"x": "2021-10-26", "y": 0.61}, {"x": "2021-11-04", "y": 1.6}, {"x": "2021-11-12", "y": 1.55}, {"x": "2021-11-23", "y": 0.0}, {"x": "2021-12-03", "y": 0.83}, {"x": "2021-12-14", "y": 0.92}, {"x": "2021-12-22", "y": 1.67}, {"x": "2022-01-03", "y": 0.69}, {"x": "2022-01-12", "y": 1.36}, {"x": "2022-01-21", "y": 2.11}, {"x": "2022-02-01", "y": 3.02}, {"x": "2022-02-10", "y": 0.89}, {"x": "2022-02-22", "y": 0.94}, {"x": "2022-03-02", "y": 0.91}, {"x": "2022-03-11", "y": 0.7}, {"x": "2022-03-22", "y": 0.06}, {"x": "2022-03-30", "y": 0.0}, {"x": "2022-04-08", "y": 0.0}, {"x": "2022-04-20", "y": 0.0}, {"x": "2022-04-29", "y": 0.0}, {"x": "2022-05-09", "y": 0.44}, {"x": "2022-05-18", "y": 2.16}, {"x": "2022-05-27", "y": 3.19}, {"x": "2022-06-07", "y": 3.19}, {"x": "2022-06-16", "y": 3.04}, {"x": "2022-06-28", "y": 2.84}, {"x": "2022-07-08", "y": 2.67}, {"x": "2022-07-18", "y": 3.8}, {"x": "2022-07-27", "y": 3.63}, {"x": "2022-08-05", "y": 3.96}, {"x": "2022-08-15", "y": 3.96}, {"x": "2022-08-24", "y": 3.96}, {"x": "2022-09-02", "y": 3.62}, {"x": "2022-09-14", "y": 0.38}, {"x": "2022-09-22", "y": 0.55}, {"x": "2022-10-03", "y": 0.6}, {"x": "2022-10-12", "y": 0.6}, {"x": "2022-10-20", "y": 0.6}, {"x": "2022-10-31", "y": 0.38}, {"x": "2022-11-09", "y": 0.0}, {"x": "2022-11-18", "y": 0.0}, {"x": "2022-11-29", "y": 0.0}, {"x": "2022-12-08", "y": 0.0}, {"x": "2022-12-19", "y": 0.27}, {"x": "2022-12-28", "y": 0.27}, {"x": "2023-01-09", "y": 0.0}, {"x": "2023-01-19", "y": 0.0}, {"x": "2023-01-30", "y": 0.0}, {"x": "2023-02-07", "y": 0.0}, {"x": "2023-02-16", "y": 1.88}, {"x": "2023-02-28", "y": 2.2}, {"x": "2023-03-08", "y": 2.51}, {"x": "2023-03-17", "y": 6.58}, {"x": "2023-03-28", "y": 6.58}, {"x": "2023-04-06", "y": 6.58}, {"x": "2023-04-17", "y": 6.44}, {"x": "2023-04-26", "y": 6.3}, {"x": "2023-05-05", "y": 6.5}, {"x": "2023-05-15", "y": 6.27}, {"x": "2023-05-24", "y": 2.92}, {"x": "2023-06-05", "y": 0.0}, {"x": "2023-06-14", "y": 0.0}, {"x": "2023-06-23", "y": 0.0}, {"x": "2023-07-05", "y": 0.0}, {"x": "2023-07-14", "y": 0.6}, {"x": "2023-07-24", "y": 0.6}, {"x": "2023-08-02", "y": 0.0}, {"x": "2023-08-11", "y": 0.39}, {"x": "2023-08-22", "y": 0.76}, {"x": "2023-08-30", "y": 0.54}, {"x": "2023-09-11", "y": 0.9}, {"x": "2023-09-20", "y": 0.15}, {"x": "2023-09-28", "y": 4.6}, {"x": "2023-10-09", "y": 2.18}, {"x": "2023-10-18", "y": 2.79}, {"x": "2023-10-27", "y": 3.62}, {"x": "2023-11-06", "y": 3.62}, {"x": "2023-11-15", "y": 2.71}, {"x": "2023-11-27", "y": 1.92}, {"x": "2023-12-05", "y": 1.92}, {"x": "2023-12-14", "y": 0.0}, {"x": "2023-12-26", "y": 0.0}, {"x": "2024-01-05", "y": 0.0}, {"x": "2024-01-16", "y": 0.55}, {"x": "2024-01-25", "y": 0.55}, {"x": "2024-02-05", "y": 0.0}, {"x": "2024-02-13", "y": 0.0}, {"x": "2024-02-23", "y": 0.0}, {"x": "2024-03-05", "y": 0.0}, {"x": "2024-03-14", "y": 0.0}, {"x": "2024-03-22", "y": 0.78}, {"x": "2024-04-03", "y": 0.0}, {"x": "2024-04-12", "y": 0.0}, {"x": "2024-04-22", "y": 1.77}, {"x": "2024-05-01", "y": 2.32}, {"x": "2024-05-10", "y": 2.32}, {"x": "2024-05-21", "y": 2.63}, {"x": "2024-05-30", "y": 0.0}, {"x": "2024-06-10", "y": 0.45}, {"x": "2024-06-20", "y": 0.0}, {"x": "2024-06-28", "y": 0.68}, {"x": "2024-07-10", "y": 0.56}, {"x": "2024-07-19", "y": 0.0}, {"x": "2024-07-30", "y": 0.0}, {"x": "2024-08-07", "y": 1.49}, {"x": "2024-08-16", "y": 1.49}, {"x": "2024-08-27", "y": 1.49}, {"x": "2024-09-05", "y": 0.0}, {"x": "2024-09-16", "y": 0.34}, {"x": "2024-09-25", "y": 0.77}, {"x": "2024-10-04", "y": 0.0}, {"x": "2024-10-14", "y": 0.0}, {"x": "2024-10-23", "y": 0.38}, {"x": "2024-11-01", "y": 0.0}, {"x": "2024-11-11", "y": 0.47}, {"x": "2024-11-20", "y": 0.51}, {"x": "2024-12-02", "y": 0.2}, {"x": "2024-12-11", "y": 0.28}, {"x": "2024-12-19", "y": 0.0}, {"x": "2024-12-31", "y": 0.0}, {"x": "2025-01-13", "y": 3.65}, {"x": "2025-01-22", "y": 3.58}, {"x": "2025-01-31", "y": 0.41}, {"x": "2025-02-11", "y": 1.24}, {"x": "2025-02-21", "y": 0.0}, {"x": "2025-03-03", "y": 0.45}, {"x": "2025-03-12", "y": 1.05}, {"x": "2025-03-21", "y": 1.48}, {"x": "2025-03-31", "y": 1.48}, {"x": "2025-04-09", "y": 5.43}, {"x": "2025-04-21", "y": 5.82}, {"x": "2025-04-30", "y": 6.65}, {"x": "2025-05-08", "y": 6.54}, {"x": "2025-05-19", "y": 6.54}, {"x": "2025-05-29", "y": 6.64}, {"x": "2025-06-06", "y": 6.5}, {"x": "2025-06-17", "y": 6.13}, {"x": "2025-06-27", "y": 5.36}, {"x": "2025-07-09", "y": 5.54}, {"x": "2025-07-17", "y": 2.61}, {"x": "2025-07-28", "y": 0.87}, {"x": "2025-08-06", "y": 0.9}, {"x": "2025-08-14", "y": 1.68}, {"x": "2025-08-25", "y": 0.31}, {"x": "2025-09-04", "y": 0.0}, {"x": "2025-09-15", "y": 0.07}, {"x": "2025-09-23", "y": 0.59}, {"x": "2025-10-02", "y": 0.46}, {"x": "2025-10-13", "y": 0.64}, {"x": "2025-10-21", "y": 2.07}, {"x": "2025-10-30", "y": 1.24}, {"x": "2025-11-10", "y": 0.6}, {"x": "2025-11-19", "y": 0.0}, {"x": "2025-11-28", "y": 0.0}, {"x": "2025-12-09", "y": 0.18}, {"x": "2025-12-18", "y": 0.54}, {"x": "2025-12-30", "y": 0.0}], "borderColor": "#7c3aed", "backgroundColor": "#7c3aed18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}, {"label": "Desde 2005", "data": [{"x": "2005-01-03", "y": 0.0}, {"x": "2005-01-13", "y": 0.0}, {"x": "2005-01-27", "y": 0.0}, {"x": "2005-02-09", "y": 0.0}, {"x": "2005-02-23", "y": 0.0}, {"x": "2005-03-08", "y": 0.0}, {"x": "2005-03-18", "y": 0.0}, {"x": "2005-04-01", "y": 0.0}, {"x": "2005-04-14", "y": 0.0}, {"x": "2005-04-27", "y": 0.0}, {"x": "2005-05-10", "y": 0.0}, {"x": "2005-05-20", "y": 0.0}, {"x": "2005-06-03", "y": 0.0}, {"x": "2005-06-16", "y": 0.0}, {"x": "2005-06-29", "y": 0.0}, {"x": "2005-07-13", "y": 0.0}, {"x": "2005-07-26", "y": 0.0}, {"x": "2005-08-05", "y": 0.0}, {"x": "2005-08-18", "y": 0.0}, {"x": "2005-08-31", "y": 0.0}, {"x": "2005-09-14", "y": 0.0}, {"x": "2005-09-27", "y": 0.0}, {"x": "2005-10-07", "y": 0.0}, {"x": "2005-10-20", "y": 0.0}, {"x": "2005-11-02", "y": 0.21}, {"x": "2005-11-15", "y": 0.21}, {"x": "2005-11-29", "y": 0.0}, {"x": "2005-12-12", "y": 0.0}, {"x": "2005-12-22", "y": 0.0}, {"x": "2006-01-06", "y": 0.29}, {"x": "2006-01-20", "y": 0.06}, {"x": "2006-02-02", "y": 0.0}, {"x": "2006-02-15", "y": 1.25}, {"x": "2006-02-28", "y": 1.25}, {"x": "2006-03-13", "y": 0.0}, {"x": "2006-03-24", "y": 0.0}, {"x": "2006-04-06", "y": 0.72}, {"x": "2006-04-20", "y": 0.57}, {"x": "2006-05-03", "y": 0.0}, {"x": "2006-05-15", "y": 2.09}, {"x": "2006-05-26", "y": 2.61}, {"x": "2006-06-09", "y": 4.94}, {"x": "2006-06-22", "y": 7.85}, {"x": "2006-07-06", "y": 9.56}, {"x": "2006-07-18", "y": 9.67}, {"x": "2006-07-31", "y": 8.35}, {"x": "2006-08-11", "y": 8.17}, {"x": "2006-08-24", "y": 5.93}, {"x": "2006-09-07", "y": 3.29}, {"x": "2006-09-20", "y": 3.73}, {"x": "2006-10-02", "y": 3.09}, {"x": "2006-10-13", "y": 3.09}, {"x": "2006-10-26", "y": 2.6}, {"x": "2006-11-08", "y": 0.0}, {"x": "2006-11-21", "y": 0.0}, {"x": "2006-12-04", "y": 0.0}, {"x": "2006-12-15", "y": 0.0}, {"x": "2006-12-29", "y": 0.44}, {"x": "2007-01-16", "y": 0.49}, {"x": "2007-01-29", "y": 0.0}, {"x": "2007-02-08", "y": 0.0}, {"x": "2007-02-22", "y": 0.0}, {"x": "2007-03-07", "y": 1.36}, {"x": "2007-03-20", "y": 2.96}, {"x": "2007-04-02", "y": 2.74}, {"x": "2007-04-16", "y": 2.63}, {"x": "2007-04-26", "y": 2.52}, {"x": "2007-05-09", "y": 1.45}, {"x": "2007-05-22", "y": 1.35}, {"x": "2007-06-05", "y": 0.0}, {"x": "2007-06-18", "y": 0.0}, {"x": "2007-06-28", "y": 0.0}, {"x": "2007-07-12", "y": 0.77}, {"x": "2007-07-25", "y": 1.32}, {"x": "2007-08-07", "y": 2.33}, {"x": "2007-08-20", "y": 6.34}, {"x": "2007-08-31", "y": 6.81}, {"x": "2007-09-13", "y": 6.8}, {"x": "2007-09-26", "y": 7.51}, {"x": "2007-10-09", "y": 6.52}, {"x": "2007-10-22", "y": 3.98}, {"x": "2007-11-02", "y": 2.61}, {"x": "2007-11-14", "y": 2.41}, {"x": "2007-11-28", "y": 4.42}, {"x": "2007-12-11", "y": 3.21}, {"x": "2007-12-24", "y": 2.86}, {"x": "2008-01-08", "y": 0.57}, {"x": "2008-01-22", "y": 1.81}, {"x": "2008-02-01", "y": 1.81}, {"x": "2008-02-14", "y": 3.3}, {"x": "2008-02-28", "y": 3.3}, {"x": "2008-03-12", "y": 5.5}, {"x": "2008-03-26", "y": 6.93}, {"x": "2008-04-07", "y": 6.93}, {"x": "2008-04-18", "y": 7.94}, {"x": "2008-05-01", "y": 8.25}, {"x": "2008-05-14", "y": 9.1}, {"x": "2008-05-28", "y": 7.97}, {"x": "2008-06-10", "y": 4.69}, {"x": "2008-06-20", "y": 6.9}, {"x": "2008-07-03", "y": 9.84}, {"x": "2008-07-17", "y": 11.2}, {"x": "2008-07-30", "y": 12.2}, {"x": "2008-08-12", "y": 12.0}, {"x": "2008-08-22", "y": 12.0}, {"x": "2008-09-05", "y": 12.0}, {"x": "2008-09-18", "y": 12.0}, {"x": "2008-10-01", "y": 12.0}, {"x": "2008-10-14", "y": 12.0}, {"x": "2008-10-24", "y": 12.0}, {"x": "2008-11-06", "y": 12.0}, {"x": "2008-11-19", "y": 12.0}, {"x": "2008-12-03", "y": 12.0}, {"x": "2008-12-16", "y": 12.0}, {"x": "2008-12-30", "y": 12.0}, {"x": "2009-01-12", "y": 0.0}, {"x": "2009-01-26", "y": 0.0}, {"x": "2009-02-06", "y": 0.0}, {"x": "2009-02-20", "y": 0.0}, {"x": "2009-03-05", "y": 1.27}, {"x": "2009-03-17", "y": 1.27}, {"x": "2009-03-30", "y": 1.27}, {"x": "2009-04-13", "y": 1.27}, {"x": "2009-04-24", "y": 1.27}, {"x": "2009-05-07", "y": 1.27}, {"x": "2009-05-20", "y": 1.27}, {"x": "2009-06-02", "y": 1.27}, {"x": "2009-06-15", "y": 1.27}, {"x": "2009-06-26", "y": 1.27}, {"x": "2009-07-10", "y": 1.27}, {"x": "2009-07-23", "y": 1.27}, {"x": "2009-08-04", "y": 0.94}, {"x": "2009-08-17", "y": 0.52}, {"x": "2009-08-28", "y": 0.52}, {"x": "2009-09-11", "y": 0.91}, {"x": "2009-09-24", "y": 0.67}, {"x": "2009-10-07", "y": 0.0}, {"x": "2009-10-19", "y": 0.0}, {"x": "2009-10-30", "y": 0.0}, {"x": "2009-11-12", "y": 0.0}, {"x": "2009-11-25", "y": 0.0}, {"x": "2009-12-09", "y": 0.27}, {"x": "2009-12-21", "y": 0.16}, {"x": "2010-01-05", "y": 0.0}, {"x": "2010-01-19", "y": 0.0}, {"x": "2010-02-01", "y": 0.0}, {"x": "2010-02-12", "y": 1.7}, {"x": "2010-02-26", "y": 1.59}, {"x": "2010-03-10", "y": 1.47}, {"x": "2010-03-23", "y": 2.13}, {"x": "2010-04-06", "y": 2.13}, {"x": "2010-04-19", "y": 0.91}, {"x": "2010-04-30", "y": 0.0}, {"x": "2010-05-12", "y": 0.0}, {"x": "2010-05-25", "y": 6.16}, {"x": "2010-06-08", "y": 7.52}, {"x": "2010-06-21", "y": 7.52}, {"x": "2010-07-02", "y": 8.49}, {"x": "2010-07-15", "y": 8.49}, {"x": "2010-07-28", "y": 7.94}, {"x": "2010-08-10", "y": 8.45}, {"x": "2010-08-23", "y": 7.48}, {"x": "2010-09-03", "y": 7.34}, {"x": "2010-09-17", "y": 7.18}, {"x": "2010-09-29", "y": 7.03}, {"x": "2010-10-12", "y": 5.73}, {"x": "2010-10-25", "y": 5.33}, {"x": "2010-11-05", "y": 5.44}, {"x": "2010-11-18", "y": 0.0}, {"x": "2010-12-01", "y": 0.5}, {"x": "2010-12-14", "y": 0.0}, {"x": "2010-12-28", "y": 0.0}, {"x": "2011-01-10", "y": 0.0}, {"x": "2011-01-24", "y": 0.0}, {"x": "2011-02-04", "y": 0.0}, {"x": "2011-02-16", "y": 0.0}, {"x": "2011-03-02", "y": 0.52}, {"x": "2011-03-15", "y": 0.0}, {"x": "2011-03-28", "y": 0.46}, {"x": "2011-04-08", "y": 0.12}, {"x": "2011-04-20", "y": 1.06}, {"x": "2011-05-04", "y": 0.86}, {"x": "2011-05-17", "y": 0.86}, {"x": "2011-05-31", "y": 0.0}, {"x": "2011-06-13", "y": 0.0}, {"x": "2011-06-24", "y": 0.0}, {"x": "2011-07-07", "y": 0.0}, {"x": "2011-07-20", "y": 0.62}, {"x": "2011-08-02", "y": 2.6}, {"x": "2011-08-15", "y": 3.04}, {"x": "2011-08-26", "y": 4.54}, {"x": "2011-09-08", "y": 4.38}, {"x": "2011-09-21", "y": 3.65}, {"x": "2011-10-04", "y": 8.29}, {"x": "2011-10-17", "y": 8.29}, {"x": "2011-10-28", "y": 7.95}, {"x": "2011-11-10", "y": 7.24}, {"x": "2011-11-22", "y": 7.06}, {"x": "2011-12-06", "y": 6.09}, {"x": "2011-12-19", "y": 5.89}, {"x": "2012-01-03", "y": 0.0}, {"x": "2012-01-17", "y": 0.0}, {"x": "2012-01-27", "y": 0.0}, {"x": "2012-02-09", "y": 0.0}, {"x": "2012-02-23", "y": 0.0}, {"x": "2012-03-07", "y": 0.0}, {"x": "2012-03-20", "y": 0.5}, {"x": "2012-03-30", "y": 0.5}, {"x": "2012-04-13", "y": 0.0}, {"x": "2012-04-26", "y": 0.0}, {"x": "2012-05-09", "y": 0.24}, {"x": "2012-05-22", "y": 0.0}, {"x": "2012-06-05", "y": 0.0}, {"x": "2012-06-15", "y": 0.0}, {"x": "2012-06-28", "y": 0.52}, {"x": "2012-07-12", "y": 0.0}, {"x": "2012-07-25", "y": 0.0}, {"x": "2012-08-07", "y": 0.28}, {"x": "2012-08-17", "y": 0.0}, {"x": "2012-08-30", "y": 0.0}, {"x": "2012-09-13", "y": 0.0}, {"x": "2012-09-26", "y": 0.0}, {"x": "2012-10-09", "y": 0.0}, {"x": "2012-10-22", "y": 0.05}, {"x": "2012-11-05", "y": 0.0}, {"x": "2012-11-16", "y": 1.14}, {"x": "2012-11-30", "y": 0.81}, {"x": "2012-12-13", "y": 0.7}, {"x": "2012-12-27", "y": 0.64}, {"x": "2013-01-09", "y": 0.24}, {"x": "2013-01-23", "y": 0.24}, {"x": "2013-02-05", "y": 0.0}, {"x": "2013-02-19", "y": 0.0}, {"x": "2013-03-04", "y": 0.0}, {"x": "2013-03-15", "y": 0.0}, {"x": "2013-03-27", "y": 0.0}, {"x": "2013-04-10", "y": 0.0}, {"x": "2013-04-23", "y": 0.0}, {"x": "2013-05-06", "y": 0.0}, {"x": "2013-05-17", "y": 0.0}, {"x": "2013-05-30", "y": 0.55}, {"x": "2013-06-12", "y": 1.47}, {"x": "2013-06-25", "y": 6.06}, {"x": "2013-07-09", "y": 6.43}, {"x": "2013-07-22", "y": 6.43}, {"x": "2013-08-02", "y": 3.58}, {"x": "2013-08-14", "y": 0.0}, {"x": "2013-08-27", "y": 1.48}, {"x": "2013-09-10", "y": 3.88}, {"x": "2013-09-23", "y": 3.84}, {"x": "2013-10-04", "y": 2.23}, {"x": "2013-10-16", "y": 0.71}, {"x": "2013-10-29", "y": 0.6}, {"x": "2013-11-11", "y": 0.0}, {"x": "2013-11-22", "y": 0.0}, {"x": "2013-12-06", "y": 0.0}, {"x": "2013-12-18", "y": 0.46}, {"x": "2014-01-02", "y": 0.0}, {"x": "2014-01-15", "y": 0.18}, {"x": "2014-01-29", "y": 0.0}, {"x": "2014-02-11", "y": 0.0}, {"x": "2014-02-25", "y": 0.0}, {"x": "2014-03-07", "y": 0.51}, {"x": "2014-03-20", "y": 0.0}, {"x": "2014-04-02", "y": 0.84}, {"x": "2014-04-15", "y": 0.0}, {"x": "2014-04-29", "y": 0.69}, {"x": "2014-05-09", "y": 0.39}, {"x": "2014-05-22", "y": 1.06}, {"x": "2014-06-05", "y": 1.06}, {"x": "2014-06-18", "y": 0.94}, {"x": "2014-07-01", "y": 0.0}, {"x": "2014-07-15", "y": 0.36}, {"x": "2014-07-25", "y": 0.54}, {"x": "2014-08-07", "y": 2.14}, {"x": "2014-08-20", "y": 2.12}, {"x": "2014-09-03", "y": 1.92}, {"x": "2014-09-16", "y": 1.94}, {"x": "2014-09-26", "y": 0.7}, {"x": "2014-10-09", "y": 2.75}, {"x": "2014-10-22", "y": 1.7}, {"x": "2014-11-04", "y": 0.6}, {"x": "2014-11-17", "y": 0.0}, {"x": "2014-12-01", "y": 0.0}, {"x": "2014-12-11", "y": 0.0}, {"x": "2014-12-24", "y": 0.0}, {"x": "2015-01-08", "y": 0.68}, {"x": "2015-01-22", "y": 1.94}, {"x": "2015-02-04", "y": 2.13}, {"x": "2015-02-17", "y": 0.0}, {"x": "2015-03-02", "y": 0.0}, {"x": "2015-03-13", "y": 0.23}, {"x": "2015-03-26", "y": 0.0}, {"x": "2015-04-09", "y": 1.4}, {"x": "2015-04-22", "y": 1.58}, {"x": "2015-05-04", "y": 4.0}, {"x": "2015-05-15", "y": 2.86}, {"x": "2015-05-29", "y": 2.86}, {"x": "2015-06-11", "y": 0.15}, {"x": "2015-06-24", "y": 0.15}, {"x": "2015-07-07", "y": 0.0}, {"x": "2015-07-20", "y": 1.17}, {"x": "2015-07-31", "y": 0.0}, {"x": "2015-08-13", "y": 0.0}, {"x": "2015-08-26", "y": 0.0}, {"x": "2015-09-08", "y": 0.4}, {"x": "2015-09-21", "y": 1.11}, {"x": "2015-10-02", "y": 1.06}, {"x": "2015-10-15", "y": 1.85}, {"x": "2015-10-28", "y": 1.2}, {"x": "2015-11-10", "y": 1.47}, {"x": "2015-11-20", "y": 1.47}, {"x": "2015-12-04", "y": 0.0}, {"x": "2015-12-17", "y": 0.83}, {"x": "2015-12-31", "y": 1.44}, {"x": "2016-01-14", "y": 3.43}, {"x": "2016-01-27", "y": 6.49}, {"x": "2016-02-09", "y": 7.47}, {"x": "2016-02-23", "y": 7.64}, {"x": "2016-03-07", "y": 6.99}, {"x": "2016-03-18", "y": 6.99}, {"x": "2016-04-01", "y": 7.54}, {"x": "2016-04-13", "y": 7.54}, {"x": "2016-04-26", "y": 3.76}, {"x": "2016-05-09", "y": 0.0}, {"x": "2016-05-20", "y": 0.6}, {"x": "2016-06-03", "y": 1.2}, {"x": "2016-06-15", "y": 0.03}, {"x": "2016-06-28", "y": 0.13}, {"x": "2016-07-12", "y": 0.0}, {"x": "2016-07-25", "y": 0.0}, {"x": "2016-08-05", "y": 0.12}, {"x": "2016-08-18", "y": 0.0}, {"x": "2016-08-30", "y": 0.76}, {"x": "2016-09-13", "y": 3.77}, {"x": "2016-09-26", "y": 3.62}, {"x": "2016-10-07", "y": 3.5}, {"x": "2016-10-20", "y": 3.22}, {"x": "2016-11-01", "y": 1.77}, {"x": "2016-11-14", "y": 3.57}, {"x": "2016-11-28", "y": 1.83}, {"x": "2016-12-09", "y": 1.4}, {"x": "2016-12-22", "y": 0.0}, {"x": "2017-01-06", "y": 0.0}, {"x": "2017-01-19", "y": 0.03}, {"x": "2017-02-01", "y": 0.0}, {"x": "2017-02-14", "y": 0.0}, {"x": "2017-02-28", "y": 0.0}, {"x": "2017-03-13", "y": 0.0}, {"x": "2017-03-23", "y": 0.5}, {"x": "2017-04-05", "y": 0.78}, {"x": "2017-04-19", "y": 0.78}, {"x": "2017-05-02", "y": 0.78}, {"x": "2017-05-15", "y": 1.62}, {"x": "2017-05-25", "y": 0.0}, {"x": "2017-06-08", "y": 0.0}, {"x": "2017-06-21", "y": 1.04}, {"x": "2017-07-05", "y": 0.89}, {"x": "2017-07-18", "y": 0.0}, {"x": "2017-07-31", "y": 0.04}, {"x": "2017-08-10", "y": 0.2}, {"x": "2017-08-23", "y": 0.0}, {"x": "2017-09-06", "y": 0.0}, {"x": "2017-09-19", "y": 0.0}, {"x": "2017-10-02", "y": 0.0}, {"x": "2017-10-12", "y": 0.0}, {"x": "2017-10-25", "y": 0.0}, {"x": "2017-11-07", "y": 1.47}, {"x": "2017-11-20", "y": 0.0}, {"x": "2017-12-04", "y": 0.0}, {"x": "2017-12-15", "y": 0.79}, {"x": "2017-12-28", "y": 0.0}, {"x": "2018-01-11", "y": 0.0}, {"x": "2018-01-25", "y": 0.0}, {"x": "2018-02-07", "y": 0.44}, {"x": "2018-02-21", "y": 3.62}, {"x": "2018-03-05", "y": 3.3}, {"x": "2018-03-16", "y": 4.01}, {"x": "2018-03-29", "y": 2.4}, {"x": "2018-04-12", "y": 3.62}, {"x": "2018-04-25", "y": 3.3}, {"x": "2018-05-08", "y": 2.26}, {"x": "2018-05-18", "y": 2.26}, {"x": "2018-06-01", "y": 0.0}, {"x": "2018-06-14", "y": 0.0}, {"x": "2018-06-27", "y": 0.0}, {"x": "2018-07-11", "y": 0.0}, {"x": "2018-07-23", "y": 0.65}, {"x": "2018-08-03", "y": 0.0}, {"x": "2018-08-16", "y": 1.16}, {"x": "2018-08-29", "y": 1.61}, {"x": "2018-09-12", "y": 1.34}, {"x": "2018-09-25", "y": 0.82}, {"x": "2018-10-05", "y": 0.0}, {"x": "2018-10-18", "y": 1.58}, {"x": "2018-10-31", "y": 5.31}, {"x": "2018-11-13", "y": 5.68}, {"x": "2018-11-27", "y": 8.45}, {"x": "2018-12-10", "y": 7.26}, {"x": "2018-12-21", "y": 8.3}, {"x": "2019-01-07", "y": 8.06}, {"x": "2019-01-18", "y": 8.06}, {"x": "2019-02-01", "y": 7.77}, {"x": "2019-02-13", "y": 7.77}, {"x": "2019-02-27", "y": 7.77}, {"x": "2019-03-12", "y": 5.36}, {"x": "2019-03-25", "y": 5.36}, {"x": "2019-04-05", "y": 5.23}, {"x": "2019-04-18", "y": 1.07}, {"x": "2019-05-01", "y": 0.0}, {"x": "2019-05-14", "y": 3.06}, {"x": "2019-05-28", "y": 4.4}, {"x": "2019-06-10", "y": 5.55}, {"x": "2019-06-21", "y": 4.7}, {"x": "2019-07-03", "y": 3.88}, {"x": "2019-07-17", "y": 4.6}, {"x": "2019-07-30", "y": 3.05}, {"x": "2019-08-12", "y": 0.0}, {"x": "2019-08-23", "y": 0.0}, {"x": "2019-09-06", "y": 0.0}, {"x": "2019-09-18", "y": 0.0}, {"x": "2019-10-01", "y": 1.98}, {"x": "2019-10-14", "y": 3.58}, {"x": "2019-10-25", "y": 4.19}, {"x": "2019-11-07", "y": 0.7}, {"x": "2019-11-19", "y": 0.0}, {"x": "2019-12-03", "y": 0.49}, {"x": "2019-12-16", "y": 0.49}, {"x": "2019-12-30", "y": 0.49}, {"x": "2020-01-13", "y": 0.44}, {"x": "2020-01-27", "y": 0.0}, {"x": "2020-02-06", "y": 0.0}, {"x": "2020-02-20", "y": 0.78}, {"x": "2020-03-04", "y": 0.0}, {"x": "2020-03-17", "y": 3.36}, {"x": "2020-03-30", "y": 7.36}, {"x": "2020-04-09", "y": 7.36}, {"x": "2020-04-23", "y": 7.05}, {"x": "2020-05-06", "y": 6.74}, {"x": "2020-05-19", "y": 5.78}, {"x": "2020-06-02", "y": 2.93}, {"x": "2020-06-15", "y": 0.83}, {"x": "2020-06-25", "y": 1.09}, {"x": "2020-07-09", "y": 1.09}, {"x": "2020-07-22", "y": 0.94}, {"x": "2020-08-04", "y": 0.11}, {"x": "2020-08-17", "y": 0.0}, {"x": "2020-08-27", "y": 0.0}, {"x": "2020-09-10", "y": 0.0}, {"x": "2020-09-23", "y": 0.0}, {"x": "2020-10-06", "y": 0.71}, {"x": "2020-10-19", "y": 0.77}, {"x": "2020-10-29", "y": 2.44}, {"x": "2020-11-11", "y": 0.51}, {"x": "2020-11-24", "y": 0.27}, {"x": "2020-12-08", "y": 0.0}, {"x": "2020-12-21", "y": 0.0}, {"x": "2021-01-05", "y": 0.0}, {"x": "2021-01-15", "y": 0.0}, {"x": "2021-01-29", "y": 0.0}, {"x": "2021-02-11", "y": 0.0}, {"x": "2021-02-25", "y": 0.66}, {"x": "2021-03-10", "y": 0.0}, {"x": "2021-03-22", "y": 0.0}, {"x": "2021-04-05", "y": 0.0}, {"x": "2021-04-16", "y": 0.0}, {"x": "2021-04-29", "y": 0.75}, {"x": "2021-05-12", "y": 0.0}, {"x": "2021-05-25", "y": 0.47}, {"x": "2021-06-07", "y": 0.47}, {"x": "2021-06-18", "y": 0.0}, {"x": "2021-07-01", "y": 0.0}, {"x": "2021-07-15", "y": 0.51}, {"x": "2021-07-28", "y": 0.85}, {"x": "2021-08-09", "y": 1.37}, {"x": "2021-08-20", "y": 2.1}, {"x": "2021-09-02", "y": 2.63}, {"x": "2021-09-16", "y": 3.04}, {"x": "2021-09-29", "y": 0.0}, {"x": "2021-10-12", "y": 0.0}, {"x": "2021-10-22", "y": 0.61}, {"x": "2021-11-04", "y": 1.6}, {"x": "2021-11-17", "y": 1.52}, {"x": "2021-12-01", "y": 0.0}, {"x": "2021-12-14", "y": 0.92}, {"x": "2021-12-27", "y": 1.68}, {"x": "2022-01-07", "y": 2.24}, {"x": "2022-01-21", "y": 2.74}, {"x": "2022-02-03", "y": 3.64}, {"x": "2022-02-16", "y": 1.75}, {"x": "2022-03-02", "y": 1.53}, {"x": "2022-03-14", "y": 0.3}, {"x": "2022-03-25", "y": 0.06}, {"x": "2022-04-07", "y": 0.0}, {"x": "2022-04-21", "y": 0.0}, {"x": "2022-05-04", "y": 0.0}, {"x": "2022-05-16", "y": 1.87}, {"x": "2022-05-27", "y": 3.19}, {"x": "2022-06-10", "y": 5.86}, {"x": "2022-06-24", "y": 3.04}, {"x": "2022-07-08", "y": 2.68}, {"x": "2022-07-20", "y": 3.44}, {"x": "2022-08-02", "y": 3.63}, {"x": "2022-08-15", "y": 3.96}, {"x": "2022-08-26", "y": 3.96}, {"x": "2022-09-09", "y": 1.94}, {"x": "2022-09-22", "y": 0.55}, {"x": "2022-10-04", "y": 0.6}, {"x": "2022-10-17", "y": 0.6}, {"x": "2022-10-28", "y": 0.38}, {"x": "2022-11-10", "y": 0.0}, {"x": "2022-11-23", "y": 0.0}, {"x": "2022-12-06", "y": 0.0}, {"x": "2022-12-19", "y": 0.27}, {"x": "2023-01-03", "y": 0.0}, {"x": "2023-01-17", "y": 0.0}, {"x": "2023-01-30", "y": 0.0}, {"x": "2023-02-10", "y": 1.12}, {"x": "2023-02-23", "y": 2.21}, {"x": "2023-03-08", "y": 2.52}, {"x": "2023-03-21", "y": 6.59}, {"x": "2023-04-03", "y": 6.59}, {"x": "2023-04-17", "y": 6.45}, {"x": "2023-04-27", "y": 5.86}, {"x": "2023-05-10", "y": 5.84}, {"x": "2023-05-23", "y": 2.93}, {"x": "2023-06-06", "y": 0.0}, {"x": "2023-06-20", "y": 0.0}, {"x": "2023-07-03", "y": 0.0}, {"x": "2023-07-14", "y": 0.6}, {"x": "2023-07-27", "y": 0.0}, {"x": "2023-08-09", "y": 0.39}, {"x": "2023-08-22", "y": 0.76}, {"x": "2023-09-05", "y": 1.2}, {"x": "2023-09-15", "y": 0.4}, {"x": "2023-09-28", "y": 4.6}, {"x": "2023-10-11", "y": 2.18}, {"x": "2023-10-24", "y": 3.99}, {"x": "2023-11-06", "y": 3.62}, {"x": "2023-11-17", "y": 2.47}, {"x": "2023-11-30", "y": 1.92}, {"x": "2023-12-13", "y": 0.96}, {"x": "2023-12-27", "y": 0.0}, {"x": "2024-01-10", "y": 0.0}, {"x": "2024-01-24", "y": 0.55}, {"x": "2024-02-05", "y": 0.0}, {"x": "2024-02-16", "y": 0.0}, {"x": "2024-03-01", "y": 0.0}, {"x": "2024-03-14", "y": 0.0}, {"x": "2024-03-27", "y": 0.78}, {"x": "2024-04-09", "y": 0.0}, {"x": "2024-04-22", "y": 1.77}, {"x": "2024-05-03", "y": 2.33}, {"x": "2024-05-16", "y": 2.33}, {"x": "2024-05-30", "y": 0.0}, {"x": "2024-06-12", "y": 0.0}, {"x": "2024-06-25", "y": 0.0}, {"x": "2024-07-09", "y": 0.56}, {"x": "2024-07-22", "y": 0.0}, {"x": "2024-08-02", "y": 0.0}, {"x": "2024-08-15", "y": 1.49}, {"x": "2024-08-27", "y": 1.49}, {"x": "2024-09-10", "y": 0.34}, {"x": "2024-09-23", "y": 0.77}, {"x": "2024-10-04", "y": 0.0}, {"x": "2024-10-17", "y": 0.0}, {"x": "2024-10-30", "y": 0.0}, {"x": "2024-11-11", "y": 0.47}, {"x": "2024-11-22", "y": 0.52}, {"x": "2024-12-06", "y": 0.0}, {"x": "2024-12-19", "y": 0.0}, {"x": "2025-01-03", "y": 0.0}, {"x": "2025-01-16", "y": 4.03}, {"x": "2025-01-30", "y": 0.41}, {"x": "2025-02-12", "y": 0.35}, {"x": "2025-02-26", "y": 0.0}, {"x": "2025-03-11", "y": 1.68}, {"x": "2025-03-24", "y": 1.48}, {"x": "2025-04-03", "y": 2.96}, {"x": "2025-04-16", "y": 5.31}, {"x": "2025-04-30", "y": 6.66}, {"x": "2025-05-13", "y": 6.55}, {"x": "2025-05-27", "y": 6.64}, {"x": "2025-06-06", "y": 6.51}, {"x": "2025-06-20", "y": 5.36}, {"x": "2025-07-03", "y": 5.67}, {"x": "2025-07-17", "y": 2.61}, {"x": "2025-07-30", "y": 1.51}, {"x": "2025-08-12", "y": 1.68}, {"x": "2025-08-22", "y": 0.31}, {"x": "2025-09-05", "y": 0.8}, {"x": "2025-09-18", "y": 0.07}, {"x": "2025-10-01", "y": 0.46}, {"x": "2025-10-14", "y": 0.64}, {"x": "2025-10-24", "y": 2.07}, {"x": "2025-11-06", "y": 0.6}, {"x": "2025-11-19", "y": 0.0}, {"x": "2025-12-03", "y": 0.78}, {"x": "2025-12-16", "y": 0.01}, {"x": "2025-12-30", "y": 0.0}], "borderColor": "#f59e0b", "backgroundColor": "#f59e0b18", "borderWidth": 2, "pointRadius": 0, "fill": true, "tension": 0.3}];
-new Chart(document.getElementById('chartDD'), {
-  type: 'line',
-  data: { datasets: ddData },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    scales: {
-      x: {
-        type: 'time',
-        time: { unit: 'year', tooltipFormat: 'yyyy-MM-dd' },
-        grid: { color: '#2d314820' },
-        ticks: { color: '#94a3b8', maxTicksLimit: 12 },
-      },
-      y: {
-        reverse: true,
-        grid: { color: '#2d314840' },
-        ticks: { color: '#94a3b8', callback: v => '-' + v + '%' },
-      }
-    },
-    plugins: {
-      legend: { labels: { color: '#e2e8f0', boxWidth: 14 } },
-      tooltip: {
-        backgroundColor: '#1a1d2e', borderColor: '#2d3148', borderWidth: 1,
-        titleColor: '#94a3b8', bodyColor: '#e2e8f0',
-        callbacks: { label: ctx => ctx.dataset.label + ': -' + ctx.parsed.y + '%' }
-      }
-    }
-  }
-});
+const gridColor = 'rgba(30,42,56,0.8)';
+const tickColor = '#4a6070';
 
-// ── Histogramas ──
-const histData = [{"yr": "2015", "col": "#00d4ff", "labels": ["-1603", "-1370", "-1138", "-906", "-674", "-442", "-210", "23", "255", "487", "719", "951", "1183", "1415", "1648", "1880", "2112", "2344", "2576", "2808", "3041", "3273", "3505", "3737", "3969", "4201", "4434", "4666", "4898"], "counts": [13, 10, 18, 26, 32, 62, 137, 282, 143, 60, 34, 23, 20, 10, 10, 9, 18, 6, 4, 6, 1, 3, 3, 1, 2, 2, 1, 1, 1], "colors": ["#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc"]}, {"yr": "2010", "col": "#7c3aed", "labels": ["-7277", "-6299", "-5320", "-4342", "-3363", "-2385", "-1406", "-427", "551", "1530", "2508", "3487", "4465", "5444", "6423", "7401", "8380", "9358", "10337", "11315", "12294", "13272", "14251", "15230", "16208", "17187", "18165", "19144", "20122"], "counts": [12, 8, 21, 21, 30, 56, 112, 372, 418, 119, 53, 34, 21, 28, 10, 13, 8, 11, 11, 7, 5, 3, 4, 1, 4, 2, 1, 1, 1], "colors": ["#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc"]}, {"yr": "2005", "col": "#f59e0b", "labels": ["-19961", "-17589", "-15217", "-12844", "-10472", "-8099", "-5727", "-3354", "-982", "1391", "3763", "6136", "8508", "10881", "13253", "15625", "17998", "20370", "22743", "25115", "27488", "29860", "32233", "34605", "36978", "39350", "41722", "44095", "46467"], "counts": [9, 8, 13, 22, 24, 32, 56, 115, 665, 444, 108, 67, 33, 28, 17, 23, 10, 12, 5, 9, 14, 6, 6, 4, 3, 3, 1, 4, 3], "colors": ["#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#ef4444cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc", "#10b981cc"]}];
-histData.forEach((h, i) => {
-  new Chart(document.getElementById('chartHist' + i), {
-    type: 'bar',
+Chart.defaults.color = tickColor;
+Chart.defaults.font.family = "'Space Mono', monospace";
+Chart.defaults.font.size = 10;
+
+function makeChart(id, type, labels, data, color, fill=false) {
+  return new Chart(document.getElementById(id), {
+    type,
     data: {
-      labels: h.labels,
+      labels,
       datasets: [{
-        label: 'Desde ' + h.yr,
-        data: h.counts,
-        backgroundColor: h.colors,
-        borderWidth: 0,
-        borderRadius: 2,
+        data,
+        borderColor: color,
+        backgroundColor: fill ? color.replace(')', ', 0.15)').replace('rgb', 'rgba') : 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        fill,
+        tension: 0.3
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
       scales: {
-        x: {
-          grid: { color: '#2d314820' },
-          ticks: { color: '#94a3b8', maxTicksLimit: 10,
-                   callback: v => parseFloat(h.labels[v]).toFixed(0) + '€' },
-        },
-        y: {
-          grid: { color: '#2d314840' },
-          ticks: { color: '#94a3b8' },
-        }
-      },
-      plugins: {
-        legend: { labels: { color: '#e2e8f0' } },
-        tooltip: {
-          backgroundColor: '#1a1d2e', borderColor: '#2d3148', borderWidth: 1,
-          titleColor: '#94a3b8', bodyColor: '#e2e8f0',
-        }
+        x: { grid: { color: gridColor }, ticks: { maxRotation: 45 } },
+        y: { grid: { color: gridColor } }
       }
     }
   });
+}
+
+makeChart('chartCapital',   'line', fechas, capitales, 'rgb(0,200,150)', true);
+makeChart('chartSenales',   'bar',  fechas, senales,   'rgb(0,136,255)');
+makeChart('chartPosiciones','line', fechas, posiciones, 'rgb(255,170,0)', true);
+
+new Chart(document.getElementById('chartDD'), {
+  type: 'line',
+  data: {
+    labels: fechas,
+    datasets: [{
+      data: dds,
+      borderColor: 'rgb(255,68,85)',
+      backgroundColor: 'rgba(255,68,85,0.1)',
+      borderWidth: 1.5,
+      pointRadius: 3,
+      fill: true,
+      tension: 0.3
+    },
+    {
+      data: Array(fechas.length).fill(-10),
+      borderColor: 'rgba(255,68,85,0.4)',
+      borderWidth: 1,
+      borderDash: [4,4],
+      pointRadius: 0,
+      fill: false,
+      label: 'Límite -10%'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: gridColor }, ticks: { maxRotation: 45 } },
+      y: { grid: { color: gridColor } }
+    }
+  }
 });
 
-// ── Tabs métricas anuales ──
-function showTab(yr) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => {
-    b.classList.remove('active');
-    b.style.borderBottomColor = 'transparent';
+// ── PORTFOLIO PIE CHART ────────────────────────────────────────────
+const portfolio = {
+  labels: ["INTC", "C", "BMY", "ILMN", "AAPL", "BWA", "CBOE", "CAT", "CASH"],
+  values: [63876, 111103, 103056, 83556, 114737, 103491, 117634, 115633, 270838],
+  colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#d19a66", "#98c379", "#3a5068"]
+};
+
+const pieTotal = portfolio.values.reduce((a, b) => a + b, 0);
+const fmt = v => v.toLocaleString('es-ES') + ' €';
+
+const pieValue = document.getElementById('pieHoverValue');
+const pieLabel = document.getElementById('pieHoverLabel');
+
+const chartCartera = new Chart(document.getElementById('chartCartera'), {
+  type: 'doughnut',
+  data: {
+    labels: portfolio.labels,
+    datasets: [{
+      data: portfolio.values,
+      backgroundColor: portfolio.colors,
+      borderColor: '#080c10',
+      borderWidth: 2,
+      hoverBorderColor: 'rgba(255,255,255,0.6)',
+      hoverBorderWidth: 2,
+      hoverOffset: 10
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '58%',
+    animation: { animateRotate: true, duration: 700 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const pct = (ctx.raw / pieTotal * 100).toFixed(2);
+            return `  ${fmt(ctx.raw)}  \u00b7  ${pct}%`;
+          }
+        },
+        backgroundColor: '#0d1117',
+        borderColor: '#1e2a38',
+        borderWidth: 1,
+        titleColor: '#e0e8f0',
+        bodyColor: '#e0e8f0',
+        titleFont: { family: "'Space Mono', monospace", size: 11, weight: '700' },
+        bodyFont:  { family: "'Space Mono', monospace", size: 11 },
+        padding: 12,
+        displayColors: true,
+        boxWidth: 10, boxHeight: 10
+      }
+    },
+    onHover: (evt, elements) => {
+      if (elements.length) {
+        const i = elements[0].index;
+        const pct = (portfolio.values[i] / pieTotal * 100).toFixed(2);
+        pieValue.textContent = fmt(portfolio.values[i]);
+        pieLabel.textContent = portfolio.labels[i] + ' · ' + pct + '%';
+      } else {
+        pieValue.textContent = fmt(pieTotal);
+        pieLabel.textContent = 'capital total';
+      }
+    }
+  }
+});
+
+// Leyenda personalizada
+const legendEl = document.getElementById('portfolioLegend');
+portfolio.labels.forEach((label, i) => {
+  const pct = (portfolio.values[i] / pieTotal * 100).toFixed(2);
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.innerHTML =
+    `<div class="legend-dot" style="background:${portfolio.colors[i]}"></div>` +
+    `<span class="legend-ticker">${label}</span>` +
+    `<span class="legend-value">${fmt(portfolio.values[i])}</span>` +
+    `<span class="legend-pct">${pct}%</span>`;
+  item.addEventListener('mouseenter', () => {
+    pieValue.textContent = fmt(portfolio.values[i]);
+    pieLabel.textContent = label + ' · ' + pct + '%';
+    chartCartera.tooltip.setActiveElements([{ datasetIndex: 0, index: i }], { x: 0, y: 0 });
+    chartCartera.update('none');
   });
-  document.getElementById('panel-' + yr).classList.add('active');
-  const btn = document.getElementById('tab-' + yr);
-  btn.classList.add('active');
-  btn.style.borderBottomColor = COLORES[yr];
+  item.addEventListener('mouseleave', () => {
+    pieValue.textContent = fmt(pieTotal);
+    pieLabel.textContent = 'capital total';
+    chartCartera.tooltip.setActiveElements([], {});
+    chartCartera.update('none');
+  });
+  legendEl.appendChild(item);
+});
+
+// Collapsibles
+function toggle(id) {
+  const el = document.getElementById(id);
+  const btn = document.getElementById('btn-' + id);
+  if (el.classList.contains('collapsed')) {
+    el.classList.remove('collapsed');
+    btn.textContent = '▼ ocultar';
+  } else {
+    el.classList.add('collapsed');
+    btn.textContent = '▶ mostrar';
+  }
 }
 </script>
 </body>
