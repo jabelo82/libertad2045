@@ -24,3 +24,4 @@ backtest_results/
 *.tmp
 *.swp
 
+venv/
