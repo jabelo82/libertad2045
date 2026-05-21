@@ -1,4 +1,5 @@
 import os
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +29,37 @@ from github_publisher import publicar_dashboard
 # --------------------------------------------------
 
 MODE = os.getenv("TRADING_MODE", "SIM")
+
+
+_PROJECT_DIR = Path(__file__).resolve().parent
+
+
+def git_backup(capital: float | None) -> tuple[bool, str]:
+    """Commit y push del estado del proyecto tras el ciclo noche."""
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+    capital_str = f"{capital:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".") if capital else "N/D"
+    msg = f"Ciclo noche {fecha} — Capital: {capital_str}"
+
+    def run(args):
+        return subprocess.run(
+            args, cwd=_PROJECT_DIR, capture_output=True, text=True, timeout=30
+        )
+
+    run(["git", "add", "-A"])
+
+    status = run(["git", "status", "--porcelain"])
+    if not status.stdout.strip():
+        return True, "Git ya estaba al día (sin cambios)"
+
+    result = run(["git", "commit", "-m", msg])
+    if result.returncode != 0:
+        return False, f"git commit falló: {result.stderr.strip()}"
+
+    result = run(["git", "push", "origin", "main"])
+    if result.returncode != 0:
+        return False, f"git push falló: {result.stderr.strip()}"
+
+    return True, msg
 
 
 def obtener_capital(ib):
@@ -344,6 +376,15 @@ def main():
                 log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
         except Exception as e_dash:
             log_event("WARN", f"Dashboard no regenerado: {e_dash}")
+
+        try:
+            ok_git, msg_git = git_backup(capital)
+            if ok_git:
+                log_event("INFO", f"Git backup: {msg_git}")
+            else:
+                log_event("WARN", f"Git backup falló: {msg_git}")
+        except Exception as e_git:
+            log_event("WARN", f"Git backup no completado: {e_git}")
 
 
     except Exception as e:
