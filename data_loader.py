@@ -1,8 +1,16 @@
 from ib_insync import Stock, util
 
+import numpy as np
 import pandas as pd
 
 from logger import log_event
+
+
+# --------------------------------------------------
+# Configuración del percentil ATR (experimento 16 — B1)
+# --------------------------------------------------
+
+ATR_PERCENTIL_VENTANA = 252   # Días para calcular el percentil histórico del ATR
 
 
 def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
@@ -11,9 +19,11 @@ def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
     con indicadores calculados y listos para el signal engine.
 
     Indicadores incluidos:
-        SMA50  : media móvil simple de 50 periodos
-        SMA200 : media móvil simple de 200 periodos
-        ATR    : Average True Range de 14 periodos (fuente única del sistema)
+        SMA50         : media móvil simple de 50 periodos
+        SMA200        : media móvil simple de 200 periodos
+        ATR           : Average True Range de 14 periodos (fuente única del sistema)
+        ATR_PERCENTIL : percentil del ATR actual respecto a los últimos 252 días
+                        → usado por position_size para el stop loss dinámico B1
 
     Retorna el DataFrame enriquecido, o None si los datos no son válidos.
     El orquestador trata None como señal de que el activo debe descartarse
@@ -27,7 +37,7 @@ def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
         bars = ib.reqHistoricalData(
             contract,
             endDateTime="",
-            durationStr=duration,
+            durationStr="2 Y",
             barSizeSetting=bar_size,
             whatToShow="TRADES",
             useRTH=True
@@ -83,6 +93,16 @@ def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
 
         # Limpiar columnas intermedias del cálculo
         df = df.drop(columns=["prev_close", "tr1", "tr2", "tr3", "TR"])
+
+
+        # --------------------------------------------------
+        # ATR_PERCENTIL — stop loss dinámico B1 (experimento 16)
+        # Percentil del ATR actual respecto a su historial de 252 días.
+        # Percentil alto = volatilidad alta ahora = stop más ajustado.
+        # Percentil bajo = volatilidad baja ahora = stop más holgado.
+        # --------------------------------------------------
+
+        df["ATR_PERCENTIL"] = df["ATR"].rolling(ATR_PERCENTIL_VENTANA).rank(pct=True)
 
         return df
 

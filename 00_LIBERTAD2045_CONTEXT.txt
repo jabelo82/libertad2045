@@ -1,0 +1,349 @@
+================================================================================
+LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
+Actualizado: 2026-05-06
+================================================================================
+
+--------------------------------------------------------------------------------
+0. CONSTITUCIÓN DEL SISTEMA
+--------------------------------------------------------------------------------
+
+Los 7 artículos que rigen el diseño, operación y evolución de LIBERTAD_2045.
+Documento completo: 01.LIBERTAD_2045_CONSTITUCIÓN.txt
+
+  I.   DISCIPLINA          Las decisiones de trading no se alteran manualmente
+                           durante la ejecución. El operador no interviene en la
+                           lógica de decisión durante el ciclo operativo.
+
+  II.  SUPERVIVENCIA       La supervivencia del sistema tiene prioridad sobre la
+                           maximización del beneficio. Toda operación debe estar
+                           protegida por mecanismos de control de riesgo.
+
+  III. EVOLUCIÓN           El sistema puede evolucionar, pero de forma controlada.
+       CONTROLADA          Los módulos no se modifican parcialmente — cuando se
+                           introduce una mejora, el módulo completo se reemplaza.
+
+  IV.  SIMPLICIDAD         La arquitectura debe mantenerse simple y legible.
+                           Cada módulo tiene una única responsabilidad.
+                           La complejidad innecesaria es una amenaza.
+
+  V.   ROBUSTEZ            El sistema debe resistir fallos técnicos y operativos:
+                           errores de datos, fallos en activos individuales,
+                           interrupciones de servicios externos, reinicios.
+
+  VI.  REGISTRO            Todo evento relevante queda documentado de forma
+                           persistente. El comportamiento del sistema debe poder
+                           reconstruirse años después de su ejecución.
+
+  VII. AUTOMATIZACIÓN      La ejecución del proceso de inversión es completamente
+                           automática. La intervención humana se limita a
+                           mantenimiento técnico, supervisión y evolución.
+
+--------------------------------------------------------------------------------
+1. QUÉ ES EL SISTEMA
+--------------------------------------------------------------------------------
+
+LIBERTAD_2045 es un sistema de trading algorítmico autónomo diseñado para
+operar en mercados de renta variable (S&P 500) de forma sistemática, sin
+intervención humana en las decisiones de entrada/salida.
+
+Creador y operador: Javier Beneito
+Inicio del proyecto: 2026
+
+Filosofía:
+  - No predice el mercado; identifica tendencias y gestiona riesgo.
+  - Acepta pérdidas frecuentes si las ganancias las superan con consistencia.
+  - Diseñado para operar durante años, no semanas.
+
+Estrategia base:
+  - Momentum + pullback sobre la SMA50 en tendencia alcista (SMA50 > SMA200).
+  - Ranking de señales por score = (close − SMA50) / ATR
+                                  + pendiente_SMA200_5d / ATR  [v2]
+  - Stop dinámico ATR-percentil (B1), break-even automático a +1.5×ATR.
+
+--------------------------------------------------------------------------------
+2. ESTADO ACTUAL (06 MAYO 2026)
+--------------------------------------------------------------------------------
+
+FASE 2 — PAPER TRADING ACTIVO desde 2026-04-14
+
+  Modo de operación : PAPER (cuenta simulada Interactive Brokers)
+  Capital PAPER     : 1.113.884,28 €  (pico histórico, última ejecución 05/05)
+  Posiciones abiertas (10 de 10 máximas):
+      INTC   LLY    C      BMY    ILMN
+      AKAM   AAPL   BWA    CBOE   CAT
+
+  Ejecución automática:
+      cron  22:10 L–V  →  run_bot.sh  →  libertad2045.py
+      watchdog  12:00 L–V  →  watchdog.sh  →  watchdog.py
+
+--------------------------------------------------------------------------------
+3. ARQUITECTURA DE MÓDULOS
+--------------------------------------------------------------------------------
+
+NÚCLEO OPERATIVO
+
+libertad2045.py       Orquestador principal. Controla el ciclo diario completo:
+                      conexión → riesgo → datos → señales → ranking →
+                      ejecución → rebalanceo → log → Telegram → dashboard.
+
+conexion_ib.py        Conexión con Interactive Brokers (puerto 4002 PAPER,
+                      4001 LIVE). Reintentos automáticos (3×, 5s intervalo).
+
+data_loader.py        Descarga datos históricos (2Y, ventana ampliada en v2).
+                      Calcula SMA50, SMA200, ATR, ATR_PERCENTIL.
+                      Activa stop B1 al disponer de suficiente histórico ATR.
+
+signal_engine.py      Detección de señales de entrada:
+                      - Tendencia: SMA50 > SMA200
+                      - Pullback adaptativo: close_prev < SMA50_prev − ATR×0.75
+                        (umbral ATR-adaptativo, mejora M5 v2)
+                      - Ventana de pullback: 3 días (mejora M2 v2)
+
+position_size.py      Tamaño de posición basado en riesgo fijo:
+                      riesgo por trade = 0.85% del capital
+                      shares = (capital × 0.0085) / (ATR × multiplicador_dinámico)
+                      multiplicador_dinámico: 2.2–4.0 según ATR_PERCENTIL.
+
+portfolio_manager.py  Gestión de posiciones abiertas: lectura desde IBKR,
+                      evaluación de stops por cierre, detección de posiciones
+                      sin stop GTC activo (alerta Telegram).
+
+order_manager.py      Gestión de órdenes pendientes. Cancela órdenes DAY,
+                      nunca toca órdenes GTC (stops activos).
+
+trade_executor.py     Ejecución de órdenes BUY STOP + SELL STOP GTC vía API.
+                      Listener on_exec() para confirmar fills reales (TRADE_FILLED).
+
+risk_guardian.py      Control de riesgo previo a cualquier operación:
+                      1. Conexión IBKR activa
+                      2. Ventana horaria (21:00–23:00 CET)
+                      3. Capital mínimo >= 2.000 €
+                      4. Drawdown <= 10% desde pico (capital_peak.txt)
+                      5. Apalancamiento <= 1.0× (sin margen)
+
+rebalance.py          Rebalanceo y gestión de stops diarios:
+                      - Amplía posición si infradimensionada > 25%
+                      - Reduce posición si sobredimensionada > 25%
+                      - Break-even: precio >= entry + 1.5×ATR
+                                  → stop sube a entry + 0.5×ATR
+                      - Protección hard: posición > 25% capital → reducir.
+
+logger.py             Registro histórico en CSV diarios (logs/LIBERTAD_YYYY-MM-DD.csv).
+                      Campos: timestamp, level, event, symbol, score, shares,
+                      entry, stop. Limpieza automática > 90 días.
+
+telegram.py           Notificaciones push al operador. send_telegram() para
+                      mensajes normales, send_telegram_critical() con reintentos.
+
+universe_sp500.py     Universo de ~420 acciones del S&P 500 operables.
+                      Validación de duplicados y tickers inválidos.
+
+process_guard.py      Lock file (/tmp/libertad2045.lock) para evitar ejecuciones
+                      simultáneas. acquire_lock() al inicio, release_lock()
+                      en finally (siempre se libera, incluso con error).
+
+dashboard.py          Dashboard web (dashboard.html) con posiciones, trades,
+                      PnL actual en € y %, métricas del sistema.
+                      Regenerado al final de cada ejecución del bot.
+
+github_publisher.py   Publica el dashboard en GitHub Pages tras cada ejecución.
+
+watchdog.py           Monitor de salud (12:00 L–V). 5 comprobaciones:
+                      1. Heartbeat (last_run.txt < 25h)
+                      2. IB Gateway accesible (puerto 4002)
+                      3. Órdenes GTC activas sin cancelaciones inesperadas
+                      4. RTC wakeup programado
+                      5. Auto-relaunch del bot si heartbeat falla.
+
+HERRAMIENTAS DE ANÁLISIS (no operativas, uso en Fase 3)
+
+backtest_expandido.py    Motor principal de backtesting con reinversión anual.
+                         Usado para validar mejoras antes de activarlas.
+backtest_2005/10/15.py   Backtests por período.
+market_filter.py         Filtro macro por estado del mercado (ALCISTA/NEUTRO/
+                         BAJISTA basado en SPY). Preparado para Fase 3.
+data_manager.py          Caché de datos históricos de Yahoo Finance para backtests.
+                         Descarga una vez y guarda en data/. No lo usa el bot en
+                         vivo, que obtiene los datos de IBKR vía data_loader.py.
+montecarlo_analysis.py   Análisis Montecarlo de resultados.
+generar_reportes.py      Generación de informes HTML.
+
+--------------------------------------------------------------------------------
+4. PARÁMETROS OPERATIVOS CLAVE
+--------------------------------------------------------------------------------
+
+  Riesgo por trade    :  0.85% del capital
+  Multiplicador ATR   :  dinámico 2.2–4.0 según ATR_PERCENTIL
+  MAX_POS             :  10   (posiciones simultáneas máximas)
+  Stop dinámico       :  B1   (ATR percentil, ventana 2Y)
+  Break-even          :  +1.5×ATR entrada → stop a entry + 0.5×ATR
+  Ventana datos       :  2Y   (ampliada en v2 para activar B1)
+  Universo            :  ~420 acciones S&P 500
+  Pullback umbral     :  close_prev < SMA50_prev − ATR_prev × 0.75
+  Pullback ventana    :  últimos 3 días
+  Score ranking       :  (close − SMA50)/ATR + pendiente_SMA200_5d/ATR
+  Capital mínimo      :  2.000 €
+  Drawdown máximo     :  10% desde pico
+
+--------------------------------------------------------------------------------
+5. INFRAESTRUCTURA
+--------------------------------------------------------------------------------
+
+  Servidor            :  Torre dedicada — jabelo@192.168.1.139
+                         i3-12100F, 32GB RAM, Zorin OS
+  ProBook             :  jabelopc@192.168.1.146 (máquina de trabajo diario)
+  Sistema operativo   :  Linux
+  Lenguaje            :  Python 3.12
+  Broker              :  Interactive Brokers
+  Gateway IB          :  puerto 4002 (PAPER) / 4001 (LIVE)
+  IBC                 :  ~/ibc/config.ini — gestiona sesión y reinicio diario
+  Automatización      :  cron 22:10 L–V (bot), 12:00 L–V (watchdog)
+  Notificaciones      :  Telegram (bot propio)
+  Entorno Python      :  venv local
+
+  Ciclo de encendido/apagado automático:
+    11:50             →  RTC despierta la torre (ciclo mediodía)
+    12:00             →  watchdog
+    12:10             →  trading-midday-shutdown: programa RTC 22:00 + apaga
+    22:00             →  RTC despierta la torre (ciclo noche)
+    22:10             →  bot de trading
+    22:20             →  trading-night-shutdown: programa RTC 11:50 + apaga
+
+  IB Gateway (servicio systemd de usuario):
+    ~/.config/systemd/user/ibgateway.service
+    Restart=on-failure, RestartSec=60
+    Arranca automáticamente en cada boot vía ibc_autostart.sh
+
+  Ficheros de ejecución:
+    run_bot.sh        →  activa venv, lanza libertad2045.py
+    watchdog.sh       →  lanza watchdog.py
+    setup.sh          →  instalación inicial del entorno (reinstalación)
+    ibc_autostart.sh  →  arranca Xvfb + IB Gateway vía IBC
+    _cuarentena/      →  scripts retirados del sistema pero conservados por
+                          precaución (fix_aapl_stop.py)
+
+  Documentación de infraestructura:
+    INFRAESTRUCTURA_IBG.md  →  arquitectura IB Gateway, bugs corregidos,
+                                comandos de diagnóstico.
+
+--------------------------------------------------------------------------------
+6. VERSIONES DEL SISTEMA
+--------------------------------------------------------------------------------
+
+VERSIÓN 2 — ACTIVA desde 2026-04-14
+  5 mejoras sobre v1:
+
+  M1 · data_loader.py      Ventana 1Y → 2Y. Activa stop B1.
+  M2 · signal_engine.py    Ventana pullback 1d → 3d.
+  M3 · libertad2045.py     Score ranking ampliado con pendiente SMA200 5d.
+  M4 · rebalance.py        Break-even automático a +1.5×ATR.
+  M5 · signal_engine.py    Umbral pullback fijo 2% → ATR-adaptativo ×0.75.
+
+VERSIÓN 1 — archivada hasta 2026-04-14
+
+--------------------------------------------------------------------------------
+7. RESULTADOS DE BACKTESTS v2
+--------------------------------------------------------------------------------
+
+Metodología: capital inicial 4.000 € + aportación 4.000 €/año, reinversión
+total, universo S&P 500 histórico (676 activos), sin comisiones explícitas.
+
+  Período 2015–2025:
+    Retorno anual medio :   6.997%
+    Win rate            :  60.3%
+    Profit Factor       :  2.2484
+    Max Drawdown        :   8.8%
+    Capital final       :    283.884 €
+
+  Período 2010–2025:
+    Retorno anual medio :  33.826%
+    Win rate            :  62.1%
+    Profit Factor       :  2.2709
+    Max Drawdown        :   8.9%
+    Capital final       :  1.357.059 €
+
+  Período 2005–2025:
+    Retorno anual medio :  94.256%
+    Win rate            :  60.9%
+    Profit Factor       :  2.2711
+    Max Drawdown        :  12.2%
+    Capital final       :  3.774.259 €
+
+  Montecarlo 1000 simulaciones:
+    Probabilidad de ruina  :   0%
+    DD percentil 95        :  10.6%
+    Capital peor 5%        : 945.000 €
+    Único año negativo     :  2008  (−12%, 190 días Risk Guardian activo)
+
+Cualquier mejora futura debe superar estos resultados para ser adoptada.
+
+Para referencia, resultados v1 (superados en todos los períodos por v2):
+  2015–2025:  4.439% | WR 49.3% | PF 2.1991 | DD  9.3%
+  2010–2025: 14.258% | WR 51.2% | PF 2.1921 | DD  9.3%
+  2005–2025: 27.032% | WR 47.9% | PF 2.1758 | DD 12.6%
+
+--------------------------------------------------------------------------------
+8. FLUJO OPERATIVO DIARIO
+--------------------------------------------------------------------------------
+
+  22:10 CET (L–V)
+      cron  →  run_bot.sh  →  libertad2045.py
+          │
+          ├─ process_guard.py    acquire_lock()
+          ├─ conexion_ib.py      conectar IBKR (3 reintentos)
+          ├─ risk_guardian.py    5 comprobaciones de riesgo
+          ├─ portfolio_manager.py evaluar stops por cierre del día
+          ├─ rebalance.py        rebalanceo + break-even
+          ├─ data_loader.py      descarga datos (2Y, ~420 tickers)
+          ├─ signal_engine.py    detecta señales de entrada
+          ├─ position_size.py    calcula tamaño de posición
+          ├─ order_manager.py    cancela órdenes DAY pendientes
+          ├─ trade_executor.py   envía órdenes a IBKR + confirma fills
+          ├─ logger.py           registra todo en CSV diario
+          ├─ telegram.py         notifica al operador (resumen + alertas)
+          ├─ dashboard.py        regenera dashboard.html
+          ├─ github_publisher.py publica en GitHub Pages
+          └─ process_guard.py    release_lock()
+
+  12:00 CET (L–V)
+      cron  →  watchdog.sh  →  watchdog.py
+          │
+          ├─ check_heartbeat()   last_run.txt < 25 horas
+          ├─ check_ibkr()        conexión puerto 4002
+          ├─ check_ordenes_gtc() stops activos sin cancelaciones
+          ├─ check_rtc()         próxima alarma programada
+          └─ relanzar_bot()      si heartbeat falla (FORCE_HOUR_BYPASS)
+
+--------------------------------------------------------------------------------
+9. PRÓXIMOS PASOS
+--------------------------------------------------------------------------------
+
+  Fase actual (mayo–julio 2026):
+    • Supervisar paper trading
+    • Monitorizar PnL real vs backtest
+    • No introducir cambios hasta agosto 2026
+
+  Fase 3 — agosto 2026:
+    • Analizar resultados mayo–julio 2026
+    • Ejecutar nuevo ciclo de mejoras si el análisis lo justifica
+    • Toda mejora debe superar la línea base v2 en backtest
+
+  Posibles líneas de mejora a evaluar:
+    • Filtro macro (market_filter.py ya preparado — VIX, breadth)
+    • Optimización de parámetros ATR (actualmente dinámico 2.2–4.0)
+    • Salida parcial en targets de beneficio
+    • Diversificación sectorial en el ranking
+
+--------------------------------------------------------------------------------
+10. DOCUMENTOS DEL PROYECTO
+--------------------------------------------------------------------------------
+
+  00_LIBERTAD2045_CONTEXT.txt     Este fichero — resumen ejecutivo completo
+  PROJECT_MAP.md                  Mapa del sistema y estado de fases
+  INFRAESTRUCTURA_IBG.md          Arquitectura IB Gateway, bugs, diagnóstico
+  01.LIBERTAD_2045_CONSTITUCIÓN.txt Principios y filosofía del sistema
+  enlaces_chats.txt               Índice histórico de conversaciones
+
+================================================================================
+FIN DEL CONTEXTO — LIBERTAD_2045 v2 — 2026-05-06
+================================================================================

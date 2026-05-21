@@ -1,7 +1,26 @@
+# Secretos
 .env
+
+# Python
 __pycache__/
 *.pyc
+
+# Datos históricos (too large, regenerable con data_manager.py)
+data/
+data.zip
+
+# Estado en tiempo real (ephemeral)
 logs/
-backtest_results/
 last_run.txt
 capital_peak.txt
+portfolio_cache.json
+trades_*.json
+orders_*.json
+
+# Resultados de backtest (grandes, van al Excel del ProBook)
+backtest_results/
+
+# Archivos temporales
+*.tmp
+*.swp
+

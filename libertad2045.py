@@ -2,11 +2,13 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
+
 from conexion_ib import conectar_ib, desconectar_ib
 from data_loader import obtener_datos
 from signal_engine import detectar_senal
 from position_size import calcular_posicion
-from portfolio_manager import obtener_posiciones_abiertas, filtrar_senales
+from portfolio_manager import obtener_posiciones_abiertas, filtrar_senales, evaluar_stops_por_cierre
 from trade_executor import ejecutar_trade
 from order_manager import cancelar_ordenes_pendientes
 from logger import log_event, limpiar_logs_antiguos
@@ -14,6 +16,9 @@ from telegram import send_telegram, send_telegram_critical
 from universe_sp500 import SP500
 from risk_guardian import risk_check
 from process_guard import acquire_lock, release_lock
+from rebalance import rebalancear, resumen_texto as rebalance_resumen
+import dashboard as _dashboard
+from github_publisher import publicar_dashboard
 
 
 # --------------------------------------------------
@@ -52,7 +57,6 @@ def main():
 
     # --------------------------------------------------
     # Limpieza de logs antiguos
-    # Se ejecuta una vez por ciclo, al inicio
     # --------------------------------------------------
 
     limpiar_logs_antiguos()
@@ -107,17 +111,63 @@ def main():
 
 
         # --------------------------------------------------
-        # Obtener posiciones abiertas y órdenes pendientes
+        # Evaluar stops por precio de cierre (Palanca 2B — exp. 27)
+        # El mercado USA ya ha cerrado cuando ejecutamos a las 22:10 CET.
+        # Si el cierre del día está por debajo del stop → cerrar posición.
+        # Esto elimina salidas por ruido intradiario y replica el backtest.
+        # --------------------------------------------------
+
+        posiciones_cerradas = evaluar_stops_por_cierre(ib)
+
+        if posiciones_cerradas:
+            log_event("INFO",
+                      f"Stops por cierre activados: {len(posiciones_cerradas)} → "
+                      f"{posiciones_cerradas}")
+
+
+        # --------------------------------------------------
+        # Rebalanceo de posiciones existentes
+        # Ajusta el tamaño de cada posición al óptimo actual antes
+        # de escanear nuevas entradas, para que el conteo de slots
+        # y el capital disponible sean precisos.
+        # --------------------------------------------------
+
+        decisiones_rebalanceo = rebalancear(ib, capital, mode=MODE)
+
+
+        # --------------------------------------------------
+        # Obtener posiciones abiertas tras evaluación de stops y rebalanceo
         # --------------------------------------------------
 
         open_positions = obtener_posiciones_abiertas(ib)
 
 
         # --------------------------------------------------
-        # Escaneo del universo
+        # V3 FIX: Verificar datos de posiciones abiertas ANTES del escaneo
+        # --------------------------------------------------
+        try:
+            posiciones_abiertas = [p.contract.symbol for p in ib.positions() if p.position > 0]
+            for sym_pos in posiciones_abiertas:
+                df_pos = obtener_datos(ib, sym_pos)
+                if df_pos is None or len(df_pos) < 20:
+                    log_event("WARN",
+                              f"FALLO DE DATOS en posicion abierta: {sym_pos}",
+                              symbol=sym_pos)
+                    try:
+                        send_telegram(f"WARNING LIBERTAD_2045 - Sin datos para {sym_pos} (posicion abierta). Stop no evaluado este ciclo.")
+                    except Exception:
+                        pass
+        except Exception as e:
+            log_event("WARN", f"V3: no se pudieron verificar posiciones: {e}")
+
+   # Escaneo del universo
         # --------------------------------------------------
 
-        signals = []
+        signals       = []
+        total_signals = 0
+        fallos_datos  = 0
+
+        UMBRAL_FALLOS = 0.30  # Alerta si más del 30% del universo falla
 
         for symbol in SP500:
 
@@ -126,9 +176,11 @@ def main():
                 df = obtener_datos(ib, symbol)
 
                 if df is None:
+                    fallos_datos += 1
                     continue
 
                 if len(df) < 200:
+                    fallos_datos += 1
                     continue
 
                 if not detectar_senal(df):
@@ -139,7 +191,15 @@ def main():
                 if last.ATR <= 0:
                     continue
 
-                score = (last.close - last.SMA50) / last.ATR
+                # Mejora 3: score compuesto — bounce sobre SMA50 + pendiente
+                # de la SMA200 en los últimos 5 días, ambos normalizados por ATR.
+                # Prioriza activos donde la tendencia de largo plazo está acelerando.
+                _sma200_5d    = df.iloc[-6]["SMA200"] if len(df) >= 6 else float("nan")
+                _sma200_slope = (
+                    (last.SMA200 - _sma200_5d) / last.ATR
+                    if not pd.isna(_sma200_5d) else 0.0
+                )
+                score = (last.close - last.SMA50) / last.ATR + _sma200_slope
 
                 signals.append({
                     "symbol": symbol,
@@ -148,13 +208,34 @@ def main():
                 })
 
             except Exception as e:
+                fallos_datos += 1
                 log_event("ERROR", f"Error escaneando {symbol}: {e}")
                 continue
 
-        total_signals = len(signals)
+        total_signals  = len(signals)
+        pct_fallos     = fallos_datos / len(SP500) if SP500 else 0
 
         log_event("INFO", f"Escaneo completado: {total_signals} señales detectadas "
-                           f"sobre {len(SP500)} activos")
+                           f"sobre {len(SP500)} activos | fallos datos: {fallos_datos} "
+                           f"({pct_fallos:.1%})")
+
+        # --------------------------------------------------
+        # Alerta crítica si los fallos de datos superan el umbral
+        # Indica un problema con la fuente de datos (IBKR timeout,
+        # mantenimiento, desconexión parcial). El sistema continúa
+        # pero el operador debe revisar.
+        # --------------------------------------------------
+
+        if pct_fallos > UMBRAL_FALLOS:
+            log_event("WARN", f"ALERTA DATOS: {pct_fallos:.1%} del universo sin datos "
+                               f"({fallos_datos}/{len(SP500)} activos fallaron)")
+            send_telegram_critical(
+                f"⚠️ LIBERTAD_2045 — ALERTA DE DATOS\n\n"
+                f"El {pct_fallos:.1%} del universo no devolvió datos válidos "
+                f"({fallos_datos}/{len(SP500)} activos).\n"
+                f"Posible problema con la conexión a IBKR o los datos históricos.\n"
+                f"Revisar logs para más detalle."
+            )
 
 
         # --------------------------------------------------
@@ -219,14 +300,22 @@ def main():
 
         runtime = (datetime.now() - start_time).seconds
 
+        stops_texto = (f"Stops por cierre    : {len(posiciones_cerradas)} "
+                       f"({', '.join(posiciones_cerradas) if posiciones_cerradas else 'ninguno'})\n"
+                       if posiciones_cerradas else
+                       f"Stops por cierre    : 0\n")
+
         message = (
             f"⚙️ LIBERTAD_2045\n\n"
             f"Modo                : {MODE}\n"
             f"Capital             : {capital:.2f}\n"
             f"Posiciones abiertas : {len(open_positions)}\n"
+            f"{stops_texto}"
+            f"{rebalance_resumen(decisiones_rebalanceo)}\n"
             f"Señales detectadas  : {total_signals}\n"
             f"Señales filtradas   : {len(signals)}\n"
             f"Trades ejecutados   : {trades_executed}\n"
+            f"Fallos de datos     : {fallos_datos}/{len(SP500)} ({pct_fallos:.1%})\n"
             f"Tiempo ejecución    : {runtime}s\n\n"
             f"Estado: OK"
         )
@@ -234,6 +323,27 @@ def main():
         send_telegram(message)
 
         log_event("INFO", "SYSTEM_END")
+
+
+        # --------------------------------------------------
+        # Regenerar dashboard HTML
+        # Se ejecuta con IB aún conectado para que leer_cartera()
+        # pueda obtener posiciones en vivo (clientId=7).
+        # El try aísla errores del dashboard del ciclo principal.
+        # --------------------------------------------------
+
+        try:
+            _dashboard.main()
+            log_event("INFO", "Dashboard regenerado")
+
+            # Publicar en GitHub Pages
+            ok_gh, msg_gh = publicar_dashboard()
+            if ok_gh:
+                log_event("INFO", f"GitHub Pages actualizado: {msg_gh}")
+            else:
+                log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
+        except Exception as e_dash:
+            log_event("WARN", f"Dashboard no regenerado: {e_dash}")
 
 
     except Exception as e:

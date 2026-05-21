@@ -1,9 +1,47 @@
+import numpy as np
 import pandas as pd
 
 
-RISK_PERCENT       = 0.0065   # Riesgo por operación: 0.65% del capital
-ATR_MULTIPLIER     = 2        # Distancia del stop-loss en múltiplos de ATR
-MAX_POSITION_PCT   = 0.25     # Tamaño máximo de una posición: 25% del capital
+# --------------------------------------------------
+# Parámetros validados — experimento 10 (2020-2025)
+# Confirmados en experimento 16 B1 (2015-2025)
+# --------------------------------------------------
+
+RISK_PERCENT     = 0.0085     # Riesgo por operación: 0.85% del capital
+MAX_POSITION_PCT = 0.25       # Tamaño máximo de una posición: 25% del capital
+
+# --------------------------------------------------
+# Stop loss dinámico B1 — experimento 16
+# Multiplicador ATR interpolado según percentil de volatilidad histórica.
+# Percentil alto (activo muy volátil ahora) → multiplicador bajo → stop ajustado
+# Percentil bajo (activo poco volátil ahora) → multiplicador alto → stop holgado
+# --------------------------------------------------
+
+B1_MULT_MIN = 2.2             # Multiplicador mínimo (volatilidad en máximos históricos)
+B1_MULT_MAX = 4.0             # Multiplicador máximo (volatilidad en mínimos históricos)
+ATR_MULTIPLIER_BASE = 3.1     # Multiplicador de respaldo si ATR_PERCENTIL no está disponible
+
+
+def _obtener_multiplicador(df):
+    """
+    Calcula el multiplicador ATR dinámico según el percentil de volatilidad.
+
+    Lee ATR_PERCENTIL del DataFrame generado por data_loader.
+    Si no está disponible, usa ATR_MULTIPLIER_BASE como fallback.
+    """
+
+    try:
+        percentil = df["ATR_PERCENTIL"].iloc[-1]
+
+        if pd.isna(percentil):
+            return ATR_MULTIPLIER_BASE
+
+        # Interpolación lineal: percentil alto → multiplicador bajo
+        mult = B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * percentil
+        return round(mult, 2)
+
+    except (KeyError, IndexError):
+        return ATR_MULTIPLIER_BASE
 
 
 def calcular_posicion(df, capital):
@@ -11,7 +49,8 @@ def calcular_posicion(df, capital):
     Calcula el tamaño de posición basado en riesgo real.
 
     Parámetros:
-        df      : DataFrame con columnas ATR y close ya calculadas por data_loader
+        df      : DataFrame con columnas ATR, ATR_PERCENTIL y close
+                  calculadas por data_loader
         capital : capital real de la cuenta, leído de IBKR en cada ciclo
 
     Retorna:
@@ -42,13 +81,18 @@ def calcular_posicion(df, capital):
         return 0, None, None
 
     # --------------------------------------------------
-    # Cálculo del tamaño de posición
+    # Multiplicador dinámico B1
     # --------------------------------------------------
 
-    stop_distance = atr * ATR_MULTIPLIER
+    multiplicador = _obtener_multiplicador(df)
+    stop_distance = atr * multiplicador
 
     if stop_distance <= 0:
         return 0, None, None
+
+    # --------------------------------------------------
+    # Cálculo del tamaño de posición
+    # --------------------------------------------------
 
     # Shares por riesgo: cuántas acciones puedo comprar
     # para no perder más de RISK_PERCENT del capital si toca el stop

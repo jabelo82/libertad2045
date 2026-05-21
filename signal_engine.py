@@ -22,14 +22,14 @@ def detectar_senal(df):
            El cierre de hoy vuelve a superar la SMA50.
            → Confirma que el precio ha retomado la tendencia tras el pullback.
 
-        4. CONFIRMACIÓN DE VOLUMEN
-           El volumen del día de recuperación supera la media de volumen de 20 días.
-           → Filtra recuperaciones sin convicción (falsas rupturas de bajo volumen).
+    Nota: el filtro de confirmación de volumen está desactivado.
+    Validado en el experimento 10 — sin filtro de volumen los resultados
+    son superiores en el universo S&P500 (251 acciones).
 
     Retorna True si la señal es válida, False en caso contrario.
     """
 
-    if df is None or len(df) < 2:
+    if df is None or len(df) < 4:
         return False
 
     last = df.iloc[-1]
@@ -39,7 +39,7 @@ def detectar_senal(df):
     # Verificar que los indicadores necesarios están disponibles
     # --------------------------------------------------
 
-    required = ["close", "SMA50", "SMA200", "volume"]
+    required = ["close", "SMA50", "SMA200"]
 
     for col in required:
         if col not in df.columns:
@@ -49,6 +49,9 @@ def detectar_senal(df):
                 prev.close, prev.SMA50, prev.SMA200]:
         if pd.isna(val):
             return False
+
+    if pd.isna(last["ATR"]) or last["ATR"] <= 0:
+        return False
 
 
     # --------------------------------------------------
@@ -65,12 +68,25 @@ def detectar_senal(df):
 
 
     # --------------------------------------------------
-    # 2. Pullback real
+    # 2+5. Pullback real — ventana 3 días + umbral ATR-adaptativo
+    #
+    # Mejora 2: se amplía la detección a los 3 días anteriores.
+    # Un pullback que duró varios días es igual de válido que uno de 1 día.
+    #
+    # Mejora 5: el umbral deja de ser un 2% fijo y pasa a ser proporcional
+    # al ATR del activo — exige más corrección en activos volátiles y menos
+    # en activos estables. Umbral: SMA50 - 0.75 × ATR
     # --------------------------------------------------
 
-    pullback = (
-        prev.close < prev.SMA50 * 0.98
-    )
+    pullback = False
+    for j in range(-4, -1):  # días: -4, -3, -2 (3 días antes de hoy)
+        row = df.iloc[j]
+        if (pd.isna(row["close"]) or pd.isna(row["SMA50"]) or
+                pd.isna(row["ATR"]) or row["ATR"] <= 0):
+            continue
+        if row["close"] < row["SMA50"] - row["ATR"] * 0.75:
+            pullback = True
+            break
 
     if not pullback:
         return False
@@ -89,28 +105,6 @@ def detectar_senal(df):
 
 
     # --------------------------------------------------
-    # 4. Confirmación de volumen
-    # --------------------------------------------------
-
-    vol_valido = False
-
-    if "volume" in df.columns and not pd.isna(last.volume):
-
-        vol_media_20 = df["volume"].rolling(20).mean().iloc[-1]
-
-        if not pd.isna(vol_media_20) and vol_media_20 > 0:
-            vol_valido = last.volume > vol_media_20
-
-    # Si no hay datos de volumen disponibles, no bloquear la señal
-    # pero registrar la advertencia
-    if not vol_valido:
-        if "volume" in df.columns:
-            log_event("WARN", "Señal detectada sin confirmación de volumen",
-                      symbol=str(df.get("symbol", "")))
-        return False
-
-
-    # --------------------------------------------------
     # Señal válida — registrar valores para trazabilidad
     # --------------------------------------------------
 
@@ -119,7 +113,8 @@ def detectar_senal(df):
               f"close={last.close:.2f} | "
               f"SMA50={last.SMA50:.2f} | "
               f"SMA200={last.SMA200:.2f} | "
-              f"vol={last.volume:.0f} | "
-              f"vol_media20={vol_media_20:.0f}")
+              f"ATR={last.ATR:.4f} | "
+              f"ATR_percentil={last.get('ATR_PERCENTIL', float('nan')):.2f} | "
+              f"pullback_umbral={last.SMA50 - last.ATR * 0.75:.2f}")
 
     return True

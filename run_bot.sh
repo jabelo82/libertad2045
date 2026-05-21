@@ -7,10 +7,10 @@
 # de entorno y ejecuta el motor de trading principal.
 #
 # Ejecutado por cron a las 22:10 diariamente:
-#   10 22 * * * /bin/bash /home/jabelopc/Escritorio/PROYECTO_LIBERTAD_2045/run_bot.sh
+#   10 22 * * * /bin/bash /home/jabelo/PROYECTO_LIBERTAD_2045/run_bot.sh
 # --------------------------------------------------
 
-PROJECT_DIR="/home/jabelopc/Escritorio/PROYECTO_LIBERTAD_2045"
+PROJECT_DIR="/home/jabelo/PROYECTO_LIBERTAD_2045"
 
 # Cargar variables de entorno desde .env
 set -a && source "$PROJECT_DIR/.env" && set +a

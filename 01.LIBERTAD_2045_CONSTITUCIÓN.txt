@@ -1,0 +1,86 @@
+CONSTITUCIÓN DE LIBERTAD_2045
+
+
+
+ARTÍCULO I - DISCIPLINA DEL SISTEMA
+
+LIBERTAD_2045 opera exclusivamente mediante reglas definidas en su arquitectura.
+
+Las decisiones de trading no se alteran manualmente durante la ejecución del sistema.
+
+El operador humano no interviene en la lógica de decisión del sistema durante el ciclo operativo.
+
+
+ARTÍCULO II - SUPERVIVENCIA DEL SISTEMA
+
+La supervivencia del sistema tiene prioridad sobre la maximización del beneficio.
+
+Toda operación debe estar protegida por mecanismos de control de riesgo.
+
+El sistema limitará:
+
+· Riesgo por operación
+
+· Exposición por posición
+
+· Exposición total de cartera
+
+
+ARTÍCULO III - EVOLUCIÓN CONTROLADA
+
+El sistema puede evolucionar, pero toda modificación debe realizarse de forma controlada.
+
+Los módulos del sistema no se modifican parcialmente.
+Cuando se introduce una mejora, el módulo completo se reemplaza.
+
+La evolución del sistema debe preservar la coherencia de su arquitectura.
+
+
+ARTÍCULO IV - SIMPLICIDAD ESTRUCTURAL
+
+La arquitectura del sistema debe mantenerse simple y legible.
+
+Cada módulo del sistema tendrá una única responsabilidad claramente definida.
+
+La complejidad innecesaria se considera una amenaza para la estabilidad del sistema.
+
+
+ARTÍCULO V - ROBUSTEZ OPERATIVA
+
+LIBERTAD_2045 debe ser capaz de resistir fallos técnicos y operativos.
+
+El sistema debe continuar funcionando ante:
+
+· Errores de datos
+
+· Fallos en un activo individual
+
+· Interrupciones de servicios externos
+
+· Reinicios del sistema
+
+La arquitectura debe privilegiar la resiliencia frente a la fragilidad.
+
+
+ARTÍCULO VI - REGISTRO HISTÓRICO
+
+El sistema debe registrar los eventos relevantes para permitir auditorías futuras.
+
+Las decisiones de trading y los eventos operativos deben quedar documentados de forma persistente.
+
+El comportamiento del sistema debe poder reconstruirse años después de su ejecución.
+
+
+ARTÍCULO VII - AUTOMATIZACIÓN
+
+LIBERTAD_2045 está diseñado para operar de forma autónoma.
+
+La intervención humana se limita a:
+
+· Mantenimiento técnico
+
+· Supervisión del sistema
+
+· Evolución controlada de la arquitectura
+
+La ejecución del proceso de inversión debe ser completamente automática.
