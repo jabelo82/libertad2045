@@ -111,15 +111,6 @@ def ejecutar_trade(ib, symbol, df, shares, stop_distance, buffer=0.05, mode="SIM
 
     # Dar tiempo a IBKR para procesar el par de órdenes
     ib.sleep(1)
-    # Escuchar confirmación de fill
-    def on_exec(trade, fill):
-        if fill.contract.symbol == symbol and fill.execution.side == "BOT":
-            log_event("TRADE_FILLED", f"Fill confirmado por IBKR [{mode}]",
-                      symbol=symbol, shares=int(fill.execution.shares),
-                      entry=round(fill.execution.price, 2), stop=stop_loss_price)
-    ib.execDetailsEvent += on_exec
-    ib.sleep(3)
-    ib.execDetailsEvent -= on_exec
 
     # --------------------------------------------------
     # Registro en log

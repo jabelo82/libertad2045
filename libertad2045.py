@@ -31,7 +31,53 @@ from github_publisher import publicar_dashboard
 MODE = os.getenv("TRADING_MODE", "SIM")
 
 
-_PROJECT_DIR = Path(__file__).resolve().parent
+_PROJECT_DIR   = Path(__file__).resolve().parent
+FILLS_IDS_FILE = _PROJECT_DIR / "logged_exec_ids.txt"
+
+
+def registrar_fills_recientes(ib):
+    """
+    Detecta fills de BUY STOP ocurridos desde el ciclo anterior y los registra
+    como TRADE_FILLED con el precio real de ejecución.
+
+    Una BUY STOP se coloca a las 22:10 y se ejecuta durante el horario de mercado
+    del día siguiente — cuando el bot no está corriendo. Este mecanismo revisa el
+    historial de ejecuciones de la sesión activa de Gateway al inicio de cada ciclo.
+
+    Deduplicación via FILLS_IDS_FILE (execId único por ejecución IBKR, cap 1000).
+    """
+    try:
+        ib.reqExecutions()
+        ib.sleep(1)
+
+        logged_ids = set()
+        if FILLS_IDS_FILE.exists():
+            logged_ids = set(FILLS_IDS_FILE.read_text().strip().splitlines())
+
+        nuevos_ids = []
+        for fill in ib.fills():
+            exec_id = fill.execution.execId
+            if exec_id in logged_ids:
+                continue
+            if fill.execution.side != "BOT":
+                continue
+
+            log_event(
+                "TRADE_FILLED",
+                f"Fill BUY STOP confirmado | precio_real={fill.execution.price:.2f}",
+                symbol=fill.contract.symbol,
+                shares=int(fill.execution.shares),
+                entry=round(fill.execution.price, 2),
+            )
+            nuevos_ids.append(exec_id)
+
+        if nuevos_ids:
+            todas = list(logged_ids) + nuevos_ids
+            FILLS_IDS_FILE.write_text("\n".join(todas[-1000:]))
+            log_event("INFO", f"Fills nuevos registrados: {len(nuevos_ids)}")
+
+    except Exception as e:
+        log_event("WARN", f"registrar_fills_recientes: {e}")
 
 
 def git_backup(capital: float | None) -> tuple[bool, str]:
@@ -109,6 +155,8 @@ def main():
             log_event("ERROR", "IBKR connection failed")
             send_telegram_critical("⚠️ LIBERTAD_2045: conexión IBKR fallida")
             return
+
+        registrar_fills_recientes(ib)
 
 
         # --------------------------------------------------
