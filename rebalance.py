@@ -528,7 +528,9 @@ def rebalancear(ib, capital: float, mode: str = "SIM") -> List[DecisionRebalance
                     _, stop_dist_nuevo, _ = calcular_posicion(df, capital)
 
                     if stop_dist_nuevo and stop_dist_nuevo > 0:
-                        stop_price_nuevo = round(precio - stop_dist_nuevo, 2)
+                        # Usar high del último bar (igual que el trailing stop B1 y la entrada)
+                        # No close: close - stop_dist queda más bajo que el modelo.
+                        stop_price_nuevo = round(df["high"].iloc[-1] - stop_dist_nuevo, 2)
 
                         if stop_price_nuevo > 0:
                             _reemplazar_stop_gtc(

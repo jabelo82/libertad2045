@@ -9,7 +9,9 @@ def cancelar_ordenes_pendientes(ib):
 
     Reglas de cancelación:
         - Se cancelan : órdenes DAY (entradas que no se ejecutaron)
-        - Se protegen : órdenes GTC (stop-loss vinculados a posiciones abiertas)
+        - Se cancelan : órdenes GTC hijo cuyo parentId apunta a una DAY cancelada
+                        (evita venta en corto involuntaria si IBKR no las cancela auto)
+        - Se protegen : órdenes GTC standalone (parentId == 0), son stop-loss activos
 
     Esto garantiza que ninguna posición abierta quede sin protección
     después de la limpieza de órdenes.
@@ -25,11 +27,35 @@ def cancelar_ordenes_pendientes(ib):
     canceladas = 0
     protegidas = 0
 
+    # Conjunto de orderId de las órdenes DAY pendientes (entradas no ejecutadas).
+    # Solo aparecen en openOrders si no están filled — las filled no se tocan.
+    day_order_ids = {o.orderId for o in open_orders if o.tif == "DAY"}
+
     for order in open_orders:
 
-        # Proteger órdenes GTC: son stop-loss de posiciones abiertas
         if order.tif == "GTC":
-            protegidas += 1
+            parent_id = getattr(order, "parentId", 0) or 0
+
+            if parent_id and parent_id in day_order_ids:
+                # GTC hijo de una entrada DAY no ejecutada → cancelar también
+                try:
+                    ib.cancelOrder(order)
+                    canceladas += 1
+
+                    log_event("INFO", "Orden GTC hijo cancelada (entrada DAY no ejecutada)",
+                              symbol=getattr(order, "symbol", ""),
+                              entry=getattr(order, "auxPrice", ""))
+
+                    print(f"GTC hijo cancelado → ID: {order.orderId} | "
+                          f"parentId: {parent_id} | auxPrice: {getattr(order, 'auxPrice', '')}")
+
+                except Exception as e:
+                    log_event("ERROR", f"Error cancelando GTC hijo {order.orderId}: {e}")
+                    print(f"Error cancelando GTC hijo {order.orderId}: {e}")
+            else:
+                # GTC standalone: stop-loss de posición abierta → proteger
+                protegidas += 1
+
             continue
 
         # Cancelar órdenes DAY: entradas que no se ejecutaron

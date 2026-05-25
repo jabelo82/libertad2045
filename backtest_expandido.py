@@ -601,6 +601,14 @@ def ejecutar_backtest(datos, composicion_df=None):
                 if nuevo_stop > pos["stop"]:
                     pos["stop"] = nuevo_stop
 
+            # Mejora 4 — Break-even (idéntico a rebalance.py)
+            # Si el cierre supera entry + 1.5×ATR → mover stop a entry + 0.5×ATR.
+            # Solo sube el stop, nunca lo baja.
+            if not pd.isna(atr) and atr > 0:
+                be_stop = round(pos["entry"] + 0.5 * atr, 2)
+                if bar["Close"] >= pos["entry"] + 1.5 * atr and be_stop > pos["stop"]:
+                    pos["stop"] = be_stop
+
             # Palanca 2B — salida por cierre
             precio_referencia = bar["Close"] if SALIDA_POR_CIERRE else bar["Low"]
 

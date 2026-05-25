@@ -214,7 +214,6 @@ def main():
         if not risk_check(ib):
             log_event("WARN", "Risk Guardian bloqueó nuevas entradas — gestión de posiciones completada")
             send_telegram_critical("⚠️ LIBERTAD_2045 detenido por Risk Guardian")
-            (_PROJECT_DIR / "last_run.txt").write_text(datetime.now().isoformat())
             return
 
 

@@ -218,7 +218,7 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
                     shares   = int(abs(pos.position))
 
                     orden_cierre = MarketOrder("SELL", shares)
-                    orden_cierre.tif = "GTC"
+                    orden_cierre.tif = "DAY"
 
                     trade = ib.placeOrder(contrato, orden_cierre)
                     ib.sleep(2)
