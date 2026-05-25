@@ -112,16 +112,6 @@ def main():
 
 
         # --------------------------------------------------
-        # Risk Guardian
-        # --------------------------------------------------
-
-        if not risk_check(ib):
-            log_event("WARN", "Risk Guardian bloqueó la ejecución")
-            send_telegram_critical("⚠️ LIBERTAD_2045 detenido por Risk Guardian")
-            return
-
-
-        # --------------------------------------------------
         # Leer capital real de la cuenta
         # --------------------------------------------------
 
@@ -147,6 +137,8 @@ def main():
         # El mercado USA ya ha cerrado cuando ejecutamos a las 22:10 CET.
         # Si el cierre del día está por debajo del stop → cerrar posición.
         # Esto elimina salidas por ruido intradiario y replica el backtest.
+        # Se ejecuta ANTES del Risk Guardian para proteger posiciones abiertas
+        # incluso en estado de drawdown máximo (alineado con backtest).
         # --------------------------------------------------
 
         posiciones_cerradas = evaluar_stops_por_cierre(ib)
@@ -159,12 +151,23 @@ def main():
 
         # --------------------------------------------------
         # Rebalanceo de posiciones existentes
-        # Ajusta el tamaño de cada posición al óptimo actual antes
-        # de escanear nuevas entradas, para que el conteo de slots
-        # y el capital disponible sean precisos.
+        # Se ejecuta ANTES del Risk Guardian: ajusta posiciones abiertas
+        # independientemente del estado de riesgo.
         # --------------------------------------------------
 
         decisiones_rebalanceo = rebalancear(ib, capital, mode=MODE)
+
+
+        # --------------------------------------------------
+        # Risk Guardian — gate exclusivo para nuevas entradas
+        # Stops y rebalanceo ya ejecutados. Si falla: heartbeat + return.
+        # --------------------------------------------------
+
+        if not risk_check(ib):
+            log_event("WARN", "Risk Guardian bloqueó nuevas entradas — gestión de posiciones completada")
+            send_telegram_critical("⚠️ LIBERTAD_2045 detenido por Risk Guardian")
+            (_PROJECT_DIR / "last_run.txt").write_text(datetime.now().isoformat())
+            return
 
 
         # --------------------------------------------------
@@ -323,14 +326,14 @@ def main():
         # Heartbeat
         # --------------------------------------------------
 
-        Path("last_run.txt").write_text(datetime.now().isoformat())
+        (_PROJECT_DIR / "last_run.txt").write_text(datetime.now().isoformat())
 
 
         # --------------------------------------------------
         # Reporte final
         # --------------------------------------------------
 
-        runtime = (datetime.now() - start_time).seconds
+        runtime = int((datetime.now() - start_time).total_seconds())
 
         stops_texto = (f"Stops por cierre    : {len(posiciones_cerradas)} "
                        f"({', '.join(posiciones_cerradas) if posiciones_cerradas else 'ninguno'})\n"

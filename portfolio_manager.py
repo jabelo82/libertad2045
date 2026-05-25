@@ -218,7 +218,7 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
                     shares   = int(abs(pos.position))
 
                     orden_cierre = MarketOrder("SELL", shares)
-                    orden_cierre.tif = "DAY"
+                    orden_cierre.tif = "GTC"
 
                     trade = ib.placeOrder(contrato, orden_cierre)
                     ib.sleep(2)
@@ -278,13 +278,9 @@ def obtener_posiciones_abiertas(ib):
 
     # -- Órdenes de compra pendientes --
     try:
-        open_orders = ib.openOrders()
-
-        for order in open_orders:
-            if order.action == "BUY":
-                symbol = getattr(order, "symbol", None)
-                if symbol:
-                    simbolos_ocupados.add(symbol)
+        for trade in ib.openTrades():
+            if trade.order.action == "BUY":
+                simbolos_ocupados.add(trade.contract.symbol)
 
     except Exception as e:
         log_event("ERROR", f"Error leyendo órdenes pendientes: {e}")

@@ -390,7 +390,7 @@ def obtener_multiplicador(df, i):
 
 def detectar_senal(df, i):
 
-    if i < 1:
+    if i < 4:
         return False
 
     last = df.iloc[i]
@@ -405,11 +405,27 @@ def detectar_senal(df, i):
     if last["ATR"] <= 0:
         return False
 
-    tendencia    = last["Close"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]
-    pullback     = prev["Close"] < prev["SMA50"] * 0.98
+    tendencia = last["Close"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]
+
+    if not tendencia:
+        return False
+
+    pullback = False
+    for j in range(i - 3, i):
+        row = df.iloc[j]
+        if (pd.isna(row["Close"]) or pd.isna(row["SMA50"]) or
+                pd.isna(row["ATR"]) or row["ATR"] <= 0):
+            continue
+        if row["Close"] < row["SMA50"] - row["ATR"] * 0.75:
+            pullback = True
+            break
+
+    if not pullback:
+        return False
+
     recuperacion = last["Close"] > last["SMA50"]
 
-    return tendencia and pullback and recuperacion
+    return recuperacion
 
 
 # ==================================================
@@ -743,8 +759,13 @@ def ejecutar_backtest(datos, composicion_df=None):
             if shares <= 0:
                 continue
 
-            bar   = df.iloc[i]
-            score = (bar["Close"] - bar["SMA50"]) / bar["ATR"]
+            bar          = df.iloc[i]
+            _sma200_5d   = df.iloc[i - 5]["SMA200"] if i >= 6 else float("nan")
+            _sma200_slope = (
+                (bar["SMA200"] - _sma200_5d) / bar["ATR"]
+                if not pd.isna(_sma200_5d) else 0.0
+            )
+            score = (bar["Close"] - bar["SMA50"]) / bar["ATR"] + _sma200_slope
 
             if symbol in CRYPTO:
                 clase = "CRIPTO"

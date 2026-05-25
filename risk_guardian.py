@@ -1,18 +1,19 @@
 import os
 from datetime import datetime
 from pathlib import Path
- 
+
 from logger import log_event
- 
- 
+
+_PROJECT_DIR = Path(__file__).resolve().parent
+
 # --------------------------------------------------
 # Umbrales de riesgo
 # Configurables desde variables de entorno
 # --------------------------------------------------
- 
+
 MIN_CAPITAL        = float(os.getenv("RISK_MIN_CAPITAL",    "2000"))  # Capital mínimo operativo
 MAX_DRAWDOWN_PCT   = float(os.getenv("RISK_MAX_DRAWDOWN",   "0.10"))  # Drawdown máximo: 10%
-PEAK_FILE          = os.getenv("RISK_PEAK_FILE", "capital_peak.txt")  # Archivo de capital pico
+PEAK_FILE          = os.getenv("RISK_PEAK_FILE", str(_PROJECT_DIR / "capital_peak.txt"))
 MAX_LEVERAGE       = float(os.getenv("RISK_MAX_LEVERAGE",   "1.00"))  # Apalancamiento máximo: 100%
  
 # Ventana horaria de operación (hora local del servidor)
@@ -120,10 +121,9 @@ def risk_check(ib):
     # 4. Drawdown máximo desde capital pico
     # --------------------------------------------------
  
-    _guardar_capital_pico(net_liq)
- 
     capital_pico = _leer_capital_pico()
- 
+    _guardar_capital_pico(net_liq)
+
     if capital_pico is None:
         log_event("WARN", "capital_peak.txt no disponible -- usando capital actual como pico")
         try:

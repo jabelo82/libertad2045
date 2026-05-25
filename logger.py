@@ -9,7 +9,7 @@ from pathlib import Path
 # Por defecto: 90 días
 # --------------------------------------------------
 
-LOG_DIR          = "logs"
+LOG_DIR          = str(Path(__file__).resolve().parent / "logs")
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
 
 
