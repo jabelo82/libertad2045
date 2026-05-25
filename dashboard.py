@@ -1188,7 +1188,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
       <div class="section-title">// Trades ejecutados</div>
       <button class="toggle-btn" id="btn-trades">▼ ocultar</button>
     </div>
-    <div class="collapsible" id="trades" style="max-height:600px">
+    <div class="collapsible" id="trades" style="max-height:9999px">
       <div class="filter-bar">
         <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px">PERÍODO:</span>
         <button class="filter-btn active" onclick="filtrarTrades(0,this)">Todo</button>
@@ -1196,7 +1196,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
         <button class="filter-btn" onclick="filtrarTrades(30,this)">1 mes</button>
         <button class="filter-btn" onclick="filtrarTrades(7,this)">1 semana</button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" style="max-height:520px;overflow-y:auto">
         <table>
           <thead>
             <tr>

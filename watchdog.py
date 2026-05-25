@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 PROJECT_DIR    = Path(os.getenv("PROJECT_DIR", "/home/jabelo/PROYECTO_LIBERTAD_2045"))
@@ -26,7 +26,6 @@ VENV_PYTHON    = PROJECT_DIR / "venv" / "bin" / "python"
 BOT_SCRIPT     = PROJECT_DIR / "libertad2045.py"
 RTC_WAKEALARM  = Path("/sys/class/rtc/rtc0/wakealarm")
 
-MAX_SILENCE        = 90000
 IBKR_HOST          = os.getenv("IBKR_HOST",  "127.0.0.1")
 IBKR_PORT          = int(os.getenv("IBKR_PORT", "4002"))
 WATCHDOG_CLIENT_ID = 8
@@ -45,15 +44,42 @@ def _send(msg, critico=False):
         print(f"[WARN] Telegram no disponible: {e}")
 
 
+def _prev_business_day(d):
+    d -= timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def check_heartbeat():
     if not HEARTBEAT_FILE.exists():
         return False, "Archivo heartbeat no encontrado", None
-    diff    = int(time.time() - HEARTBEAT_FILE.stat().st_mtime)
-    horas   = diff // 3600
-    minutos = (diff % 3600) // 60
-    if diff > MAX_SILENCE:
-        return False, f"Bot sin ejecutar en las últimas {horas}h {minutos}m", horas
-    return True, f"Última ejecución hace {horas}h {minutos}m", horas
+
+    try:
+        last_run = datetime.fromisoformat(HEARTBEAT_FILE.read_text().strip())
+    except (ValueError, OSError):
+        last_run = datetime.fromtimestamp(HEARTBEAT_FILE.stat().st_mtime)
+
+    now     = datetime.now()
+    weekday = now.date().weekday()  # 0=lun … 6=dom
+
+    # Fin de semana: cron no ejecuta, pero por si acaso
+    if weekday >= 5:
+        horas = int((now - last_run).total_seconds()) // 3600
+        return True, f"Fin de semana — sin ciclo (última ejecución hace {horas}h)", 0
+
+    diff    = now - last_run
+    horas   = int(diff.total_seconds()) // 3600
+    minutos = int(diff.total_seconds() % 3600) // 60
+
+    prev_bday = _prev_business_day(now.date())
+    if last_run.date() >= prev_bday:
+        return True, f"Última ejecución hace {horas}h {minutos}m", horas
+    return (
+        False,
+        f"Bot sin ejecutar desde {last_run.date()} (esperado desde {prev_bday}) — {horas}h {minutos}m de silencio",
+        horas,
+    )
 
 
 def check_ibkr():
