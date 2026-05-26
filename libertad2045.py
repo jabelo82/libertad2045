@@ -91,7 +91,18 @@ def git_backup(capital: float | None) -> tuple[bool, str]:
             args, cwd=_PROJECT_DIR, capture_output=True, text=True, timeout=30
         )
 
-    run(["git", "add", "-A"])
+    # Add selectivo: solo código fuente. Evita subir accidentalmente
+    # archivos de estado en tiempo real o sensibles no cubiertos por .gitignore.
+    _archivos = (
+        list(_PROJECT_DIR.glob("*.py")) +
+        list(_PROJECT_DIR.glob("*.md")) +
+        list(_PROJECT_DIR.glob("*.sh")) +
+        list(_PROJECT_DIR.glob("*.txt")) +
+        [_PROJECT_DIR / ".gitignore"]
+    )
+    _nombres = [str(f.relative_to(_PROJECT_DIR)) for f in _archivos if f.exists()]
+    if _nombres:
+        run(["git", "add", "--"] + _nombres)
 
     status = run(["git", "status", "--porcelain"])
     if not status.stdout.strip():

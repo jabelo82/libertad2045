@@ -12,8 +12,10 @@ data.zip
 # Estado en tiempo real (ephemeral)
 logs/
 last_run.txt
+last_success.txt
 capital_peak.txt
 portfolio_cache.json
+logged_exec_ids.txt
 trades_*.json
 orders_*.json
 
