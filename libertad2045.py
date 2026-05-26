@@ -370,10 +370,14 @@ def main():
 
 
         # --------------------------------------------------
-        # Heartbeat
+        # Heartbeat + registro de éxito
+        # last_run.txt  : watchdog heartbeat — solo ciclo completo sin bloqueos RG
+        # last_success.txt : confirmación explícita de ciclo con escaneo y ejecución
         # --------------------------------------------------
 
-        (_PROJECT_DIR / "last_run.txt").write_text(datetime.now().isoformat())
+        ts = datetime.now().isoformat()
+        (_PROJECT_DIR / "last_run.txt").write_text(ts)
+        (_PROJECT_DIR / "last_success.txt").write_text(ts)
 
 
         # --------------------------------------------------

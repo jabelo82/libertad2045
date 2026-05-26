@@ -21,6 +21,58 @@ B1_VENTANA     = 252   # ventana rolling para ATR percentil
 # Trailing stop dinámico B1
 # --------------------------------------------------
 
+def _calcular_trailing_ibkr(ib, contract, symbol: str):
+    """
+    Fallback de _calcular_trailing_yf cuando yfinance no está disponible.
+
+    Solicita 1 mes de datos diarios desde IBKR y calcula el trailing stop
+    con ATR_MULTIPLIER fijo (sin ajuste por percentil — ventana histórica
+    insuficiente para replicar B1 completo).
+
+    Retorna (nuevo_stop, mult) o (None, None) si falla.
+    """
+    try:
+        import pandas as pd
+
+        bars = ib.reqHistoricalData(
+            contract,
+            endDateTime="",
+            durationStr="1 M",
+            barSizeSetting="1 day",
+            whatToShow="TRADES",
+            useRTH=True,
+            keepUpToDate=False,
+        )
+
+        if not bars or len(bars) < ATR_PERIOD + 2:
+            return None, None
+
+        high  = pd.Series([b.high  for b in bars])
+        low   = pd.Series([b.low   for b in bars])
+        close = pd.Series([b.close for b in bars])
+
+        prev_close = close.shift(1)
+        tr = pd.concat([
+            high - low,
+            (high - prev_close).abs(),
+            (low  - prev_close).abs(),
+        ], axis=1).max(axis=1)
+
+        atr_val = tr.rolling(ATR_PERIOD).mean().iloc[-1]
+
+        if pd.isna(atr_val) or atr_val <= 0:
+            return None, None
+
+        high_hoy   = float(bars[-1].high)
+        nuevo_stop = round(high_hoy - float(atr_val) * ATR_MULTIPLIER, 2)
+
+        return nuevo_stop, ATR_MULTIPLIER
+
+    except Exception as e:
+        log_event("WARN", f"_calcular_trailing_ibkr({symbol}): {e}")
+        return None, None
+
+
 def _calcular_trailing_yf(symbol: str):
     """
     Calcula el trailing stop B1 con 3 años de datos de yfinance.
@@ -175,6 +227,18 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
             # Actualiza el stop GTC en IBKR si el nuevo nivel es más alto.
             # Modificación in-place (mismo orderId) para evitar ventana sin protección.
             nuevo_stop, mult = _calcular_trailing_yf(symbol)
+
+            if nuevo_stop is None:
+                log_event("WARN",
+                          f"yfinance no disponible para {symbol} — usando fallback IBKR "
+                          f"(ATR_PERIOD={ATR_PERIOD}, mult fijo={ATR_MULTIPLIER})",
+                          symbol=symbol)
+                nuevo_stop, mult = _calcular_trailing_ibkr(ib, pos.contract, symbol)
+                if nuevo_stop is not None:
+                    log_event("INFO",
+                              f"Trailing fallback IBKR | {symbol} | "
+                              f"nuevo_stop={nuevo_stop:.2f} | mult={mult}",
+                              symbol=symbol)
 
             if nuevo_stop is not None and nuevo_stop > stop_level:
                 try:

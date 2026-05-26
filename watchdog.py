@@ -139,15 +139,46 @@ def check_rtc():
         return False, f"Error verificando RTC: {e}"
 
 
+def _mercado_usa_abierto() -> bool:
+    """
+    True si el mercado regular USA (NYSE/NASDAQ) está abierto ahora.
+    Horario regular: 09:30–16:00 ET = 13:30–20:00 UTC, L-V.
+    No cubre half-days ni festivos — es una guardia de seguridad, no un calendario exacto.
+    """
+    now_utc  = datetime.utcnow()
+    if now_utc.weekday() >= 5:
+        return False
+    apertura = now_utc.replace(hour=13, minute=30, second=0, microsecond=0)
+    cierre   = now_utc.replace(hour=20, minute=0,  second=0, microsecond=0)
+    return apertura <= now_utc <= cierre
+
+
 def relanzar_bot():
     try:
         env = os.environ.copy()
-        env["TRADING_MODE"]      = "PAPER"
         env["FORCE_HOUR_BYPASS"] = "true"
+
+        if _mercado_usa_abierto():
+            # Mercado abierto: relaunch en SIM para no ejecutar trades accidentalmente
+            env["TRADING_MODE"] = "SIM"
+            modo_relaunch = "SIM (mercado USA abierto — sin ejecución de trades)"
+            _send(
+                "⚠️ LIBERTAD_2045 — Watchdog: relaunch en SIM porque el mercado "
+                "está abierto. Revisar por qué el bot no corrió en horario.",
+                critico=True,
+            )
+        else:
+            env["TRADING_MODE"] = "PAPER"
+            modo_relaunch = "PAPER"
+
         log_path = PROJECT_DIR / "logs" / f"watchdog_relaunch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         with open(log_path, "w") as log_file:
-            proc = subprocess.Popen([str(VENV_PYTHON), str(BOT_SCRIPT)], cwd=str(PROJECT_DIR), env=env, stdout=log_file, stderr=log_file)
-        return True, f"Bot relanzado (PID {proc.pid}) — log: {log_path.name}"
+            proc = subprocess.Popen(
+                [str(VENV_PYTHON), str(BOT_SCRIPT)],
+                cwd=str(PROJECT_DIR), env=env,
+                stdout=log_file, stderr=log_file,
+            )
+        return True, f"Bot relanzado en modo {modo_relaunch} (PID {proc.pid}) — log: {log_path.name}"
     except Exception as e:
         return False, f"Error relanzando el bot: {e}"
 
