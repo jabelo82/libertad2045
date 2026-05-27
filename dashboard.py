@@ -85,6 +85,61 @@ PORTFOLIO_COLORS = [
 # LECTURA DE LOGS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def leer_precios_salida():
+    """
+    Extrae precios de salida de los logs CSV.
+    Fuentes:
+      1. INFO "STOP ACTIVADO por cierre | SYMBOL | cierre=X.XX" — precio de cierre
+         que activó la evaluación de salida al final de la sesión.
+      2. TRADE_FILLED sin "BUY" en el evento — reservado para fills SELL si el bot
+         empieza a registrarlos con level=TRADE_FILLED en el futuro.
+    Retorna {symbol: [(ts_str, precio_float), ...]} con todas las salidas conocidas,
+    ordenadas cronológicamente por símbolo.
+    """
+    salidas = {}
+    archivos = sorted(glob.glob(os.path.join(LOG_DIR, "LIBERTAD_*.csv")))
+    for archivo in archivos:
+        try:
+            with open(archivo, encoding="utf-8") as f:
+                for linea in f:
+                    linea = linea.strip()
+                    if not linea:
+                        continue
+                    partes = linea.split(",", 7)
+                    if len(partes) < 4:
+                        continue
+                    ts, level, event = partes[0], partes[1], partes[2]
+                    symbol = partes[3].strip()
+                    if not symbol:
+                        continue
+
+                    # Fuente 1: evaluación de stop al cierre de sesión
+                    if level == "INFO":
+                        m = re.search(
+                            r"STOP ACTIVADO por cierre[^|]*\|[^|]*\| cierre=([0-9]+\.?[0-9]*)",
+                            event,
+                        )
+                        if m:
+                            try:
+                                precio = float(m.group(1))
+                                salidas.setdefault(symbol, []).append((ts, precio))
+                            except ValueError:
+                                pass
+
+                    # Fuente 2: TRADE_FILLED SLD (fill de venta, si se loguea)
+                    if level == "TRADE_FILLED" and "BUY" not in event.upper():
+                        entry_col = partes[6].strip() if len(partes) > 6 else ""
+                        if entry_col:
+                            try:
+                                precio = float(entry_col)
+                                salidas.setdefault(symbol, []).append((ts, precio))
+                            except ValueError:
+                                pass
+        except Exception:
+            continue
+    return salidas
+
+
 def leer_logs():
     """Lee todos los CSVs y extrae métricas por sesión."""
     sesiones = []
@@ -715,7 +770,7 @@ def _portfolio_js(cartera):
 # GENERADOR HTML
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0, stops_actuales=None):
+def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0, stops_actuales=None, precios_salida=None):
     fechas_json    = json.dumps([s["fecha"]     for s in sesiones])
     capitales_json = json.dumps([s["capital"]   for s in sesiones])
     señales_json   = json.dumps([s["señales"]   for s in sesiones])
@@ -778,16 +833,33 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
             stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
-            _sa = stops_actuales.get(t["symbol"].strip()) if stops_actuales else None
+            _sym = t["symbol"].strip()
+            _sa = stops_actuales.get(_sym) if stops_actuales else None
             try:
                 _entrada_f = float(t["entry"]) if t.get("entry") else None
             except (ValueError, TypeError):
                 _entrada_f = None
+
             if _sa is not None and _entrada_f:
+                # Posición abierta: mostrar stop actual
                 _color = "#00c896" if _sa > _entrada_f else "inherit"
-                stop_actual_str = f'<span style="color:{_color}">{_sa:.2f}</span>'
+                stop_salida_str = f'<span style="color:{_color}">{_sa:.2f}</span>'
             else:
-                stop_actual_str = "—"
+                # Posición cerrada: buscar precio de salida en logs
+                _salidas_sym = (precios_salida or {}).get(_sym, [])
+                _exit_precio = None
+                if _salidas_sym and t.get("ts"):
+                    _entry_ts = t["ts"]
+                    for _sal_ts, _sal_precio in _salidas_sym:
+                        if _sal_ts > _entry_ts:
+                            _exit_precio = _sal_precio
+                            break
+                if _exit_precio is not None and _entrada_f:
+                    _color = "#ff4455" if _exit_precio < _entrada_f else "#00c896"
+                    stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
+                else:
+                    stop_salida_str = "—"
+
             filas_trades += f"""
             <tr data-date="{t['ts'][:10]}">
                 <td>{t['ts'][:10]}</td>
@@ -796,7 +868,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                 <td class="num">{t['entry']}</td>
                 <td class="num">{precio_actual_str}</td>
                 <td class="num">{stop_inicial_str}</td>
-                <td class="num">{stop_actual_str}</td>
+                <td class="num">{stop_salida_str}</td>
                 <td class="num">{pnl_cell}</td>
                 <td class="num">{pct_cell}</td>
             </tr>"""
@@ -1206,7 +1278,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
               <th class="num">Entrada</th>
               <th class="num">Precio actual</th>
               <th class="num">Stop inicial</th>
-              <th class="num">Stop actual</th>
+              <th class="num">Stop / Salida</th>
               <th class="num">PnL (€)</th>
               <th class="num">%</th>
             </tr>
@@ -1438,7 +1510,8 @@ def main():
         print(f"[dashboard] Precios obtenidos para: {', '.join(sorted(precios_trades))}")
 
     stops_actuales = cartera.get("stops_actuales", {})
-    html = generar_html(sesiones, stats, cartera, precios_trades, usd_per_eur, stops_actuales)
+    precios_salida = leer_precios_salida()
+    html = generar_html(sesiones, stats, cartera, precios_trades, usd_per_eur, stops_actuales, precios_salida)
 
     with open(OUTPUT, "w", encoding="utf-8") as f:
         f.write(html)

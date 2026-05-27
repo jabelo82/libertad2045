@@ -4,7 +4,7 @@ LIBERTAD_2045 — Montecarlo trade-level ×0.75
 1. Ejecuta el backtest completo (2006-2025) con factor ×0.75 para obtener
    los trades individuales (PnL y capital en cada cierre).
 2. Corre 1.000 simulaciones bootstrap: muestrea los retornos por trade
-   con reposición sobre 100.000 € de capital inicial.
+   con reposición sobre 4.000 € de capital inicial (igual que backtest_expandido.py).
 3. Genera montecarlo_075.html con curvas de capital, histogramas y métricas.
 
 Uso:
@@ -25,7 +25,7 @@ import pandas as pd
 
 FACTOR          = 0.75
 N_SIMS          = 1_000
-CAPITAL_MC      = 100_000.0          # Capital de inicio de cada simulación
+CAPITAL_MC      = 4_000.0            # Igual que backtest_expandido.py (CAPITAL_INICIAL)
 RUIN_THRESHOLD  = 0.50               # Ruina si capital < 50% del inicial
 N_CURVES_PLOT   = 200                # Curvas individuales a mostrar en gráfico
 N_BANDS_POINTS  = 300                # Puntos de muestreo para bandas percentil
@@ -55,7 +55,7 @@ from backtest_exp40ter import (
 print("=" * 65)
 print("  LIBERTAD_2045 — Montecarlo trade-level ×0.75")
 print("=" * 65)
-print(f"\n  Capital MC : {CAPITAL_MC:,.0f} €")
+print(f"\n  Capital MC : {CAPITAL_MC:,.0f} € (= CAPITAL_INICIAL backtest)")
 print(f"  Simulaciones: {N_SIMS:,}")
 print(f"  Metodología : bootstrap con reposición (trade returns)")
 print()
@@ -91,7 +91,8 @@ if os.path.exists(TRADES_CACHE):
     df_cached = pd.read_csv(TRADES_CACHE)
     trades        = df_cached.to_dict("records")
     capital_final = float(df_cached["capital"].iloc[-1])
-    curva_capital = []  # no disponible desde caché, pero no se usa
+    # Curva proxy: capital tras cada trade (suficiente para calcular_metricas)
+    curva_capital = [{"fecha": r["fecha_salida"], "capital": r["capital"]} for r in trades]
 else:
     print(f"\n  Ejecutando backtest ×0.75...", end="", flush=True)
     t0 = time.time()
@@ -221,21 +222,13 @@ real_equity_curve[0] = CAPITAL_MC
 for k, r in enumerate(returns):
     real_equity_curve[k + 1] = real_equity_curve[k] * (1.0 + r)
 
-# Comparativa con montecarlo_2005.html (valores extraídos del existente)
-ORIG_P5   =   946_000
-ORIG_P50  = 3_324_000
-ORIG_P95  = 16_435_000
+# Valores de referencia — Montecarlo original ×1.00 (montecarlo_2005.html, 4.000 € inicio)
+ORIG_P5      =   946_000
+ORIG_P50     = 3_324_000
+ORIG_P95     = 16_435_000
 ORIG_DD_P50  = 7.6
 ORIG_DD_P95  = 11.1
 ORIG_CAP_INI = 4_000
-
-# Normalizar a múltiplo del capital inicial para comparar
-orig_mult_p5  = ORIG_P5  / ORIG_CAP_INI
-orig_mult_p50 = ORIG_P50 / ORIG_CAP_INI
-orig_mult_p95 = ORIG_P95 / ORIG_CAP_INI
-new_mult_p5   = p5  / CAPITAL_MC
-new_mult_p50  = p50 / CAPITAL_MC
-new_mult_p95  = p95 / CAPITAL_MC
 
 fecha_gen = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -319,7 +312,7 @@ body{{background:var(--bg);color:var(--txt);font-family:'Courier New',monospace;
     <span class="sec-sub">Backtest ×0.75 (2006–2025) + {N_SIMS:,} simulaciones bootstrap</span>
   </div>
   <div class="kpis">
-    <div class="kcard"><div class="v" style="color:var(--red)">{ruin_prob:.2%}</div><div class="l">Prob. ruina (&lt;50k€)</div></div>
+    <div class="kcard"><div class="v" style="color:var(--red)">{ruin_prob:.2%}</div><div class="l">Prob. ruina (&lt;{CAPITAL_MC*RUIN_THRESHOLD:,.0f}€)</div></div>
     <div class="kcard"><div class="v" style="color:var(--red)">{p5/1000:.0f}k€</div><div class="l">Capital p5</div></div>
     <div class="kcard"><div class="v">{p50/1000:.0f}k€</div><div class="l">Capital p50 (mediana)</div></div>
     <div class="kcard"><div class="v" style="color:var(--green)">{p95/1000:.0f}k€</div><div class="l">Capital p95</div></div>
@@ -364,59 +357,59 @@ body{{background:var(--bg);color:var(--txt);font-family:'Courier New',monospace;
 <div class="sec">
   <div class="sec-hdr">
     <span class="sec-title">Comparativa</span>
-    <span class="sec-sub">×0.75 trade-level bootstrap vs original diario (montecarlo_2005)</span>
+    <span class="sec-sub">×0.75 trade-level bootstrap vs ×1.00 original diario (montecarlo_2005) — mismo capital inicial: 4.000 €</span>
   </div>
   <div style="overflow-x:auto;border:1px solid var(--bdr);border-radius:8px;margin-bottom:12px">
     <table class="cmp-tbl">
       <thead>
         <tr>
           <th>Métrica</th>
-          <th>×0.75 trade (este)</th>
-          <th>Original diario</th>
-          <th>Δ (múltiplo capital ini.)</th>
+          <th>×0.75 trade-level (este)</th>
+          <th>×1.00 original diario</th>
+          <th>Δ</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td>Capital inicial</td>
           <td>{CAPITAL_MC:,.0f} €</td>
-          <td>4.000 $</td>
+          <td>4.000 €</td>
           <td>—</td>
         </tr>
         <tr>
           <td>Capital final p5</td>
-          <td>{p5:>14,.0f} €  ({new_mult_p5:.1f}x)</td>
-          <td>946.000 $  ({orig_mult_p5:.0f}x)</td>
-          <td class="{'hi' if new_mult_p5 > orig_mult_p5 else ''}">{new_mult_p5/orig_mult_p5:.2f}x ratio</td>
+          <td class="{'hi' if p5 > ORIG_P5 else ''}">{p5:,.0f} € ({p5/CAPITAL_MC:.0f}x)</td>
+          <td>{ORIG_P5:,.0f} € ({ORIG_P5/ORIG_CAP_INI:.0f}x)</td>
+          <td class="{'hi' if p5 > ORIG_P5 else ''}">{'+' if p5 > ORIG_P5 else ''}{(p5-ORIG_P5)/ORIG_P5*100:.0f}%</td>
         </tr>
         <tr>
           <td>Capital final p50</td>
-          <td>{p50:>14,.0f} €  ({new_mult_p50:.1f}x)</td>
-          <td>3.324.000 $  ({orig_mult_p50:.0f}x)</td>
-          <td>{new_mult_p50/orig_mult_p50:.2f}x ratio</td>
+          <td class="{'hi' if p50 > ORIG_P50 else ''}">{p50:,.0f} € ({p50/CAPITAL_MC:.0f}x)</td>
+          <td>{ORIG_P50:,.0f} € ({ORIG_P50/ORIG_CAP_INI:.0f}x)</td>
+          <td class="{'hi' if p50 > ORIG_P50 else ''}">{'+' if p50 > ORIG_P50 else ''}{(p50-ORIG_P50)/ORIG_P50*100:.0f}%</td>
         </tr>
         <tr>
           <td>Capital final p95</td>
-          <td>{p95:>14,.0f} €  ({new_mult_p95:.1f}x)</td>
-          <td>16.435.000 $  ({orig_mult_p95:.0f}x)</td>
-          <td>{new_mult_p95/orig_mult_p95:.2f}x ratio</td>
+          <td class="{'hi' if p95 > ORIG_P95 else ''}">{p95:,.0f} € ({p95/CAPITAL_MC:.0f}x)</td>
+          <td>{ORIG_P95:,.0f} € ({ORIG_P95/ORIG_CAP_INI:.0f}x)</td>
+          <td class="{'hi' if p95 > ORIG_P95 else ''}">{'+' if p95 > ORIG_P95 else ''}{(p95-ORIG_P95)/ORIG_P95*100:.0f}%</td>
         </tr>
         <tr>
           <td>DD máx p50</td>
           <td>{dd_p50:.1%}</td>
-          <td>7.6%</td>
-          <td class="{'hi' if dd_p50 < 0.076 else ''}">{'+' if dd_p50 < 0.076 else ''}{(dd_p50 - 0.076)*100:+.1f}pp</td>
+          <td>{ORIG_DD_P50:.1f}%</td>
+          <td class="{'hi' if dd_p50 < ORIG_DD_P50/100 else ''}">{(dd_p50 - ORIG_DD_P50/100)*100:+.1f}pp</td>
         </tr>
         <tr>
           <td>DD máx p95</td>
           <td>{dd_p95:.1%}</td>
-          <td>11.1%</td>
-          <td class="{'hi' if dd_p95 < 0.111 else ''}">{(dd_p95 - 0.111)*100:+.1f}pp</td>
+          <td>{ORIG_DD_P95:.1f}%</td>
+          <td class="{'hi' if dd_p95 < ORIG_DD_P95/100 else ''}">{(dd_p95 - ORIG_DD_P95/100)*100:+.1f}pp</td>
         </tr>
         <tr>
           <td>Prob. ruina</td>
           <td>{ruin_prob:.2%}</td>
-          <td>—</td>
+          <td>~0.00%</td>
           <td>—</td>
         </tr>
         <tr>
@@ -428,7 +421,7 @@ body{{background:var(--bg);color:var(--txt);font-family:'Courier New',monospace;
       </tbody>
     </table>
   </div>
-  <div class="note">* Comparativa orientativa: metodologías distintas (trade vs diario) y capital inicial diferente. Los múltiplos del capital inicial son comparables entre sí.</div>
+  <div class="note">* Comparativa orientativa: metodologías distintas (trade-level vs diario). Ambos parten de 4.000 € de capital inicial.</div>
 </div>
 
 <!-- Veredicto -->
