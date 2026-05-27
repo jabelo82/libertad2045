@@ -15,6 +15,7 @@ ATR_MULTIPLIER = 3.1   # fallback si percentil no disponible
 B1_MULT_MIN    = 2.2
 B1_MULT_MAX    = 4.0
 B1_VENTANA     = 252   # ventana rolling para ATR percentil
+TRAILING_FACTOR = 0.75  # Aprobado en Experimento 40-ter (stress test 3/3 crisis)
 
 
 # --------------------------------------------------
@@ -80,7 +81,7 @@ def _calcular_trailing_yf(symbol: str):
     TR = max(H−L, |H−prev_C|, |L−prev_C|)
     ATR = TR.rolling(ATR_PERIOD).mean()
     ATR_PERCENTIL = ATR.rolling(B1_VENTANA).rank(pct=True)
-    mult = B1_MULT_MAX − (B1_MULT_MAX − B1_MULT_MIN) × percentil
+    mult = (B1_MULT_MAX − (B1_MULT_MAX − B1_MULT_MIN) × percentil) × TRAILING_FACTOR
     nuevo_stop = High_hoy − ATR × mult
 
     Retorna (nuevo_stop, mult) o (None, None) si falla.
@@ -118,7 +119,7 @@ def _calcular_trailing_yf(symbol: str):
         if pd.isna(atr_val) or pd.isna(percentil_val):
             mult = ATR_MULTIPLIER
         else:
-            mult = round(B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * float(percentil_val), 2)
+            mult = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * float(percentil_val)) * TRAILING_FACTOR, 2)
 
         high_hoy   = float(df["High"].iloc[-1])
         nuevo_stop = round(high_hoy - float(atr_val) * mult, 2)
