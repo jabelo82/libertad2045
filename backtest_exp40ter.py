@@ -1,20 +1,32 @@
 """
-LIBERTAD_2045 — Experimento 40
-================================
-Comparativa de 5 variantes de trailing stop (2005-2025).
+LIBERTAD_2045 — Backtest Experimento 40-ter
+=============================================
+Optimización del multiplicador de trailing stop.
 
-  Variante A — Línea base    : trailing dinámico B1 actual (referencia)
-  Variante B — Break-even    : una sola subida a entry+0.5×ATR cuando
-                               precio > entry+1.5×ATR; sin trailing posterior
-  Variante C — Agresivo      : B1 con multiplicador × 0.70
-  Variante D — Conservador   : B1 con multiplicador × 1.30
-  Variante E — Fijo sin pct. : High - ATR × 3.1 (sin ajuste de percentil)
+Contexto: Experimento 40 mostró que el trailing agresivo ×0.70 (Variante C)
+produce +240% de capital vs la línea base pero con DD marginalmente peor
+(12.0% vs 11.2%). Este experimento busca el punto óptimo entre 0.70 y 1.00.
 
-Los datos se cargan UNA VEZ y se reutilizan en los 5 backtests.
-No se toca ningún módulo de producción.
+La lógica de stop es idéntica para todos los multiplicadores:
+    mult         = obtener_multiplicador_B1(df, i) × factor
+    nuevo_stop   = High - ATR × mult           (trailing)
+    break-even   = entry + 0.5×ATR cuando Close ≥ entry + 1.5×ATR
+
+Multiplicadores evaluados:
+    ×0.70  ×0.75  ×0.80  ×0.85  ×0.90  ×0.95  ×1.00 (= línea base A)
+
+Criterio de aprobación:
+    El multiplicador óptimo debe mejorar simultáneamente PF, capital final
+    y drawdown respecto al ×1.00. Si ninguno cumple las tres, se reporta el
+    mejor equilibrio y se identifica el punto de inflexión del DD.
+
+Los datos se descargan UNA sola vez y se reutilizan en los 7 backtests.
+No se modifica ningún módulo de producción.
 
 Uso:
-    python backtest_exp40.py
+    python backtest_exp40ter.py
+
+Tiempo estimado con caché: ~10-12 minutos (7 × backtest completo)
 """
 
 import warnings
@@ -39,15 +51,14 @@ CAPITAL_INICIAL  = 4000.0
 APORTACION_ANUAL = 4000.0
 
 RISK_PERCENT     = 0.0085
-ATR_MULTIPLIER   = 3.1
+ATR_MULTIPLIER   = 3.1        # multiplicador base (sin ajuste percentil)
 MAX_POSITION_PCT = 0.25
 MAX_POSITIONS    = 10
 BUFFER           = 0.05
 
-VOLATILITY_MODE  = "B1"
-B1_VENTANA       = 252
-B1_MULT_MIN      = 2.2
-B1_MULT_MAX      = 4.0
+B1_VENTANA  = 252
+B1_MULT_MIN = 2.2
+B1_MULT_MAX = 4.0
 
 SALIDA_POR_CIERRE = True
 
@@ -65,9 +76,12 @@ SP500_COMP_URL   = (
 
 LOG_DIR = "backtest_results"
 
+# Multiplicadores a evaluar — de agresivo a conservador
+FACTORES = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00]
+
 
 # --------------------------------------------------
-# Universo S&P500 completo (~420 activos)
+# Universo S&P500
 # --------------------------------------------------
 
 SP500 = [
@@ -170,8 +184,6 @@ CRYPTO          = ["BTC-USD","ETH-USD","BNB-USD","SOL-USD","XRP-USD","ADA-USD","
 MATERIAS_PRIMAS = ["GLD","SLV","USO","UNG","CPER","CORN","WEAT","SOYB","DBA","GSG"]
 ETFS            = ["XLK","XLV","XLF","XLE","XLI","XLY","XLP","XLB","XLU","XLRE","XLC","QQQ","IWM","EEM","EFA","VNQ","TAN","ICLN","ARKK","SMH"]
 
-UNIVERSE_COMPLETO = SP500
-
 
 # ==================================================
 # UNIVERSO DINÁMICO S&P500
@@ -179,15 +191,12 @@ UNIVERSE_COMPLETO = SP500
 
 def cargar_composicion_sp500():
     if os.path.exists(SP500_COMP_CACHE):
-        print("  Composición S&P500 : caché local")
         return pd.read_csv(SP500_COMP_CACHE, index_col=0, parse_dates=True)
-    print("  Composición S&P500 : descargando desde GitHub…")
     try:
         df = pd.read_csv(SP500_COMP_URL, index_col=0, parse_dates=True)
         df.to_csv(SP500_COMP_CACHE)
         return df
-    except Exception as e:
-        print(f"  ADVERTENCIA: {e} — usando universo estático.")
+    except Exception:
         return pd.DataFrame()
 
 
@@ -195,7 +204,7 @@ def universo_historico_sp500(comp_df):
     if comp_df.empty:
         return list(SP500)
     import re
-    _date_suffix = re.compile(r'-\d{6,8}$')
+    _date_suffix  = re.compile(r'-\d{6,8}$')
     _valid_ticker = re.compile(r'^[A-Z]{1,5}$')
     todos = set()
     col = comp_df.columns[0]
@@ -234,7 +243,7 @@ def calcular_indicadores(df):
     df = df.loc[:, ~df.columns.duplicated()]
     for col in ["Close", "High", "Low", "Volume"]:
         if col not in df.columns:
-            raise ValueError(f"Columna requerida no encontrada: {col}")
+            raise ValueError(f"Columna requerida: {col}")
     close  = df["Close"].squeeze()
     high   = df["High"].squeeze()
     low    = df["Low"].squeeze()
@@ -252,7 +261,7 @@ def calcular_indicadores(df):
     df["TR"]  = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     df["ATR"] = df["TR"].rolling(14).mean()
     df = df.drop(columns=["TR"])
-    df["vol_media20"]  = volume.rolling(20).mean()
+    df["vol_media20"]   = volume.rolling(20).mean()
     df["ATR_PERCENTIL"] = df["ATR"].rolling(B1_VENTANA).rank(pct=True)
     return df
 
@@ -261,16 +270,15 @@ def calcular_indicadores(df):
 # MULTIPLICADOR DINÁMICO B1
 # ==================================================
 
-def obtener_multiplicador(df, i):
+def obtener_multiplicador_b1(df, i):
     percentil = df.iloc[i].get("ATR_PERCENTIL", np.nan)
     if pd.isna(percentil):
         return ATR_MULTIPLIER
-    mult = B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * percentil
-    return round(mult, 2)
+    return round(B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * percentil, 2)
 
 
 # ==================================================
-# SEÑAL
+# SEÑAL — idéntica al baseline v2.3
 # ==================================================
 
 def detectar_senal(df, i):
@@ -285,8 +293,7 @@ def detectar_senal(df, i):
             return False
     if last["ATR"] <= 0:
         return False
-    tendencia = last["Close"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]
-    if not tendencia:
+    if not (last["Close"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]):
         return False
     pullback = False
     for j in range(i - 3, i):
@@ -303,7 +310,7 @@ def detectar_senal(df, i):
 
 
 # ==================================================
-# POSITION SIZING
+# POSITION SIZING — idéntico al baseline v2.3
 # ==================================================
 
 def calcular_posicion(df, i, capital):
@@ -313,8 +320,8 @@ def calcular_posicion(df, i, capital):
         return 0, None, None
     if pd.isna(last_price) or last_price <= 0.01:
         return 0, None, None
-    multiplicador  = obtener_multiplicador(df, i)
-    stop_distance  = atr * multiplicador
+    mult          = obtener_multiplicador_b1(df, i)
+    stop_distance = atr * mult
     if stop_distance <= 0:
         return 0, None, None
     risk_amount        = capital * RISK_PERCENT
@@ -328,39 +335,39 @@ def calcular_posicion(df, i, capital):
 
 
 # ==================================================
-# DESCARGA DE DATOS
+# DESCARGA DE DATOS — una sola vez para todos los runs
 # ==================================================
 
 def descargar_datos(universe, start, end):
     from data_manager import obtener_datos_cached
     print(f"\nCargando datos ({start} → {end})...")
-    print(f"Universo total: {len(universe)} activos\n")
+    print(f"Universo total: {len(universe)} activos")
     datos   = {}
     errores = []
-    for i, symbol in enumerate(universe, 1):
+    for symbol in universe:
         try:
             df_raw = obtener_datos_cached(symbol, start, end)
             if df_raw is None or len(df_raw) < 200:
                 errores.append(symbol)
                 continue
-            df = calcular_indicadores(df_raw)
-            datos[symbol] = df
-        except Exception as e:
+            datos[symbol] = calcular_indicadores(df_raw)
+        except Exception:
             errores.append(symbol)
-    print(f"  Activos cargados  : {len(datos)}")
-    print(f"  Activos con error : {len(errores)}")
+    print(f"Activos cargados : {len(datos)}  |  Con error: {len(errores)}\n")
     return datos
 
 
 # ==================================================
-# MOTOR DEL BACKTEST — con variante de trailing stop
+# MOTOR DEL BACKTEST — paramétrico por factor
 # ==================================================
 
-def ejecutar_backtest(datos, variante, composicion_df=None):
+def ejecutar_backtest(datos, composicion_df, factor):
     """
-    Corre el backtest completo con la variante de trailing stop indicada.
+    Corre el backtest completo con el factor multiplicador indicado.
 
-    variante: "A" | "B" | "C" | "D" | "E"
+    Stop trailing: High - ATR × obtener_multiplicador_b1(df, i) × factor
+    Break-even   : entry + 0.5×ATR cuando Close ≥ entry + 1.5×ATR
+    Todo lo demás: idéntico al baseline v2.3
     """
     if composicion_df is None:
         composicion_df = pd.DataFrame()
@@ -371,11 +378,11 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
         for fecha in df.index
     ))
 
-    capital        = CAPITAL_INICIAL
-    capital_pico   = CAPITAL_INICIAL
-    posiciones     = {}
-    trades         = []
-    curva_capital  = []
+    capital       = CAPITAL_INICIAL
+    capital_pico  = CAPITAL_INICIAL
+    posiciones    = {}
+    trades        = []
+    curva_capital = []
 
     for idx, fecha in enumerate(fechas):
 
@@ -394,66 +401,39 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
             curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
             continue
 
-        # 4. Gestionar posiciones abiertas — trailing stop según variante
+        # 4. Gestionar posiciones — trailing stop con factor variable
         cerradas = []
-
         for symbol, pos in posiciones.items():
             if symbol not in datos:
                 continue
             df = datos[symbol]
             if fecha not in df.index:
                 continue
-
             bar      = df.loc[fecha]
             atr      = df.loc[fecha, "ATR"]
             i_actual = df.index.get_loc(fecha)
 
-            # --- LÓGICA DE TRAILING STOP POR VARIANTE ---
-            if variante == "B":
-                # Break-even estático: stop sube UNA sola vez cuando
-                # Close > entry + 1.5×ATR → stop a entry + 0.5×ATR.
-                # Sin trailing posterior.
-                if not pos.get("stop_moved", False) and not pd.isna(atr) and atr > 0:
-                    if bar["Close"] > pos["entry"] + 1.5 * atr:
-                        nuevo_stop = round(pos["entry"] + 0.5 * atr, 2)
-                        if nuevo_stop > pos["stop"]:
-                            pos["stop"]       = nuevo_stop
-                            pos["stop_moved"] = True
+            if not pd.isna(atr) and atr > 0:
+                mult_b1    = obtener_multiplicador_b1(df, i_actual)
+                nuevo_stop = round(bar["High"] - atr * mult_b1 * factor, 2)
+                if nuevo_stop > pos["stop"]:
+                    pos["stop"] = nuevo_stop
 
-            else:
-                # Variantes A, C, D, E: trailing stop + break-even
-                if not pd.isna(atr) and atr > 0:
-                    if variante == "A":
-                        mult = obtener_multiplicador(df, i_actual)
-                    elif variante == "C":
-                        mult = obtener_multiplicador(df, i_actual) * 0.70
-                    elif variante == "D":
-                        mult = obtener_multiplicador(df, i_actual) * 1.30
-                    else:  # E — fijo sin percentil
-                        mult = ATR_MULTIPLIER  # 3.1
+                # Break-even — idéntico al baseline v2.3
+                be_stop = round(pos["entry"] + 0.5 * atr, 2)
+                if bar["Close"] >= pos["entry"] + 1.5 * atr and be_stop > pos["stop"]:
+                    pos["stop"] = be_stop
 
-                    nuevo_stop = round(bar["High"] - atr * mult, 2)
-                    if nuevo_stop > pos["stop"]:
-                        pos["stop"] = nuevo_stop
-
-                    # Break-even idéntico al baseline v2.3
-                    be_stop = round(pos["entry"] + 0.5 * atr, 2)
-                    if bar["Close"] >= pos["entry"] + 1.5 * atr and be_stop > pos["stop"]:
-                        pos["stop"] = be_stop
-
-            # Palanca 2B — salida por cierre
             precio_ref = bar["Close"] if SALIDA_POR_CIERRE else bar["Low"]
-
             if precio_ref <= pos["stop"]:
-                precio_salida = pos["stop"]
-                pnl           = (precio_salida - pos["entry"]) * pos["shares"]
-                capital      += pnl
+                pnl      = (pos["stop"] - pos["entry"]) * pos["shares"]
+                capital += pnl
                 trades.append({
                     "symbol"       : symbol,
                     "fecha_entrada": pos["fecha_entrada"],
                     "fecha_salida" : fecha,
                     "entrada"      : round(pos["entry"], 4),
-                    "salida"       : round(precio_salida, 4),
+                    "salida"       : round(pos["stop"], 4),
                     "shares"       : pos["shares"],
                     "pnl"          : round(pnl, 2),
                     "resultado"    : "LOSS" if pnl < 0 else "WIN",
@@ -470,7 +450,7 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
             curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
             continue
 
-        # 6. Rebalanceo dinámico
+        # 6. Rebalanceo dinámico — idéntico al baseline v2.3
         for symbol in list(posiciones.keys()):
             if symbol not in datos:
                 continue
@@ -483,13 +463,11 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
             if pd.isna(precio) or precio <= 0:
                 continue
             shares_actual = pos["shares"]
-            valor_actual  = shares_actual * precio
             limite_valor  = capital * MAX_POSITION_PCT
-            if capital > 0 and valor_actual > limite_valor:
+            if capital > 0 and shares_actual * precio > limite_valor:
                 shares_limite = int(limite_valor / precio)
                 if abs(shares_limite - shares_actual) >= REBALANCE_MIN_SHARES and shares_limite > 0:
-                    pnl_parcial = (precio - pos["entry"]) * (shares_actual - shares_limite)
-                    capital    += pnl_parcial
+                    capital += (precio - pos["entry"]) * (shares_actual - shares_limite)
                     posiciones[symbol]["shares"] = shares_limite
                     continue
             shares_optimo, _, _ = calcular_posicion(df_reb, i_reb, capital)
@@ -502,13 +480,10 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
             if abs(delta) < REBALANCE_MIN_SHARES:
                 continue
             if delta < 0:
-                pnl_parcial = (precio - pos["entry"]) * (-delta)
-                capital    += pnl_parcial
+                capital += (precio - pos["entry"]) * (-delta)
                 posiciones[symbol]["shares"] = shares_optimo
             else:
-                entry_blended = (
-                    (pos["entry"] * shares_actual + precio * delta) / shares_optimo
-                )
+                entry_blended = (pos["entry"] * shares_actual + precio * delta) / shares_optimo
                 posiciones[symbol]["shares"] = shares_optimo
                 posiciones[symbol]["entry"]  = round(entry_blended, 4)
 
@@ -569,20 +544,16 @@ def ejecutar_backtest(datos, variante, composicion_df=None):
                 df = datos[symbol]
                 if fecha_entrada not in df.index:
                     continue
-                bar_entrada = df.loc[fecha_entrada]
-                if bar_entrada["High"] >= buy_stop:
+                if df.loc[fecha_entrada, "High"] >= buy_stop:
                     coste = buy_stop * señal["shares"]
                     if coste > capital:
                         continue
-                    entry = {
-                        "entry"         : buy_stop,
-                        "stop"          : stop_loss,
-                        "shares"        : señal["shares"],
-                        "fecha_entrada" : fecha_entrada,
+                    posiciones[symbol] = {
+                        "entry"        : buy_stop,
+                        "stop"         : stop_loss,
+                        "shares"       : señal["shares"],
+                        "fecha_entrada": fecha_entrada,
                     }
-                    if variante == "B":
-                        entry["stop_moved"] = False
-                    posiciones[symbol] = entry
 
         curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
 
@@ -650,11 +621,10 @@ def calcular_metricas(trades, curva_capital, capital_final):
         if dd > max_drawdown:
             max_drawdown = dd
 
-    # CAGR basado en capital inicial (comparable entre variantes)
     start_dt = datetime.strptime(START_DATE, "%Y-%m-%d")
     end_dt   = datetime.strptime(END_DATE,   "%Y-%m-%d")
     years    = (end_dt - start_dt).days / 365.25
-    cagr     = (capital_final / CAPITAL_INICIAL) ** (1 / years) - 1 if CAPITAL_INICIAL > 0 else 0
+    cagr     = (capital_final / CAPITAL_INICIAL) ** (1.0 / years) - 1
 
     return {
         "capital_final": round(capital_final, 2),
@@ -667,61 +637,148 @@ def calcular_metricas(trades, curva_capital, capital_final):
 
 
 # ==================================================
-# TABLA COMPARATIVA
+# TABLA COMPARATIVA + ANÁLISIS DE INFLEXIÓN
 # ==================================================
 
 def imprimir_tabla(resultados):
-    sep  = "─" * 90
-    sep2 = "═" * 90
+    sep  = "═" * 92
+    sep2 = "─" * 92
 
-    print(f"\n{sep2}")
-    print(f"  LIBERTAD_2045 — EXPERIMENTO 40 — Comparativa trailing stop  ({START_DATE} → {END_DATE})")
-    print(f"{sep2}")
+    ref = resultados.get(1.00, {})
+    ref_cap = ref.get("capital_final", 0)
+    ref_pf  = ref.get("profit_factor", 0)
+    ref_dd  = ref.get("max_drawdown",  0)
+    ref_cagr= ref.get("cagr", 0)
 
-    header = (
-        f"  {'Var':<4} {'Descripción':<26} {'Capital €':>12} "
-        f"{'CAGR':>8} {'Prof.F':>8} {'WinRate':>8} {'MaxDD':>8} {'Trades':>7}"
-    )
-    print(header)
-    print(f"  {sep[2:]}")
+    print(f"\n\n{sep}")
+    print(f"  LIBERTAD_2045 — EXPERIMENTO 40-ter — Optimización del multiplicador de trailing stop")
+    print(f"  Período: {START_DATE} → {END_DATE}  |  Capital: {CAPITAL_INICIAL:.0f} €  |  Aportación anual: {APORTACION_ANUAL:.0f} €")
+    print(sep)
 
-    descripciones = {
-        "A": "Línea base B1 (referencia)",
-        "B": "Break-even estático",
-        "C": "Trailing agresivo ×0.70",
-        "D": "Trailing conservador ×1.30",
-        "E": "Trailing fijo ATR×3.1",
-    }
+    print(f"\n  {'Factor':>7}  {'Capital final':>14}  {'CAGR':>7}  {'PF':>7}  {'WR':>7}  {'DD máx':>7}  {'Trades':>7}  {'vs ref'}  {'Aprobado?'}")
+    print(f"  {sep2}")
 
-    ref_capital = resultados["A"]["capital_final"] if "A" in resultados else None
+    aprobados = []
 
-    for var in ["A", "B", "C", "D", "E"]:
-        if var not in resultados:
+    for factor in FACTORES:
+        m = resultados.get(factor, {})
+        if not m:
             continue
-        m    = resultados[var]
-        diff = ""
-        if ref_capital and var != "A":
-            delta = m["capital_final"] - ref_capital
-            sign  = "+" if delta >= 0 else ""
-            diff  = f"  ({sign}{delta:,.0f}€ vs A)"
 
-        marker = " ◀ REF" if var == "A" else ""
+        cap    = m["capital_final"]
+        cagr   = m["cagr"]
+        pf     = m["profit_factor"]
+        wr     = m["win_rate"]
+        dd     = m["max_drawdown"]
+        trades = m["total_trades"]
+
+        if factor == 1.00:
+            vs_ref   = "  (ref)"
+            aprobado = "   —"
+        else:
+            delta_cap = cap - ref_cap
+            sign      = "+" if delta_cap >= 0 else ""
+            vs_ref    = f"{sign}{delta_cap/1e6:+.2f}M"
+            mejora_pf  = pf  > ref_pf
+            mejora_dd  = dd  < ref_dd
+            mejora_cap = cap > ref_cap
+            ok = mejora_pf and mejora_dd and mejora_cap
+            aprobado = f"  ✓ PF DD Cap" if ok else (
+                "  " +
+                ("✓" if mejora_pf  else "✗") + "PF " +
+                ("✓" if mejora_dd  else "✗") + "DD " +
+                ("✓" if mejora_cap else "✗") + "Cap"
+            )
+            if ok:
+                aprobados.append(factor)
+
+        marker = " ◀ REF" if factor == 1.00 else ""
 
         print(
-            f"  {var:<4} {descripciones[var]:<26} "
-            f"{m['capital_final']:>12,.2f} "
-            f"{m['cagr']:>8.2%} "
-            f"{m['profit_factor']:>8.4f} "
-            f"{m['win_rate']:>8.1%} "
-            f"{m['max_drawdown']:>8.1%} "
-            f"{m['total_trades']:>7d}"
-            f"{diff}{marker}"
+            f"  ×{factor:.2f}    "
+            f"{cap:>14,.0f}  "
+            f"{cagr:>7.2%}  "
+            f"{pf:>7.4f}  "
+            f"{wr:>7.1%}  "
+            f"{dd:>7.1%}  "
+            f"{trades:>7d}  "
+            f"{vs_ref:>9}  "
+            f"{aprobado}{marker}"
         )
 
-    print(f"  {sep[2:]}")
-    print(f"\n  CAGR  = retorno anualizado sobre capital inicial {CAPITAL_INICIAL:.0f}€ (comparativo)")
-    print(f"  MaxDD = drawdown máximo sobre curva de capital")
-    print(f"{sep2}\n")
+    print(f"  {sep2}")
+
+    # --------------------------------------------------
+    # Análisis de inflexión
+    # --------------------------------------------------
+    print(f"\n  PUNTO DE INFLEXIÓN DEL DRAWDOWN")
+    print(f"  {sep2}")
+    print(f"  {'Factor':>7}  {'DD máx':>7}  {'Delta DD vs anterior':>22}  {'Capital':>14}")
+
+    dd_anterior  = None
+    cap_anterior = None
+    inflexion    = None
+
+    for factor in sorted(FACTORES):
+        m  = resultados.get(factor, {})
+        dd = m.get("max_drawdown", None)
+        cap= m.get("capital_final", None)
+        if dd is None:
+            continue
+        if dd_anterior is not None:
+            delta_dd  = dd - dd_anterior
+            delta_cap = cap - cap_anterior
+            signo_dd  = "▲ empeora" if delta_dd > 0.001 else ("▼ mejora" if delta_dd < -0.001 else "≈ estable")
+            nota = ""
+            if delta_dd > 0.001 and delta_cap > 0 and inflexion is None:
+                inflexion = factor
+                nota = "  ← INFLEXIÓN: DD empeora, Capital sigue subiendo"
+            print(f"  ×{factor:.2f}    {dd:>7.1%}  {delta_dd:>+8.1%} {signo_dd:<12}  {cap:>14,.0f}{nota}")
+        else:
+            print(f"  ×{factor:.2f}    {dd:>7.1%}  {'—':>22}  {cap:>14,.0f}")
+        dd_anterior  = dd
+        cap_anterior = cap
+
+    # --------------------------------------------------
+    # Veredicto
+    # --------------------------------------------------
+    print(f"\n  VEREDICTO")
+    print(f"  {sep2}")
+
+    if aprobados:
+        mejor = max(aprobados, key=lambda f: resultados[f]["capital_final"])
+        m      = resultados[mejor]
+        delta_cap = m["capital_final"] - ref_cap
+        print(f"  ✓ Multiplicadores que aprueban los 3 criterios: {[f'×{f:.2f}' for f in sorted(aprobados)]}")
+        print(f"  ✓ Óptimo recomendado: ×{mejor:.2f}")
+        print(f"    Capital: {m['capital_final']:,.0f} € (+{delta_cap:,.0f} vs ref)")
+        print(f"    PF: {m['profit_factor']:.4f}  DD: {m['max_drawdown']:.1%}  WR: {m['win_rate']:.1%}")
+    else:
+        # Buscar el mejor equilibrio: maximizar capital con DD ≤ ref
+        candidatos_dd = {f: r for f, r in resultados.items()
+                         if f != 1.00 and r.get("max_drawdown", 1) <= ref_dd}
+        if candidatos_dd:
+            mejor_eq = max(candidatos_dd, key=lambda f: candidatos_dd[f]["capital_final"])
+            m = candidatos_dd[mejor_eq]
+            print(f"  ✗ Ningún multiplicador aprueba las 3 métricas simultáneamente.")
+            print(f"  ↗ Mejor equilibrio (DD ≤ ref): ×{mejor_eq:.2f}")
+            print(f"    Capital: {m['capital_final']:,.0f} €  PF: {m['profit_factor']:.4f}  DD: {m['max_drawdown']:.1%}")
+        else:
+            # Buscar mayor PF con menor exceso de DD
+            mejor_pf = max(
+                (f for f in resultados if f != 1.00),
+                key=lambda f: resultados[f]["profit_factor"]
+            )
+            m = resultados[mejor_pf]
+            print(f"  ✗ Ningún multiplicador aprueba las 3 métricas simultáneamente.")
+            print(f"  ↗ Mejor PF encontrado: ×{mejor_pf:.2f}")
+            print(f"    Capital: {m['capital_final']:,.0f} €  PF: {m['profit_factor']:.4f}  DD: {m['max_drawdown']:.1%}")
+
+    if inflexion:
+        print(f"\n  Punto de inflexión DD: en ×{inflexion:.2f} el DD empieza a empeorar")
+        print(f"  mientras el capital sigue mejorando → límite de seguridad del sistema")
+
+    print(f"\n{sep}\n")
 
 
 # ==================================================
@@ -731,22 +788,13 @@ def imprimir_tabla(resultados):
 def guardar_comparativo(resultados):
     os.makedirs(LOG_DIR, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
     filas = []
-    descripciones = {
-        "A": "Línea base B1 (referencia)",
-        "B": "Break-even estático",
-        "C": "Trailing agresivo x0.70",
-        "D": "Trailing conservador x1.30",
-        "E": "Trailing fijo ATR×3.1",
-    }
-    for var in ["A", "B", "C", "D", "E"]:
-        if var not in resultados:
+    for factor in FACTORES:
+        m = resultados.get(factor, {})
+        if not m:
             continue
-        m = resultados[var]
         filas.append({
-            "variante"     : var,
-            "descripcion"  : descripciones[var],
+            "factor"       : factor,
             "capital_final": m["capital_final"],
             "cagr"         : round(m["cagr"], 6),
             "profit_factor": m["profit_factor"],
@@ -754,8 +802,7 @@ def guardar_comparativo(resultados):
             "max_drawdown" : round(m["max_drawdown"], 4),
             "total_trades" : m["total_trades"],
         })
-
-    path = f"{LOG_DIR}/exp40_comparativa_{timestamp}.csv"
+    path = f"{LOG_DIR}/exp40ter_comparativa_{timestamp}.csv"
     pd.DataFrame(filas).to_csv(path, index=False)
     print(f"  CSV guardado: {path}")
 
@@ -766,57 +813,46 @@ def guardar_comparativo(resultados):
 
 if __name__ == "__main__":
 
-    print("=" * 60)
-    print("  LIBERTAD_2045 — EXPERIMENTO 40")
-    print("  Comparativa de 5 variantes de trailing stop")
-    print("=" * 60)
-    print(f"  Período   : {START_DATE} → {END_DATE}")
-    print(f"  Capital   : {CAPITAL_INICIAL:.0f}€  +{APORTACION_ANUAL:.0f}€/año")
-    print(f"  Riesgo/op : {RISK_PERCENT:.2%}")
-    print(f"  Max pos   : {MAX_POSITIONS}")
+    print("=" * 70)
+    print("  LIBERTAD_2045 — EXPERIMENTO 40-ter")
+    print("  Optimización del multiplicador de trailing stop")
+    print("=" * 70)
+    print(f"  Período    : {START_DATE} → {END_DATE}")
+    print(f"  Capital    : {CAPITAL_INICIAL:.0f} € + {APORTACION_ANUAL:.0f} €/año")
+    print(f"  Riesgo/op  : {RISK_PERCENT:.2%}")
+    print(f"  Max pos    : {MAX_POSITIONS}")
+    print(f"  Factores   : {FACTORES}")
     print()
 
-    # Cargar datos UNA sola vez — compartidos entre todas las variantes
+    # Datos descargados una sola vez
     comp_df  = cargar_composicion_sp500()
     universo = universo_historico_sp500(comp_df)
-    print(f"  Universo  : {len(universo)} activos históricos únicos\n")
+    print(f"  Universo   : {len(universo)} activos históricos únicos")
 
     datos = descargar_datos(universo, START_DATE, END_DATE)
     if not datos:
         print("ERROR: no se pudieron cargar datos.")
         exit(1)
 
-    # Ejecutar las 5 variantes
-    variantes = {
-        "A": "Línea base B1",
-        "B": "Break-even estático",
-        "C": "Trailing agresivo ×0.70",
-        "D": "Trailing conservador ×1.30",
-        "E": "Trailing fijo ATR×3.1",
-    }
-
     resultados = {}
+    t_total = time.time()
 
-    for var, desc in variantes.items():
-        print(f"\n{'─'*60}")
-        print(f"  Variante {var} — {desc}")
-        print(f"{'─'*60}")
+    for factor in FACTORES:
+        print(f"  ── Factor ×{factor:.2f} ", end="", flush=True)
         t0 = time.time()
-        trades, curva_capital, capital_final = ejecutar_backtest(
-            datos, variante=var, composicion_df=comp_df
-        )
+        trades, curva_capital, capital_final = ejecutar_backtest(datos, comp_df, factor)
         metricas = calcular_metricas(trades, curva_capital, capital_final)
-        elapsed  = time.time() - t0
-        resultados[var] = metricas
+        resultados[factor] = metricas
+        elapsed = time.time() - t0
         print(
-            f"  Capital final: {capital_final:,.2f}€  "
-            f"| Trades: {metricas['total_trades']}  "
-            f"| WinRate: {metricas['win_rate']:.1%}  "
-            f"| PF: {metricas['profit_factor']:.4f}  "
-            f"| MaxDD: {metricas['max_drawdown']:.1%}  "
-            f"| {elapsed:.1f}s"
+            f"→ Capital: {capital_final:>13,.0f} €  "
+            f"PF: {metricas['profit_factor']:.4f}  "
+            f"DD: {metricas['max_drawdown']:.1%}  "
+            f"Trades: {metricas['total_trades']}  "
+            f"({elapsed:.0f}s)"
         )
 
-    # Tabla comparativa final
+    print(f"\n  Total: {time.time() - t_total:.0f}s")
+
     imprimir_tabla(resultados)
     guardar_comparativo(resultados)
