@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>LIBERTAD_2045 — Comparativa Final ×0.75 vs ×1.00</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#080c14;--card:#0f1624;--bdr:#1e293b;--txt:#e2e8f0;--muted:#64748b;
+  --blue:#3b82f6;--green:#10b981;--gold:#f59e0b;--red:#ef4444;--purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Courier New',monospace;font-size:13px;
+     padding:20px;max-width:1440px;margin:0 auto;line-height:1.7}
+.hdr{text-align:center;padding:40px 20px 28px;border-bottom:1px solid var(--bdr);margin-bottom:36px}
+.hdr h1{font-size:22px;font-weight:700;letter-spacing:3px;color:var(--gold);margin-bottom:6px}
+.hdr .sub{color:var(--muted);font-size:11px;letter-spacing:1px}
+.hdr .params{margin-top:14px;display:inline-flex;gap:20px;background:var(--card);
+              border:1px solid var(--bdr);border-radius:8px;padding:10px 24px}
+.hdr .param{font-size:12px;color:var(--txt)}
+.hdr .param span{color:var(--gold);font-weight:700}
+.sec{margin-bottom:50px}
+.sec-hdr{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;
+         padding-bottom:10px;border-bottom:1px solid var(--bdr)}
+.sec-title{font-size:14px;font-weight:700;color:var(--blue);letter-spacing:2px;text-transform:uppercase}
+.sec-sub{font-size:11px;color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+th{background:#0b1220;color:var(--muted);padding:9px 14px;text-align:right;
+   font-size:10px;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--bdr)}
+th:first-child,th.left{text-align:left}
+td{padding:9px 14px;text-align:right;border-bottom:1px solid var(--bdr);color:var(--txt)}
+td:first-child,td.left{text-align:left;color:var(--muted)}
+tr:last-child td{border-bottom:none}
+.hi{color:var(--green);font-weight:700}
+.lo{color:var(--red)}
+.neutral{color:var(--muted)}
+.factor-075{color:var(--purple);font-weight:700}
+.factor-100{color:var(--blue);font-weight:700}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--bdr);border-radius:8px;margin-bottom:16px}
+.chart-box{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:18px;margin-bottom:20px}
+.chart-box canvas{max-height:320px}
+.chart-title{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+.crisis-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px}
+.crisis-card{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:16px}
+.crisis-title{font-size:11px;color:var(--gold);letter-spacing:1px;font-weight:700;
+              text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;
+              border-bottom:1px solid var(--bdr)}
+.verdict-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:28px}
+.vcard{background:var(--card);border:1px solid var(--bdr);border-radius:8px;
+        padding:16px;text-align:center}
+.vcard .v{font-size:22px;font-weight:700;margin-bottom:4px}
+.vcard .l{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
+.badge-green{background:rgba(16,185,129,.15);color:var(--green);border:1px solid rgba(16,185,129,.3)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge-yellow{background:rgba(245,158,11,.15);color:var(--gold);border:1px solid rgba(245,158,11,.3)}
+.final-verdict{background:linear-gradient(135deg,rgba(245,158,11,.10),rgba(245,158,11,.03));
+               border:2px solid var(--gold);border-radius:12px;padding:36px;
+               text-align:center;margin-top:36px}
+.fv-title{font-size:20px;font-weight:700;color:var(--gold);letter-spacing:4px;margin-bottom:8px}
+.fv-sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.fv-grid{display:inline-grid;grid-template-columns:repeat(3,1fr);
+          border:1px solid rgba(245,158,11,.2);border-radius:8px;overflow:hidden;
+          max-width:700px;margin-bottom:18px}
+.fvk{padding:16px 24px;border-right:1px solid rgba(245,158,11,.15)}
+.fvk:last-child{border-right:none}
+.fvkv{font-size:20px;font-weight:700;color:var(--gold);margin-bottom:2px}
+.fvkl{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.note{font-size:11px;color:var(--muted);padding:6px 4px;margin-top:8px}
+.foot{text-align:center;padding:20px 0;border-top:1px solid var(--bdr);
+       margin-top:36px;color:var(--muted);font-size:10px;letter-spacing:1px}
+@media(max-width:900px){.crisis-grid{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}
+  .verdict-row{grid-template-columns:repeat(2,1fr)}.fv-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <h1>LIBERTAD_2045 — COMPARATIVA FINAL ×0.75 vs ×1.00</h1>
+  <div class="sub">Backtest completo · Stress tests · Montecarlo · 2026-05-27 21:53</div>
+  <div class="params">
+    <div class="param">Capital inicial <span>4.000 €</span></div>
+    <div class="param">Aportación anual <span>4.000 €</span></div>
+    <div class="param">Período <span>2006 – 2025</span></div>
+    <div class="param">Metodología MC <span>Bootstrap trade-level</span></div>
+    <div class="param">Simulaciones MC <span>1,000</span></div>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- SECCIÓN 1: RESUMEN EJECUTIVO                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-title">Resumen Ejecutivo</span>
+    <span class="sec-sub">Backtest completo 2006-2025 — 4.000 € + 4.000 €/año</span>
+  </div>
+  <div class="verdict-row">
+    <div class="vcard">
+      <div class="v factor-100">2.71M€</div>
+      <div class="l">Capital final ×1.00</div>
+    </div>
+    <div class="vcard">
+      <div class="v factor-075">8.91M€</div>
+      <div class="l">Capital final ×0.75</div>
+    </div>
+    <div class="vcard">
+      <div class="v hi">11.9% vs 12.9%</div>
+      <div class="l">DD máx (×0.75 vs ×1.00)</div>
+    </div>
+    <div class="vcard">
+      <div class="v hi">0.00% vs 0.00%</div>
+      <div class="l">Prob. ruina MC (×0.75 vs ×1.00)</div>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Métrica</th>
+          <th>×1.00 (baseline)</th>
+          <th>×0.75</th>
+          <th>Δ</th>
+          <th>Veredicto ×0.75</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="left">Capital final</td>
+          <td class="factor-100">2.71M€</td>
+          <td class="factor-075">8.91M€</td>
+          <td class="hi">+228%</td>
+          <td><span class="badge badge-green"> ↑ Mejor</span></td>
+        </tr>
+        <tr>
+          <td class="left">CAGR (20 años)</td>
+          <td class="factor-100">38.5%</td>
+          <td class="factor-075">47.0%</td>
+          <td class="hi">+8.5pp</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">Profit Factor</td>
+          <td>2.163</td>
+          <td>2.486</td>
+          <td class="hi">+0.323</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">Win Rate</td>
+          <td>48.6%</td>
+          <td>54.3%</td>
+          <td class="hi">+5.7pp</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">Drawdown máximo</td>
+          <td>12.9%</td>
+          <td class="hi">11.9%</td>
+          <td class="hi">-1.0pp</td>
+          <td><span class="badge badge-green">↓ Mejor DD</span></td>
+        </tr>
+        <tr>
+          <td class="left">Total trades</td>
+          <td>1535</td>
+          <td>2386</td>
+          <td class="neutral">+851</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">* Capital inicial 4.000 € + 4.000 €/año (2006-2025). ×1.00 = motor backtest_expandido.py. ×0.75 = backtest_exp40ter.py factor=0.75 sobre trailing stop ATR.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- SECCIÓN 2: STRESS TESTS                                               -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-title">Stress Tests</span>
+    <span class="sec-sub">3 períodos de crisis · Capital 4.000 € + 4.000 €/año · Mismo motor para ×1.00 y ×0.75</span>
+  </div>
+
+  <div class="crisis-grid">
+    <div class="crisis-card">
+      <div class="crisis-title">Crisis 2008<br><span style="font-size:10px;color:var(--muted)">2007-01-01 → 2009-12-31</span></div>
+      <table>
+        <thead>
+          <tr><th class="left">Métrica</th><th>×1.00</th><th>×0.75</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="left">Capital final</td>
+            <td class="factor-100">13.1k€</td>
+            <td class="hi factor-075">13.3k€</td>
+          </tr>
+          <tr>
+            <td class="left">Retorno período</td>
+            <td class="hi">+226.6%</td>
+            <td class="hi">+231.6%</td>
+          </tr>
+          <tr>
+            <td class="left">Drawdown máx.</td>
+            <td>11.7%</td>
+            <td class="hi">11.5%</td>
+          </tr>
+          <tr>
+            <td class="left">Profit Factor</td>
+            <td>1.238</td>
+            <td class="hi">1.253</td>
+          </tr>
+          <tr>
+            <td class="left">Win Rate</td>
+            <td>53.8%</td>
+            <td>41.7%</td>
+          </tr>
+          <tr>
+            <td class="left">Trades</td>
+            <td>208</td>
+            <td>300</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×1.00</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×0.75</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-weight:700">Veredicto ×0.75</td>
+            <td colspan="2" style="text-align:center"><span class="badge badge-green">✅ Mejor</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="crisis-card">
+      <div class="crisis-title">COVID 2020<br><span style="font-size:10px;color:var(--muted)">2019-01-01 → 2020-12-31</span></div>
+      <table>
+        <thead>
+          <tr><th class="left">Métrica</th><th>×1.00</th><th>×0.75</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="left">Capital final</td>
+            <td class="factor-100">11.5k€</td>
+            <td class="hi factor-075">12.6k€</td>
+          </tr>
+          <tr>
+            <td class="left">Retorno período</td>
+            <td class="hi">+187.7%</td>
+            <td class="hi">+214.7%</td>
+          </tr>
+          <tr>
+            <td class="left">Drawdown máx.</td>
+            <td>7.3%</td>
+            <td class="hi">4.8%</td>
+          </tr>
+          <tr>
+            <td class="left">Profit Factor</td>
+            <td>2.221</td>
+            <td class="hi">2.506</td>
+          </tr>
+          <tr>
+            <td class="left">Win Rate</td>
+            <td>56.7%</td>
+            <td>52.8%</td>
+          </tr>
+          <tr>
+            <td class="left">Trades</td>
+            <td>178</td>
+            <td>248</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×1.00</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×0.75</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-weight:700">Veredicto ×0.75</td>
+            <td colspan="2" style="text-align:center"><span class="badge badge-green">✅ Mejor</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="crisis-card">
+      <div class="crisis-title">Bear 2022<br><span style="font-size:10px;color:var(--muted)">2021-01-01 → 2022-12-31</span></div>
+      <table>
+        <thead>
+          <tr><th class="left">Métrica</th><th>×1.00</th><th>×0.75</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="left">Capital final</td>
+            <td class="factor-100">11.0k€</td>
+            <td class="hi factor-075">13.5k€</td>
+          </tr>
+          <tr>
+            <td class="left">Retorno período</td>
+            <td class="hi">+174.9%</td>
+            <td class="hi">+238.0%</td>
+          </tr>
+          <tr>
+            <td class="left">Drawdown máx.</td>
+            <td>6.4%</td>
+            <td class="hi">5.5%</td>
+          </tr>
+          <tr>
+            <td class="left">Profit Factor</td>
+            <td>2.089</td>
+            <td class="hi">2.851</td>
+          </tr>
+          <tr>
+            <td class="left">Win Rate</td>
+            <td>59.4%</td>
+            <td>57.7%</td>
+          </tr>
+          <tr>
+            <td class="left">Trades</td>
+            <td>207</td>
+            <td>267</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×1.00</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-size:10px">Años neg. ×0.75</td>
+            <td colspan="2" style="text-align:left;font-size:10px;color:var(--muted)">ninguno</td>
+          </tr>
+          <tr>
+            <td class="left" style="font-weight:700">Veredicto ×0.75</td>
+            <td colspan="2" style="text-align:center"><span class="badge badge-green">✅ Mejor</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Crisis</th>
+          <th>Período</th>
+          <th>×1.00 Capital</th>
+          <th>×0.75 Capital</th>
+          <th>Δ Capital</th>
+          <th>×1.00 DD</th>
+          <th>×0.75 DD</th>
+          <th>Δ DD</th>
+          <th>Veredicto ×0.75</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="left">Crisis 2008</td>
+          <td class="neutral">2007–2009</td>
+          <td>13.1k€</td>
+          <td class="hi">13.3k€</td>
+          <td class="hi">+201€</td>
+          <td>11.7%</td>
+          <td class="hi">11.5%</td>
+          <td class="hi">-0.2pp</td>
+          <td><span class="badge badge-green">✅ Mejor</span></td>
+        </tr>
+        <tr>
+          <td class="left">COVID 2020</td>
+          <td class="neutral">2019–2020</td>
+          <td>11.5k€</td>
+          <td class="hi">12.6k€</td>
+          <td class="hi">+1.1k€</td>
+          <td>7.3%</td>
+          <td class="hi">4.8%</td>
+          <td class="hi">-2.4pp</td>
+          <td><span class="badge badge-green">✅ Mejor</span></td>
+        </tr>
+        <tr>
+          <td class="left">Bear 2022</td>
+          <td class="neutral">2021–2022</td>
+          <td>11.0k€</td>
+          <td class="hi">13.5k€</td>
+          <td class="hi">+2.5k€</td>
+          <td>6.4%</td>
+          <td class="hi">5.5%</td>
+          <td class="hi">-0.9pp</td>
+          <td><span class="badge badge-green">✅ Mejor</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note">* Capital inicial 4.000 € + 4.000 €/año durante el período de crisis. Motor idéntico para ×1.00 y ×0.75 (solo varía el multiplicador del trailing stop).</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- SECCIÓN 3: MONTECARLO                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="sec">
+  <div class="sec-hdr">
+    <span class="sec-title">Análisis Montecarlo</span>
+    <span class="sec-sub">1,000 simulaciones bootstrap trade-level · Capital inicio 4.000 € · Misma metodología para ×1.00 y ×0.75</span>
+  </div>
+
+  <div class="tbl-wrap" style="margin-bottom:20px">
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Métrica</th>
+          <th>×1.00 (baseline)</th>
+          <th>×0.75</th>
+          <th>Δ</th>
+          <th>Veredicto ×0.75</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="left">Prob. ruina (&lt;2,000€)</td>
+          <td>0.00%</td>
+          <td class="">0.00%</td>
+          <td class="">+0.00pp</td>
+          <td><span class="badge badge-green">≤ Igual</span></td>
+        </tr>
+        <tr>
+          <td class="left">Capital p5</td>
+          <td>116.9k€</td>
+          <td class="hi">556.2k€</td>
+          <td class="hi">+376%</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">Capital p50 (mediana)</td>
+          <td>230.6k€</td>
+          <td class="hi">1.04M€</td>
+          <td class="hi">+352%</td>
+          <td><span class="badge badge-green">↑ Similar+</span></td>
+        </tr>
+        <tr>
+          <td class="left">Capital p95</td>
+          <td>443.9k€</td>
+          <td class="hi">1.91M€</td>
+          <td class="hi">+331%</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">DD máx p50</td>
+          <td>7.4%</td>
+          <td class="hi">5.3%</td>
+          <td class="hi">-2.0pp</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">DD máx p95</td>
+          <td>11.0%</td>
+          <td class="hi">7.6%</td>
+          <td class="hi">-3.4pp</td>
+          <td><span class="badge badge-green">↓ Mejor DD</span></td>
+        </tr>
+        <tr>
+          <td class="left">Retorno medio por trade</td>
+          <td>0.2721%</td>
+          <td>0.2369%</td>
+          <td class="lo">-0.0351pp</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="left">Trades usados en MC</td>
+          <td>1525</td>
+          <td>2376</td>
+          <td class="neutral">+851</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid2">
+    <div class="chart-box">
+      <div class="chart-title">Distribución capital final — ×1.00 vs ×0.75 (1,000 sims)</div>
+      <canvas id="chartCap"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Distribución drawdown máximo — ×1.00 vs ×0.75 (1,000 sims)</div>
+      <canvas id="chartDD"></canvas>
+    </div>
+  </div>
+  <div class="note">* Bootstrap trade-level: se muestrean los retornos por trade con reposición desde 4.000 € de capital.
+  Sin aportaciones anuales en la simulación (metodología trade-level). Los retornos de cada trade ya incorporan la dinámica del capital real del backtest.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- VEREDICTO FINAL                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="final-verdict">
+  <div style="font-size:36px;margin-bottom:12px">
+    ✅
+  </div>
+  <div class="fv-title">VEREDICTO FINAL — ×0.75</div>
+  <div class="fv-sub">Comparativa completa · 1,000 simulaciones Montecarlo · Capital 4.000 € + 4.000 €/año · 2026-05-27 21:53</div>
+  <div class="fv-grid">
+    <div class="fvk">
+      <div class="fvkv">8.91M€</div>
+      <div class="fvkl">Capital final ×0.75</div>
+    </div>
+    <div class="fvk">
+      <div class="fvkv hi">11.9%</div>
+      <div class="fvkl">DD máx (vs 12.9% ×1.00)</div>
+    </div>
+    <div class="fvk">
+      <div class="fvkv hi">7.6%</div>
+      <div class="fvkl">MC DD p95 (vs 11.0% ×1.00)</div>
+    </div>
+  </div>
+  <div class="fv-grid" style="margin-top:8px">
+    <div class="fvk">
+      <div class="fvkv">1.04M€</div>
+      <div class="fvkl">MC p50 (vs 230.6k€ ×1.00)</div>
+    </div>
+    <div class="fvk">
+      <div class="fvkv">0.00%</div>
+      <div class="fvkl">Prob. ruina</div>
+    </div>
+    <div class="fvk">
+      <div class="fvkv">2.486</div>
+      <div class="fvkl">PF (vs 2.163 ×1.00)</div>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-top:16px">
+    Backtest: 2.71M€ (×1.00) vs 8.91M€ (×0.75) ·
+    Stress: 3/3 períodos ×0.75 ≥ ×1.00 ·
+    MC DD_p95: 7.6% vs 11.0%
+  </div>
+</div>
+
+<footer class="foot">
+  LIBERTAD_2045 · Comparativa Final ×0.75 vs ×1.00 · 2026-05-27 21:53 ·
+  Motor: backtest_expandido.py (×1.00) + backtest_exp40ter.py (×0.75) ·
+  Sin módulos de producción modificados
+</footer>
+
+<script>
+const D = {"h100_cap": [14, 37, 53, 82, 93, 101, 102, 89, 90, 70, 56, 42, 39, 27, 18, 22, 16, 12, 14, 3, 4, 1, 0, 4, 2, 3, 0, 2, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1], "e100_cap": [73.16524557104701, 95.17000936567173, 117.17477316029644, 139.17953695492116, 161.18430074954588, 183.1890645441706, 205.1938283387953, 227.19859213342005, 249.20335592804474, 271.2081197226695, 293.2128835172942, 315.21764731191894, 337.22241110654363, 359.2271749011684, 381.2319386957931, 403.2367024904178, 425.2414662850425, 447.2462300796672, 469.25099387429196, 491.25575766891666, 513.2605214635414, 535.265285258166, 557.2700490527908, 579.2748128474155, 601.2795766420402, 623.2843404366649, 645.2891042312897, 667.2938680259143, 689.2986318205391, 711.3033956151638, 733.3081594097886, 755.3129232044132, 777.317686999038, 799.3224507936627, 821.3272145882873, 843.3319783829121, 865.3367421775368, 887.3415059721616, 909.3462697667862, 931.351033561411, 953.3557973560357], "h075_cap": [10, 12, 43, 66, 84, 80, 76, 93, 95, 78, 77, 57, 41, 34, 28, 32, 15, 16, 16, 18, 3, 3, 4, 5, 5, 3, 0, 2, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1], "e075_cap": [322.25040832646596, 408.42382205828983, 494.59723579011376, 580.7706495219377, 666.9440632537616, 753.1174769855854, 839.2908907174094, 925.4643044492333, 1011.6377181810572, 1097.8111319128811, 1183.984545644705, 1270.1579593765289, 1356.3313731083529, 1442.5047868401766, 1528.6782005720006, 1614.8516143038244, 1701.0250280356483, 1787.1984417674723, 1873.371855499296, 1959.54526923112, 2045.7186829629438, 2131.892096694768, 2218.0655104265916, 2304.2389241584156, 2390.4123378902395, 2476.585751622063, 2562.7591653538875, 2648.932579085711, 2735.1059928175355, 2821.279406549359, 2907.4528202811825, 2993.626234013007, 3079.7996477448305, 3165.973061476655, 3252.1464752084785, 3338.319888940302, 3424.4933026721264, 3510.66671640395, 3596.8401301357744, 3683.013543867598, 3769.1869575994215], "h100_dd": [5, 10, 15, 41, 54, 75, 78, 97, 87, 73, 56, 67, 62, 58, 54, 35, 26, 15, 16, 14, 13, 12, 7, 11, 3, 4, 3, 1, 3, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1], "e100_dd": [4.381849831637557, 4.6966934693247016, 5.011537107011846, 5.326380744698991, 5.641224382386136, 5.95606802007328, 6.270911657760426, 6.58575529544757, 6.900598933134715, 7.2154425708218595, 7.530286208509004, 7.84512984619615, 8.159973483883293, 8.474817121570439, 8.789660759257583, 9.104504396944728, 9.419348034631874, 9.734191672319017, 10.049035310006161, 10.363878947693307, 10.678722585380452, 10.993566223067596, 11.308409860754741, 11.623253498441887, 11.93809713612903, 12.252940773816174, 12.567784411503322, 12.882628049190465, 13.19747168687761, 13.512315324564753, 13.8271589622519, 14.142002599939044, 14.456846237626188, 14.771689875313335, 15.086533513000479, 15.401377150687622, 15.716220788374766, 16.031064426061914, 16.345908063749057, 16.6607517014362, 16.975595339123345], "h075_dd": [1, 4, 16, 47, 69, 77, 82, 106, 109, 74, 64, 60, 56, 59, 47, 35, 21, 15, 11, 9, 8, 11, 5, 6, 3, 2, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1], "e075_dd": [3.311441603759937, 3.5392876621726375, 3.7671337205853375, 3.9949797789980375, 4.222825837410738, 4.450671895823438, 4.678517954236138, 4.906364012648838, 5.134210071061538, 5.362056129474238, 5.589902187886939, 5.81774824629964, 6.04559430471234, 6.27344036312504, 6.50128642153774, 6.72913247995044, 6.95697853836314, 7.18482459677584, 7.41267065518854, 7.640516713601242, 7.868362772013942, 8.096208830426642, 8.324054888839342, 8.551900947252042, 8.779747005664742, 9.007593064077442, 9.235439122490142, 9.463285180902844, 9.691131239315544, 9.918977297728244, 10.146823356140944, 10.374669414553644, 10.602515472966344, 10.830361531379044, 11.058207589791744, 11.286053648204446, 11.513899706617144, 11.741745765029846, 11.969591823442546, 12.197437881855246, 12.425283940267946]};
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e293b';
+Chart.defaults.font.family = 'Courier New, monospace';
+Chart.defaults.font.size = 11;
+
+// ── Capital final ─────────────────────────────────────────────────────────
+const ctxC = document.getElementById('chartCap').getContext('2d');
+new Chart(ctxC, {
+  type: 'bar',
+  data: {
+    labels: D.e100_cap.slice(0,-1).map(e => e.toFixed(0)+'k'),
+    datasets: [
+      {
+        label: '×1.00',
+        data: D.h100_cap,
+        backgroundColor: 'rgba(59,130,246,0.6)',
+        borderColor: 'rgba(59,130,246,0.9)',
+        borderWidth: 1,
+      },
+      {
+        label: '×0.75',
+        data: D.h075_cap,
+        backgroundColor: 'rgba(167,139,250,0.6)',
+        borderColor: 'rgba(167,139,250,0.9)',
+        borderWidth: 1,
+      },
+    ],
+  },
+  options: {
+    animation: false, responsive: true,
+    plugins: {
+      legend: {display:true,labels:{color:'#94a3b8'}},
+      tooltip: {callbacks: {label: ctx => ` ${ctx.raw} sims`}},
+    },
+    scales: {
+      x: {ticks:{maxTicksLimit:8,color:'#475569'},grid:{color:'rgba(30,41,59,0.8)'},
+           title:{display:true,text:'Capital final (miles €)',color:'#475569'}},
+      y: {ticks:{color:'#475569'},grid:{color:'rgba(30,41,59,0.8)'},
+           title:{display:true,text:'Simulaciones',color:'#475569'}},
+    },
+  },
+});
+
+// ── Drawdown máximo ───────────────────────────────────────────────────────
+const ctxD = document.getElementById('chartDD').getContext('2d');
+new Chart(ctxD, {
+  type: 'bar',
+  data: {
+    labels: D.e100_dd.slice(0,-1).map(e => e.toFixed(1)+'%'),
+    datasets: [
+      {
+        label: '×1.00',
+        data: D.h100_dd,
+        backgroundColor: 'rgba(59,130,246,0.6)',
+        borderColor: 'rgba(59,130,246,0.9)',
+        borderWidth: 1,
+      },
+      {
+        label: '×0.75',
+        data: D.h075_dd,
+        backgroundColor: 'rgba(167,139,250,0.6)',
+        borderColor: 'rgba(167,139,250,0.9)',
+        borderWidth: 1,
+      },
+    ],
+  },
+  options: {
+    animation: false, responsive: true,
+    plugins: {
+      legend: {display:true,labels:{color:'#94a3b8'}},
+      tooltip: {callbacks: {label: ctx => ` ${ctx.raw} sims`}},
+    },
+    scales: {
+      x: {ticks:{maxTicksLimit:8,color:'#475569'},grid:{color:'rgba(30,41,59,0.8)'},
+           title:{display:true,text:'Drawdown máximo (%)',color:'#475569'}},
+      y: {ticks:{color:'#475569'},grid:{color:'rgba(30,41,59,0.8)'},
+           title:{display:true,text:'Simulaciones',color:'#475569'}},
+    },
+  },
+});
+</script>
+</body>
+</html>
