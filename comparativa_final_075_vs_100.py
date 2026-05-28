@@ -657,7 +657,7 @@ tr:last-child td{{border-bottom:none}}
   <div class="params">
     <div class="param">Capital inicial <span>4.000 €</span></div>
     <div class="param">Aportación anual <span>4.000 €</span></div>
-    <div class="param">Período <span>2006 – 2025</span></div>
+    <div class="param">Período <span>2005 – 2025</span></div>
     <div class="param">Metodología MC <span>Bootstrap trade-level</span></div>
     <div class="param">Simulaciones MC <span>{N_SIMS:,}</span></div>
   </div>
@@ -669,7 +669,7 @@ tr:last-child td{{border-bottom:none}}
 <div class="sec">
   <div class="sec-hdr">
     <span class="sec-title">Resumen Ejecutivo</span>
-    <span class="sec-sub">Backtest completo 2006-2025 — 4.000 € + 4.000 €/año</span>
+    <span class="sec-sub">Backtest completo 2005-2025 — 4.000 € + 4.000 €/año</span>
   </div>
   <div class="verdict-row">
     <div class="vcard">
@@ -710,7 +710,7 @@ tr:last-child td{{border-bottom:none}}
           <td><span class="badge {'badge-green' if cap_final_075 >= cap_final_100*0.95 else 'badge-red'}">{'' if cap_final_075>=cap_final_100 else ''} {'↑ Mejor' if cap_final_075>cap_final_100 else '≈ Similar' if cap_final_075>=cap_final_100*0.95 else '↓ Inferior'}</span></td>
         </tr>
         <tr>
-          <td class="left">CAGR (20 años)</td>
+          <td class="left">CAGR (21 años)</td>
           <td class="factor-100">{cagr(cap_final_100,CAPITAL_INICIAL,YEARS):.1%}</td>
           <td class="factor-075">{cagr(cap_final_075,CAPITAL_INICIAL,YEARS):.1%}</td>
           <td class="{delta_cls(cagr(cap_final_075,CAPITAL_INICIAL,YEARS), cagr(cap_final_100,CAPITAL_INICIAL,YEARS))}">{delta_str(cagr(cap_final_075,CAPITAL_INICIAL,YEARS), cagr(cap_final_100,CAPITAL_INICIAL,YEARS))}</td>
@@ -747,7 +747,7 @@ tr:last-child td{{border-bottom:none}}
       </tbody>
     </table>
   </div>
-  <div class="note">* Capital inicial 4.000 € + 4.000 €/año (2006-2025). ×1.00 = motor backtest_expandido.py. ×0.75 = backtest_exp40ter.py factor=0.75 sobre trailing stop ATR.</div>
+  <div class="note">* Capital inicial 4.000 € + 4.000 €/año (2005-2025). ×1.00 y ×0.75 = mismo motor backtest_exp40ter.py. Factor aplicado al trailing stop ATR.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
