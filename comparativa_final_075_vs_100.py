@@ -455,12 +455,18 @@ for nombre, (p_start, p_end) in CRISIS.items():
 print("\n[4/4] Montecarlo (1.000 sims × 2 factores)...")
 
 def ejecutar_montecarlo(trades_list, label):
-    """Bootstrap trade-level: muestrea retornos con reposición desde 4.000 €."""
+    """Bootstrap trade-level con aportaciones anuales — mismo escenario que el backtest."""
     df = pd.DataFrame(trades_list)
     df = df[df["resultado"] != "OPEN→CLOSE"].copy()
     df["cap_antes"] = df["capital"] - df["pnl"]
     df = df[df["cap_antes"] > 0]
     df["r"] = df["pnl"] / df["cap_antes"]
+
+    # Distribución temporal: nº de trades por año calendario del backtest
+    df["year"] = pd.to_datetime(df["fecha_salida"]).dt.year
+    trades_por_año = df.groupby("year").size().sort_index().values
+    n_años = len(trades_por_año)
+
     returns  = df["r"].values
     n_trades = len(returns)
 
@@ -471,15 +477,32 @@ def ejecutar_montecarlo(trades_list, label):
 
     for i in range(N_SIMS):
         sample = RNG.choice(returns, size=n_trades, replace=True)
-        eq     = np.empty(n_trades + 1)
-        eq[0]  = CAPITAL_INICIAL
-        for j in range(n_trades):
-            eq[j+1] = eq[j] * (1.0 + sample[j])
-        final_caps[i] = eq[-1]
-        peak = np.maximum.accumulate(eq)
-        dds  = (eq - peak) / peak
+        cap    = CAPITAL_INICIAL
+        peak   = CAPITAL_INICIAL
+        eq     = [cap]
+        idx    = 0
+
+        for año_i, n_año in enumerate(trades_por_año):
+            # Aportación al inicio de cada año (igual que el backtest)
+            if año_i > 0:
+                cap += APORTACION_ANUAL
+                if cap > peak:
+                    peak = cap
+                eq.append(cap)
+            # Trades del año
+            for _ in range(n_año):
+                cap = cap * (1.0 + sample[idx])
+                idx += 1
+                eq.append(cap)
+                if cap > peak:
+                    peak = cap
+
+        eq_arr = np.array(eq)
+        final_caps[i] = eq_arr[-1]
+        peak_arr = np.maximum.accumulate(eq_arr)
+        dds = (eq_arr - peak_arr) / peak_arr
         max_dds[i] = dds.min()
-        if (eq < ruin_level).any():
+        if (eq_arr < ruin_level).any():
             ruin_hits[i] = True
 
     p5, p25, p50, p75, p95 = np.percentile(final_caps, [5, 25, 50, 75, 95])
@@ -489,12 +512,13 @@ def ejecutar_montecarlo(trades_list, label):
     ruin   = ruin_hits.mean()
 
     result = {
-        "n_trades": n_trades,
-        "r_mean"  : returns.mean(),
-        "r_std"   : returns.std(),
-        "p5"      : p5,   "p25": p25, "p50": p50,
-        "p75"     : p75,  "p95": p95,
-        "dd_p50"  : dd_p50, "dd_p95": dd_p95,
+        "n_trades" : n_trades,
+        "n_años"   : n_años,
+        "r_mean"   : returns.mean(),
+        "r_std"    : returns.std(),
+        "p5"       : p5,   "p25": p25, "p50": p50,
+        "p75"      : p75,  "p95": p95,
+        "dd_p50"   : dd_p50, "dd_p95": dd_p95,
         "ruin_prob": ruin,
         "all_final": final_caps.tolist(),
         "all_dd"   : dd_abs.tolist(),
@@ -875,7 +899,7 @@ html += f"""
 <div class="sec">
   <div class="sec-hdr">
     <span class="sec-title">Análisis Montecarlo</span>
-    <span class="sec-sub">{N_SIMS:,} simulaciones bootstrap trade-level · Capital inicio 4.000 € · Misma metodología para ×1.00 y ×0.75</span>
+    <span class="sec-sub">{N_SIMS:,} simulaciones bootstrap trade-level · Capital 4.000 € + 4.000 €/año · Misma metodología para ×1.00 y ×0.75</span>
   </div>
 
   <div class="tbl-wrap" style="margin-bottom:20px">
@@ -960,8 +984,7 @@ html += f"""
       <canvas id="chartDD"></canvas>
     </div>
   </div>
-  <div class="note">* Bootstrap trade-level: se muestrean los retornos por trade con reposición desde 4.000 € de capital.
-  Sin aportaciones anuales en la simulación (metodología trade-level). Los retornos de cada trade ya incorporan la dinámica del capital real del backtest.</div>
+  <div class="note">* Bootstrap trade-level: se muestrean los retornos por trade con reposición desde 4.000 € de capital + 4.000 €/año al inicio de cada año, igual que el backtest. La distribución temporal de trades por año se preserva del backtest real.</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
