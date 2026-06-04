@@ -22,7 +22,7 @@ from logger import log_event
 # --------------------------------------------------
 
 IBKR_HOST      = os.getenv("IBKR_HOST",      "127.0.0.1")
-IBKR_PORT      = int(os.getenv("IBKR_PORT",  "7497"))
+IBKR_PORT      = int(os.getenv("IBKR_PORT",  "4002"))
 IBKR_CLIENT_ID = int(os.getenv("IBKR_CLIENT_ID", "1"))
 
 MAX_RETRIES    = 3       # Número máximo de intentos de conexión
@@ -48,7 +48,7 @@ def conectar_ib():
             log_event("INFO", f"Conectando a IBKR (intento {intento}/{MAX_RETRIES}) "
                                f"→ {IBKR_HOST}:{IBKR_PORT} clientId={IBKR_CLIENT_ID}")
 
-            ib.connect(IBKR_HOST, IBKR_PORT, clientId=IBKR_CLIENT_ID, timeout=10)
+            ib.connect(IBKR_HOST, IBKR_PORT, clientId=IBKR_CLIENT_ID, timeout=20)
 
             if ib.isConnected():
                 log_event("INFO", f"Conexión IBKR establecida en intento {intento}")

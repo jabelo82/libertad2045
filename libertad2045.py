@@ -136,7 +136,6 @@ def git_backup(capital: float | None) -> tuple[bool, str]:
         list(_PROJECT_DIR.glob("*.py")) +
         list(_PROJECT_DIR.glob("*.md")) +
         list(_PROJECT_DIR.glob("*.sh")) +
-        list(_PROJECT_DIR.glob("*.txt")) +
         [_PROJECT_DIR / ".gitignore"]
     )
     _nombres = [str(f.relative_to(_PROJECT_DIR)) for f in _archivos if f.exists()]
@@ -292,7 +291,7 @@ def main():
         except Exception as e:
             log_event("WARN", f"V3: no se pudieron verificar posiciones: {e}")
 
-   # Escaneo del universo
+        # Escaneo del universo
         # --------------------------------------------------
 
         signals       = []

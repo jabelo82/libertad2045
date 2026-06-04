@@ -98,6 +98,8 @@ def check_ordenes_gtc(ib):
     if ib is None:
         return False, "Sin conexión IBKR — no se puede verificar", {}
     try:
+        ib.reqAllOpenOrders()
+        ib.sleep(2)
         trades         = ib.trades()
         gtc_activas    = []
         gtc_canceladas = []
@@ -172,11 +174,19 @@ def relanzar_bot():
             modo_relaunch = "PAPER"
 
         log_path = PROJECT_DIR / "logs" / f"watchdog_relaunch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        RELAUNCH_WAIT = 30
         with open(log_path, "w") as log_file:
             proc = subprocess.Popen(
                 [str(VENV_PYTHON), str(BOT_SCRIPT)],
                 cwd=str(PROJECT_DIR), env=env,
                 stdout=log_file, stderr=log_file,
+            )
+        time.sleep(RELAUNCH_WAIT)
+        if proc.poll() is not None:
+            _send(
+                f"🔴 LIBERTAD_2045 — Watchdog: bot relanzado pero terminó en "
+                f"{RELAUNCH_WAIT}s (crash temprano). Revisar log: {log_path.name}",
+                critico=True,
             )
         return True, f"Bot relanzado en modo {modo_relaunch} (PID {proc.pid}) — log: {log_path.name}"
     except Exception as e:

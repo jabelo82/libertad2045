@@ -37,7 +37,7 @@ def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
         bars = ib.reqHistoricalData(
             contract,
             endDateTime="",
-            durationStr="2 Y",
+            durationStr=duration,
             barSizeSetting=bar_size,
             whatToShow="TRADES",
             useRTH=True

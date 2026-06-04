@@ -235,6 +235,26 @@ def actualizar_archivo(tickers_por_sector: dict, n_total: int, fecha: str) -> bo
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# NOTIFICACIONES
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _notify(añadidos: list, eliminados: list):
+    """Envía alerta Telegram cuando el universo S&P500 cambia."""
+    try:
+        from telegram import send_telegram
+        partes = []
+        if añadidos:
+            muestra = ", ".join(añadidos[:10]) + ("…" if len(añadidos) > 10 else "")
+            partes.append(f"Añadidos ({len(añadidos)}): {muestra}")
+        if eliminados:
+            muestra = ", ".join(eliminados[:10]) + ("…" if len(eliminados) > 10 else "")
+            partes.append(f"Eliminados ({len(eliminados)}): {muestra}")
+        send_telegram("🔄 LIBERTAD_2045 — Universo S&P500 actualizado\n" + "\n".join(partes))
+    except Exception as e:
+        _log("WARN", f"Telegram no disponible: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -347,6 +367,7 @@ def actualizar_universo(dry_run: bool = False) -> dict:
          f"(+{len(añadidos_validados)} / -{len(eliminados)})")
 
     resultado["ok"] = True
+    _notify(resultado["añadidos"], resultado["eliminados"])
     return resultado
 
 

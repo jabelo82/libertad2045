@@ -75,7 +75,7 @@ def _obtener_gtc_stops(ib) -> dict:
     Usa el mismo patrón que evaluar_stops_por_cierre() en portfolio_manager.
     """
     ib.reqAllOpenOrders()
-    ib.sleep(1)
+    ib.sleep(2)
 
     stops = {}
     for trade in ib.trades():

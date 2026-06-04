@@ -59,7 +59,7 @@ def detectar_senal(df):
     # --------------------------------------------------
 
     tendencia = (
-        last.close  > last.SMA200 and
+        last.SMA50  > last.SMA200 and
         last.SMA200 > prev.SMA200
     )
 
@@ -77,6 +77,9 @@ def detectar_senal(df):
     # al ATR del activo — exige más corrección en activos volátiles y menos
     # en activos estables. Umbral: SMA50 - 0.75 × ATR
     # --------------------------------------------------
+
+    if len(df) < 5:
+        return False
 
     pullback = False
     for j in range(-4, -1):  # días: -4, -3, -2 (3 días antes de hoy)
