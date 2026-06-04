@@ -288,12 +288,54 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
                     trade = ib.placeOrder(contrato, orden_cierre)
                     ib.sleep(2)
 
+                    estado_cierre = trade.orderStatus.status
+
                     log_event("INFO",
                               f"Orden MKT enviada | {symbol} | {shares} acc. | "
-                              f"estado={trade.orderStatus.status}",
+                              f"estado={estado_cierre}",
                               symbol=symbol)
 
-                    cerrados.append(symbol)
+                    if estado_cierre in ("Cancelled", "Inactive"):
+                        # La orden fue rechazada — la posición sigue abierta.
+                        # Recolocar un stop GTC de emergencia para no dejarla sin protección.
+                        log_event("ERROR",
+                                  f"Orden MKT RECHAZADA ({estado_cierre}) | {symbol} | "
+                                  f"posición sigue abierta — recolocando stop GTC de emergencia",
+                                  symbol=symbol)
+                        try:
+                            from telegram import send_telegram_critical
+                            send_telegram_critical(
+                                f"🔴 LIBERTAD_2045 — {symbol}: orden de cierre RECHAZADA "
+                                f"({estado_cierre}). Posición sigue abierta. "
+                                f"Stop GTC de emergencia recolocado automáticamente."
+                            )
+                        except Exception:
+                            pass
+                        # Recolocar stop GTC con el nivel anterior
+                        try:
+                            contrato_em = pos.contract
+                            contrato_em.exchange = "SMART"
+                            if ib.qualifyContracts(contrato_em):
+                                stop_em = Order()
+                                stop_em.action        = "SELL"
+                                stop_em.orderType     = "STP"
+                                stop_em.totalQuantity = int(abs(pos.position))
+                                stop_em.auxPrice      = stop_level
+                                stop_em.tif           = "GTC"
+                                stop_em.transmit      = True
+                                ib.placeOrder(contrato_em, stop_em)
+                                ib.sleep(1)
+                                log_event("INFO",
+                                          f"Stop GTC de emergencia recolocado | {symbol} | "
+                                          f"stop={stop_level:.2f}",
+                                          symbol=symbol)
+                        except Exception as e_em:
+                            log_event("ERROR",
+                                      f"Error recolocando stop de emergencia para {symbol}: {e_em}",
+                                      symbol=symbol)
+                        # NO añadir a cerrados — la posición sigue abierta
+                    else:
+                        cerrados.append(symbol)
 
                 except Exception as e:
                     log_event("ERROR", f"Error cerrando posición {symbol}: {e}", symbol=symbol)
