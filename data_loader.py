@@ -13,7 +13,7 @@ from logger import log_event
 ATR_PERCENTIL_VENTANA = 252   # Días para calcular el percentil histórico del ATR
 
 
-def obtener_datos(ib, symbol, duration="1 Y", bar_size="1 day"):
+def obtener_datos(ib, symbol, duration="2 Y", bar_size="1 day"):
     """
     Descarga datos históricos desde IBKR y devuelve un DataFrame
     con indicadores calculados y listos para el signal engine.
