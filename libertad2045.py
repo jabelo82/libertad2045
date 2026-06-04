@@ -40,11 +40,9 @@ def registrar_fills_recientes(ib):
     Detecta fills de BUY STOP ocurridos desde el ciclo anterior y los registra
     como TRADE_FILLED con el precio real de ejecución.
 
-    Una BUY STOP se coloca a las 22:10 y se ejecuta durante el horario de mercado
-    del día siguiente — cuando el bot no está corriendo. Este mecanismo revisa el
-    historial de ejecuciones de la sesión activa de Gateway al inicio de cada ciclo.
-
-    Deduplicación via FILLS_IDS_FILE (execId único por ejecución IBKR, cap 1000).
+    FIX: consolida fills parciales del mismo símbolo en un único registro,
+    usando el precio promedio ponderado y el total de acciones.
+    FIX: registra el stop_loss buscando la orden hija GTC asociada al fill.
     """
     try:
         ib.reqExecutions()
@@ -54,7 +52,10 @@ def registrar_fills_recientes(ib):
         if FILLS_IDS_FILE.exists():
             logged_ids = set(FILLS_IDS_FILE.read_text().strip().splitlines())
 
+        # Agrupar fills por símbolo — consolida parciales
+        fills_por_simbolo = {}
         nuevos_ids = []
+
         for fill in ib.fills():
             exec_id = fill.execution.execId
             if exec_id in logged_ids:
@@ -62,19 +63,57 @@ def registrar_fills_recientes(ib):
             if fill.execution.side != "BOT":
                 continue
 
+            symbol = fill.contract.symbol
+            precio = fill.execution.price
+            qty    = int(fill.execution.shares)
+
+            if symbol not in fills_por_simbolo:
+                fills_por_simbolo[symbol] = {
+                    "total_qty":    0,
+                    "precio_sum":   0.0,
+                    "exec_ids":     [],
+                    "contract":     fill.contract,
+                }
+
+            fills_por_simbolo[symbol]["total_qty"]  += qty
+            fills_por_simbolo[symbol]["precio_sum"] += precio * qty
+            fills_por_simbolo[symbol]["exec_ids"].append(exec_id)
+
+        # Buscar stops GTC activos para recuperar el precio de stop
+        ib.reqAllOpenOrders()
+        ib.sleep(1)
+        stops_gtc = {}
+        for trade in ib.trades():
+            if (trade.order.orderType in ("STP", "TRAIL")
+                    and trade.order.action == "SELL"
+                    and trade.order.tif == "GTC"):
+                stops_gtc[trade.contract.symbol] = getattr(
+                    trade.order, "auxPrice", None
+                )
+
+        # Registrar un único evento consolidado por símbolo
+        for symbol, datos in fills_por_simbolo.items():
+            total_qty   = datos["total_qty"]
+            precio_prom = round(datos["precio_sum"] / total_qty, 2)
+            stop_price  = stops_gtc.get(symbol, "")
+
             log_event(
                 "TRADE_FILLED",
-                f"Fill BUY STOP confirmado | precio_real={fill.execution.price:.2f}",
-                symbol=fill.contract.symbol,
-                shares=int(fill.execution.shares),
-                entry=round(fill.execution.price, 2),
+                f"Fill BUY STOP confirmado | precio_real={precio_prom:.2f}"
+                + (f" | fills_parciales={len(datos['exec_ids'])}"
+                   if len(datos["exec_ids"]) > 1 else ""),
+                symbol=symbol,
+                shares=total_qty,
+                entry=precio_prom,
+                stop=stop_price if stop_price else "",
             )
-            nuevos_ids.append(exec_id)
+            nuevos_ids.extend(datos["exec_ids"])
 
         if nuevos_ids:
             todas = list(logged_ids) + nuevos_ids
             FILLS_IDS_FILE.write_text("\n".join(todas[-1000:]))
-            log_event("INFO", f"Fills nuevos registrados: {len(nuevos_ids)}")
+            log_event("INFO", f"Fills nuevos registrados: {len(fills_por_simbolo)} símbolos "
+                               f"({len(nuevos_ids)} ejecuciones parciales)")
 
     except Exception as e:
         log_event("WARN", f"registrar_fills_recientes: {e}")

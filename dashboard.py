@@ -192,8 +192,22 @@ def leer_logs():
                     if level == "TRADE_FILLED" or "TRADE_EXECUTED" in event:
                         if symbol and shares:
                             try:
-                                trades.append({"ts": ts, "symbol": symbol,
-                                               "shares": shares, "entry": entry, "stop": stop})
+                                # FIX: deduplicación de fills parciales por (fecha, symbol)
+                                existing = next(
+                                    (t for t in trades
+                                     if t["ts"][:10] == ts[:10] and t["symbol"] == symbol),
+                                    None
+                                )
+                                if existing is None:
+                                    trades.append({"ts": ts, "symbol": symbol,
+                                                   "shares": shares, "entry": entry, "stop": stop})
+                                else:
+                                    try:
+                                        existing["shares"] = str(int(existing["shares"]) + int(shares))
+                                    except (ValueError, TypeError):
+                                        pass
+                                    if not existing["stop"] and stop:
+                                        existing["stop"] = stop
                             except Exception:
                                 pass
                     elif level == "TRADE":
