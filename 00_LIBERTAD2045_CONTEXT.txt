@@ -62,6 +62,9 @@ Commits principales en producción:
   3d88ea3  dashboard: Trades actuales desde cartera IBKR, cerrados desde logs
   29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas, retención logs 10y
   966242f  backtest_expandido: alinear señal tendencia con producción (SMA50>SMA200)
+  —        reconstruir_salidas.py: 12 TRADE_SOLD escritos en logs históricos
+           (BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC, LLY, OXY, R, TER)
+           precios aproximados vía yfinance (cierre del día de primera ausencia)
 
 FIXES APLICADOS EN v2.4:
 
@@ -102,6 +105,12 @@ FIXES APLICADOS EN v2.4:
   · portfolio_manager.py  Posición corta detectada: alerta Telegram crítica + skip.
   · libertad2045.py       ConnectionError de conectar_ib() capturado — C1 funcional.
   · logger.py             Retención logs 90d → 3650d (10 años, sobreescribible via .env).
+  · reconstruir_salidas.py Script de reconstrucción de salidas históricas. Lee logs,
+                          detecta cierres por primera ausencia en Posiciones ocupadas,
+                          cruza con TRADE_SOLD/STOP_ACTIVADO existentes, usa yfinance
+                          batch como fallback. --dry-run disponible. 12 trades escritos
+                          (05/06/2026): BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC,
+                          LLY, OXY, R, TER. 8 BUY STOP no ejecutados ignorados.
   · run_bot.sh            PROJECT_DIR sobreescribible. PID stale detectado.
   · watchdog.sh           PROJECT_DIR sobreescribible.
   · .gitignore            Entradas faltantes añadidas
