@@ -33,6 +33,14 @@ MODE = os.getenv("TRADING_MODE", "SIM")
 
 _PROJECT_DIR   = Path(__file__).resolve().parent
 FILLS_IDS_FILE = _PROJECT_DIR / "logged_exec_ids.txt"
+_LAST_RUN_FILE = _PROJECT_DIR / "last_run.txt"
+
+
+def _escribir_last_run():
+    try:
+        _LAST_RUN_FILE.write_text(datetime.now().isoformat())
+    except Exception as e:
+        log_event("WARN", f"No se pudo escribir last_run.txt: {e}")
 
 
 def registrar_fills_recientes(ib):
@@ -201,8 +209,17 @@ def main():
         ib = conectar_ib()
 
         if not ib.isConnected():
-            log_event("ERROR", "IBKR connection failed")
+            log_event("ERROR", "Sin conexión IBKR — se intentan stops y rebalanceo igualmente")
             send_telegram_critical("⚠️ LIBERTAD_2045: conexión IBKR fallida")
+            try:
+                evaluar_stops_por_cierre(ib)
+            except Exception as e:
+                log_event("ERROR", f"C1: stops fallaron con IB caído: {e}")
+            try:
+                rebalancear(ib, 0, mode=MODE)
+            except Exception as e:
+                log_event("ERROR", f"C1: rebalanceo falló con IB caído: {e}")
+            _escribir_last_run()
             return
 
         registrar_fills_recientes(ib)
@@ -215,8 +232,17 @@ def main():
         capital = obtener_capital(ib)
 
         if capital is None:
-            log_event("ERROR", "No se pudo obtener el capital de la cuenta")
+            log_event("WARN", "Capital no disponible — stops y rebalanceo corren igualmente")
             send_telegram_critical("⚠️ LIBERTAD_2045: no se pudo leer el capital de IBKR")
+            try:
+                posiciones_cerradas = evaluar_stops_por_cierre(ib)
+            except Exception as e:
+                log_event("ERROR", f"C1: stops fallaron sin capital: {e}")
+            try:
+                rebalancear(ib, 0, mode=MODE)
+            except Exception as e:
+                log_event("ERROR", f"C1: rebalanceo falló sin capital: {e}")
+            _escribir_last_run()
             return
 
         log_event("INFO", f"Capital disponible: {capital:.2f}")
@@ -262,7 +288,9 @@ def main():
 
         if not risk_check(ib):
             log_event("WARN", "Risk Guardian bloqueó nuevas entradas — gestión de posiciones completada")
-            send_telegram_critical("⚠️ LIBERTAD_2045 detenido por Risk Guardian")
+            send_telegram_critical("⚠️ LIBERTAD_2045 — Risk Guardian: nuevas entradas bloqueadas. Stops y rebalanceo activos.")
+            _escribir_last_run()
+            log_event("INFO", "last_run.txt actualizado — RG bloqueó entradas pero ciclo completado")
             return
 
 

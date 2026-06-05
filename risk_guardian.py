@@ -143,7 +143,7 @@ def risk_check(ib):
         if drawdown > MAX_DRAWDOWN_PCT:
             log_event("WARN", f"Risk Guardian: drawdown máximo superado "
                                f"({drawdown:.2%} > límite {MAX_DRAWDOWN_PCT:.2%}). "
-                               f"Sistema detenido.")
+                               f"Entradas bloqueadas.")
             return False
  
  
@@ -167,7 +167,7 @@ def risk_check(ib):
             log_event("WARN", f"Risk Guardian: apalancamiento no permitido "
                                f"({leverage:.2f}x > límite {MAX_LEVERAGE:.2f}x). "
                                f"LIBERTAD_2045 opera exclusivamente con capital propio. "
-                               f"Sistema detenido.")
+                               f"Entradas bloqueadas.")
             return False
  
     else:
