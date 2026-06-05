@@ -58,6 +58,7 @@ Commits principales en producción:
   dc55105  gitignore: añadir entradas faltantes
   11bdbfd  Fill SELL: registrar precio real de salida en logs y dashboard
   2c23726  github_publisher: __main__ publica dashboard principal
+  3532dc8  dashboard: Trades actuales vs ejecutados, eliminar historial sesiones
 
 FIXES APLICADOS EN v2.4:
 
@@ -78,6 +79,9 @@ FIXES APLICADOS EN v2.4:
   · portfolio_manager.py  MKT rechazada recoloca stop GTC automáticamente
                           auto_adjust=True en yfinance (splits)
   · dashboard.py          Deduplicación fills O(n²)→O(1) con set
+                          Sección "Trades actuales" (posiciones abiertas) separada
+                          de "Trades ejecutados" (cerrados). PnL cerrados usa
+                          precio de salida real. Historial de sesiones eliminado.
   · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
                           registrar_fills_recientes: consolida fills parciales,
                           registra stop GTC asociado
