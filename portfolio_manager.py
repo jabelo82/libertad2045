@@ -177,8 +177,11 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
 
                 # Cancelar orden GTC existente
                 try:
-                    ib.cancelOrder(stops_gtc[symbol].order)
-                    ib.sleep(1)
+                    if mode in ("PAPER", "LIVE"):
+                        ib.cancelOrder(stops_gtc[symbol].order)
+                        ib.sleep(1)
+                    else:
+                        log_event("SIM", f"CancelOrder simulado — GTC no tocado", symbol=symbol)
                 except Exception as e:
                     log_event("WARN", f"Error cancelando GTC de {symbol}: {e}", symbol=symbol)
 
