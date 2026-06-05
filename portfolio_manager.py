@@ -181,6 +181,25 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
 
             symbol = pos.contract.symbol
 
+            # Posición corta — no contemplada en la estrategia
+            # Alerta crítica y saltar sin tocar la posición
+            if pos.position < 0:
+                log_event("ERROR",
+                          f"POSICIÓN CORTA DETECTADA | {symbol} | "
+                          f"{pos.position} acc — estrategia solo opera largo. "
+                          f"Intervención manual requerida.",
+                          symbol=symbol)
+                try:
+                    from telegram import send_telegram_critical
+                    send_telegram_critical(
+                        f"🔴 LIBERTAD_2045 — POSICIÓN CORTA: {symbol} "
+                        f"({pos.position} acc). El sistema NO cierra cortos. "
+                        f"Cerrar manualmente en IBKR inmediatamente."
+                    )
+                except Exception:
+                    pass
+                continue  # No tocar — SELL empeoraría el corto
+
             # Obtener precio de cierre del día
             try:
                 bars = ib.reqHistoricalData(

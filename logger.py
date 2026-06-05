@@ -10,7 +10,7 @@ from pathlib import Path
 # --------------------------------------------------
 
 LOG_DIR          = str(Path(__file__).resolve().parent / "logs")
-LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "3650"))
 
 
 def log_event(level, event, symbol="", score="", shares="", entry="", stop=""):

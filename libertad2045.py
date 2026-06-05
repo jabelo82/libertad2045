@@ -224,19 +224,24 @@ def main():
         # Conexión con Interactive Brokers
         # --------------------------------------------------
 
-        ib = conectar_ib()
-
-        if not ib.isConnected():
-            log_event("ERROR", "Sin conexión IBKR — se intentan stops y rebalanceo igualmente")
-            send_telegram_critical("⚠️ LIBERTAD_2045: conexión IBKR fallida")
+        try:
+            ib = conectar_ib()
+        except ConnectionError as e:
+            log_event("ERROR", f"Conexión IBKR fallida: {e} — se intentan stops y rebalanceo con IB anterior")
+            send_telegram_critical(f"⚠️ LIBERTAD_2045: conexión IBKR fallida ({e})")
             try:
                 evaluar_stops_por_cierre(ib)
-            except Exception as e:
-                log_event("ERROR", f"C1: stops fallaron con IB caído: {e}")
+            except Exception as e2:
+                log_event("ERROR", f"C1: stops fallaron con IB caído: {e2}")
             try:
                 rebalancear(ib, 0, mode=MODE)
-            except Exception as e:
-                log_event("ERROR", f"C1: rebalanceo falló con IB caído: {e}")
+            except Exception as e2:
+                log_event("ERROR", f"C1: rebalanceo falló con IB caído: {e2}")
+            _escribir_last_run()
+            return
+
+        if not ib.isConnected():
+            log_event("ERROR", "Sin conexión IBKR tras connect() — abortando")
             _escribir_last_run()
             return
 
