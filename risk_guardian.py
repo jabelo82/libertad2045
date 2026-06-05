@@ -172,7 +172,16 @@ def risk_check(ib):
  
     else:
         log_event("WARN", "Risk Guardian: GrossPositionValue no disponible — "
-                           "verificación de apalancamiento omitida este ciclo")
+                           "bloqueando nuevas entradas por precaución (fail-safe)")
+        try:
+            from telegram import send_telegram_critical
+            send_telegram_critical(
+                "⚠️ LIBERTAD_2045 — Risk Guardian: GrossPositionValue no disponible. "
+                "Nuevas entradas bloqueadas este ciclo por precaución."
+            )
+        except Exception:
+            pass
+        return False
  
  
     # --------------------------------------------------
