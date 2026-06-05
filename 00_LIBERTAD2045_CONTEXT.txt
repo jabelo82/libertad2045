@@ -59,6 +59,7 @@ Commits principales en producción:
   11bdbfd  Fill SELL: registrar precio real de salida en logs y dashboard
   2c23726  github_publisher: __main__ publica dashboard principal
   3532dc8  dashboard: Trades actuales vs ejecutados, eliminar historial sesiones
+  3d88ea3  dashboard: Trades actuales desde cartera IBKR, cerrados desde logs
   29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas, retención logs 10y
   966242f  backtest_expandido: alinear señal tendencia con producción (SMA50>SMA200)
 
@@ -84,6 +85,8 @@ FIXES APLICADOS EN v2.4:
                           Sección "Trades actuales" (posiciones abiertas) separada
                           de "Trades ejecutados" (cerrados). PnL cerrados usa
                           precio de salida real. Historial de sesiones eliminado.
+                          Trades actuales construidos desde cartera IBKR (labels),
+                          no desde logs — fuente de verdad para posiciones abiertas.
   · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
                           registrar_fills_recientes: consolida fills parciales,
                           registra stop GTC asociado
@@ -94,6 +97,11 @@ FIXES APLICADOS EN v2.4:
                           real. dashboard.py Fuente 3 lee TRADE_SOLD.
   · universe_updater.py   Notificación Telegram al actualizar universo
   · backtest_expandido.py TRAILING_FACTOR=0.75 en trailing stop
+                          Señal tendencia corregida: SMA50>SMA200 (antes Close>SMA200)
+                          alineada con producción. PF 2.607, DD 10.4% (2005-2025).
+  · portfolio_manager.py  Posición corta detectada: alerta Telegram crítica + skip.
+  · libertad2045.py       ConnectionError de conectar_ib() capturado — C1 funcional.
+  · logger.py             Retención logs 90d → 3650d (10 años, sobreescribible via .env).
   · run_bot.sh            PROJECT_DIR sobreescribible. PID stale detectado.
   · watchdog.sh           PROJECT_DIR sobreescribible.
   · .gitignore            Entradas faltantes añadidas
