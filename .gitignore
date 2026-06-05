@@ -1,5 +1,7 @@
 # Secretos
 .env
+*.key
+*.pem
 
 # Python
 __pycache__/
@@ -16,6 +18,8 @@ last_success.txt
 capital_peak.txt
 portfolio_cache.json
 logged_exec_ids.txt
+logged_exec_ids_*.txt
+sp500_composicion.csv
 trades_*.json
 orders_*.json
 
@@ -25,5 +29,14 @@ backtest_results/
 # Archivos temporales
 *.tmp
 *.swp
+*.log
+dashboard.html
+montecarlo_075.html
+exp40_dashboard.html
+comparativa_final_075_vs_100.html
 
 venv/
+
+# Backups locales
+BACKUP_*/
+*.zip
