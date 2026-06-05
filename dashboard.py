@@ -800,58 +800,116 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
     señales_json   = json.dumps([s["señales"]   for s in sesiones])
     posiciones_json = json.dumps([s["posiciones"] for s in sesiones])
 
-    # Tablas de trades — abiertos y cerrados por separado
     precios_trades = precios_trades or {}
-    filas_trades_abiertos = ""
-    filas_trades_cerrados = ""
 
+    # ── TRADES ACTUALES: desde cartera IBKR ──────────────────────────────────
+    # Índice del trade más reciente por símbolo (para entry, shares, stop inicial)
+    ultimo_trade = {}
+    for s in sesiones:
+        for t in s['trades']:
+            sym = t["symbol"].strip()
+            if sym not in ultimo_trade or t["ts"] > ultimo_trade[sym]["ts"]:
+                ultimo_trade[sym] = t
+
+    posiciones_abiertas = [sym for sym in (cartera.get("labels") or []) if sym != "CASH"]
+    filas_trades_abiertos = ""
+    for sym in posiciones_abiertas:
+        t = ultimo_trade.get(sym, {})
+        precio_actual = precios_trades.get(sym)
+        precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
+        _sa = (stops_actuales or {}).get(sym)
+        entrada = t.get("entry", "—") or "—"
+        shares  = t.get("shares", "—") or "—"
+        fecha   = (t.get("ts") or "")[:10] or "—"
+        stop_inicial_str = (t.get("stop") or "").strip() or "—"
+
+        try:
+            _entrada_f = float(entrada)
+        except (ValueError, TypeError):
+            _entrada_f = None
+
+        if _sa is not None and _entrada_f:
+            _color = "#00c896" if _sa > _entrada_f else "inherit"
+            stop_salida_str = f'<span style="color:{_color}">{_sa:.2f}</span>'
+        else:
+            stop_salida_str = "—"
+
+        pnl_cell = "—"
+        pct_cell = "—"
+        try:
+            shares_f = float(shares)
+            if precio_actual is not None and _entrada_f and _entrada_f > 0:
+                pnl_usd  = (precio_actual - _entrada_f) * shares_f
+                pnl_eur  = pnl_usd / usd_per_eur
+                pct      = (precio_actual - _entrada_f) / _entrada_f * 100
+                color    = "#00c896" if pnl_eur >= 0 else "#ff4455"
+                pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
+                pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
+        except (ValueError, TypeError, ZeroDivisionError):
+            pass
+
+        filas_trades_abiertos += f"""
+            <tr data-date="{fecha}">
+                <td>{fecha}</td>
+                <td><strong>{sym}</strong></td>
+                <td class="num">{shares}</td>
+                <td class="num">{entrada}</td>
+                <td class="num">{precio_actual_str}</td>
+                <td class="num">{stop_inicial_str}</td>
+                <td class="num">{stop_salida_str}</td>
+                <td class="num">{pnl_cell}</td>
+                <td class="num">{pct_cell}</td>
+            </tr>"""
+
+    if not filas_trades_abiertos:
+        filas_trades_abiertos = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
+                                 'Sin posiciones abiertas</td></tr>')
+
+    # ── TRADES EJECUTADOS: desde logs, solo cerrados ──────────────────────────
+    filas_trades_cerrados = ""
     for s in reversed(sesiones):
         for t in s['trades']:
-            precio_actual = precios_trades.get(t["symbol"])
-            precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
-            stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
             _sym = t["symbol"].strip()
-            _sa = stops_actuales.get(_sym) if stops_actuales else None
+            _sa  = (stops_actuales or {}).get(_sym)
             try:
                 _entrada_f = float(t["entry"]) if t.get("entry") else None
             except (ValueError, TypeError):
                 _entrada_f = None
 
             _exit_precio = None
-            if _sa is not None and _entrada_f:
-                _color = "#00c896" if _sa > _entrada_f else "inherit"
-                stop_salida_str = f'<span style="color:{_color}">{_sa:.2f}</span>'
-            else:
+            if _sa is None:
                 _salidas_sym = (precios_salida or {}).get(_sym, [])
                 if _salidas_sym and t.get("ts"):
                     for _sal_ts, _sal_precio in _salidas_sym:
                         if _sal_ts > t["ts"]:
                             _exit_precio = _sal_precio
                             break
-                if _exit_precio is not None and _entrada_f:
-                    _color = "#ff4455" if _exit_precio < _entrada_f else "#00c896"
-                    stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
-                else:
-                    stop_salida_str = "—"
 
-            # PnL: precio actual para abiertos, precio de salida para cerrados
-            _precio_pnl = precio_actual if (_sa is not None) else (_exit_precio if _exit_precio else precio_actual)
+            if _exit_precio is None:
+                continue  # posición abierta o sin salida registrada → omitir
+
+            _color = "#ff4455" if _exit_precio < (_entrada_f or _exit_precio) else "#00c896"
+            stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
+            stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
+            precio_actual = precios_trades.get(_sym)
+            precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
+
             pnl_cell = "—"
             pct_cell = "—"
             try:
                 entrada_f = float(t["entry"])
                 shares_f  = float(t["shares"])
-                if _precio_pnl is not None and entrada_f > 0:
-                    pnl_usd  = (_precio_pnl - entrada_f) * shares_f
+                if entrada_f > 0:
+                    pnl_usd  = (_exit_precio - entrada_f) * shares_f
                     pnl_eur  = pnl_usd / usd_per_eur
-                    pct      = (_precio_pnl - entrada_f) / entrada_f * 100
+                    pct      = (_exit_precio - entrada_f) / entrada_f * 100
                     color    = "#00c896" if pnl_eur >= 0 else "#ff4455"
                     pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
                     pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
 
-            fila = f"""
+            filas_trades_cerrados += f"""
             <tr data-date="{t['ts'][:10]}">
                 <td>{t['ts'][:10]}</td>
                 <td><strong>{t['symbol']}</strong></td>
@@ -864,14 +922,6 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                 <td class="num">{pct_cell}</td>
             </tr>"""
 
-            if (_sa is not None) or (_exit_precio is None):
-                filas_trades_abiertos += fila
-            else:
-                filas_trades_cerrados += fila
-
-    if not filas_trades_abiertos:
-        filas_trades_abiertos = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
-                                 'Sin posiciones abiertas</td></tr>')
     if not filas_trades_cerrados:
         filas_trades_cerrados = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
                                  'Sin trades cerrados registrados</td></tr>')
