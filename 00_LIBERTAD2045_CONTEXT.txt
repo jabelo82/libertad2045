@@ -68,6 +68,9 @@ Commits principales en producción:
   99a633f  dashboard: posiciones=0 cuando RG bloquea — fallback 'evaluando N posiciones'
   ef64a18  dashboard: eliminar duplicados ORDER/FILLED — solo TRADE_FILLED en tablas
   —        logs: R 03-24 (orden cancelada) eliminado. INTC 23:59:01 añadido.
+  9a18de6  dashboard: fix PnL oculto — INTC+BWA ocultos por stop GTC stale;
+           dedup ORDER/FILLED por ventana 5 días (CBOE 03-30 recuperado).
+           PnL total cuadra: 23 trades, +176.855 € ≈ +18.17% KPI.
 
 FIXES APLICADOS EN v2.4:
 
@@ -94,8 +97,11 @@ FIXES APLICADOS EN v2.4:
                           Trades actuales construidos desde cartera IBKR (labels),
                           no desde logs — fuente de verdad para posiciones abiertas.
                           Duplicados ORDER/FILLED eliminados: si existe TRADE_FILLED
-                          para un símbolo, la Orden enviada (TRADE) se omite.
+                          en los 5 días siguientes a la ORDER, la Orden enviada se omite
+                          (ventana temporal evita filtrar trades distintos del mismo símbolo).
                           Posiciones=0 cuando RG bloquea: fallback a línea de rebalanceo.
+                          Exit price buscado siempre, independiente de stop GTC activo —
+                          evita ocultar trades cerrados con stop stale (INTC, BWA).
   · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
                           registrar_fills_recientes: consolida fills parciales,
                           registra stop GTC asociado
