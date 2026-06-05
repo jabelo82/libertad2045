@@ -71,6 +71,10 @@ Commits principales en producción:
   9a18de6  dashboard: fix PnL oculto — INTC+BWA ocultos por stop GTC stale;
            dedup ORDER/FILLED por ventana 5 días (CBOE 03-30 recuperado).
            PnL total cuadra: 23 trades, +176.855 € ≈ +18.17% KPI.
+  eab1499  risk_guardian: fail-safe cuando GrossPositionValue no disponible
+  acc258d  Refactoring C: cache datos cartera, calcular_trailing_stop() fuente única,
+           eliminar yfinance de portfolio_manager
+  8b195df  docs/config: requirements.txt, config.py centralizado, docstrings y fechas
 
 FIXES APLICADOS EN v2.4:
 
@@ -102,9 +106,22 @@ FIXES APLICADOS EN v2.4:
                           Posiciones=0 cuando RG bloquea: fallback a línea de rebalanceo.
                           Exit price buscado siempre, independiente de stop GTC activo —
                           evita ocultar trades cerrados con stop stale (INTC, BWA).
+  · risk_guardian.py      GrossPositionValue no disponible → bloquea entradas
+                          (fail-safe) + alerta Telegram. Antes omitía el ciclo.
   · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
                           registrar_fills_recientes: consolida fills parciales,
-                          registra stop GTC asociado
+                          registra stop GTC asociado.
+                          _cargar_datos_posiciones(): descarga DataFrames una vez,
+                          compartido entre stops, rebalanceo y trailing (Refactoring C).
+  · portfolio_manager.py  _calcular_trailing_yf() y _calcular_trailing_ibkr()
+                          eliminadas. Trailing usa calcular_trailing_stop() de
+                          position_size.py — fuente única B1. yfinance eliminado.
+  · position_size.py      calcular_trailing_stop(df) añadida — fuente única lógica B1.
+                          TRAILING_FACTOR=0.75 definido aquí.
+  · rebalance.py          Acepta datos=cache. Usa DataFrame pre-descargado si disponible.
+  · signal_engine.py      Docstring corregido: SMA50>SMA200 (antes "close>SMA200").
+  · config.py             Creado — referencia centralizada de 20 parámetros del sistema.
+  · requirements.txt      Creado — versiones pinneadas del venv.
   · github_publisher.py   Reintentos MAX_RETRIES=3
                           __main__ publica dashboard principal (index.html)
                           antes de los secundarios. yfinance instalado en venv.
