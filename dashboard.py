@@ -800,62 +800,15 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
     señales_json   = json.dumps([s["señales"]   for s in sesiones])
     posiciones_json = json.dumps([s["posiciones"] for s in sesiones])
 
-    # Tabla de sesiones
-    capitales_list = [s["capital"] for s in sesiones]
-    filas_sesiones = ""
-    for rev_idx, s in enumerate(reversed(sesiones)):
-        orig_idx = len(sesiones) - 1 - rev_idx
-        if s['drawdown'] is not None:
-            dd_str = f"{s['drawdown']:.2f}%"
-        else:
-            pico   = max(capitales_list[:orig_idx + 1])
-            dd     = (s['capital'] - pico) / pico * 100 if pico > 0 else 0.0
-            dd_str = f"{dd:.2f}%"
-        _emp  = s.get('empresas')
-        _t    = s.get('tiempo')
-        if _emp and _t:
-            ciclo_str = f"{_emp} / {_t}s"
-        elif _emp:
-            ciclo_str = f"{_emp} activos"
-        elif _t:
-            ciclo_str = f"{_t}s"
-        else:
-            ciclo_str = "—"
-        trades_n   = len(s['trades'])
-        rg_class   = "warn" if s['rg_status'] != "OK" else "ok"
-        filas_sesiones += f"""
-        <tr data-date="{s['fecha']}">
-            <td>{s['fecha']}</td>
-            <td class="num">{s['capital']:,.2f} €</td>
-            <td class="num">{dd_str}</td>
-            <td class="num">{s['señales']}</td>
-            <td class="num">{trades_n}</td>
-            <td class="num">{s['posiciones']}</td>
-            <td class="num">{ciclo_str}</td>
-            <td><span class="badge {rg_class}">{s['rg_status']}</span></td>
-        </tr>"""
-
-    # Tabla de trades
+    # Tablas de trades — abiertos y cerrados por separado
     precios_trades = precios_trades or {}
-    filas_trades = ""
+    filas_trades_abiertos = ""
+    filas_trades_cerrados = ""
+
     for s in reversed(sesiones):
         for t in s['trades']:
             precio_actual = precios_trades.get(t["symbol"])
             precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
-            pnl_cell = "—"
-            pct_cell = "—"
-            try:
-                entrada_f = float(t["entry"])
-                shares_f  = float(t["shares"])
-                if precio_actual is not None and entrada_f > 0:
-                    pnl_usd = (precio_actual - entrada_f) * shares_f
-                    pnl_eur = pnl_usd / usd_per_eur
-                    pct     = (precio_actual - entrada_f) / entrada_f * 100
-                    color   = "#00c896" if pnl_eur >= 0 else "#ff4455"
-                    pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
-                    pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
-            except (ValueError, TypeError, ZeroDivisionError):
-                pass
             stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
             _sym = t["symbol"].strip()
             _sa = stops_actuales.get(_sym) if stops_actuales else None
@@ -864,18 +817,15 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             except (ValueError, TypeError):
                 _entrada_f = None
 
+            _exit_precio = None
             if _sa is not None and _entrada_f:
-                # Posición abierta: mostrar stop actual
                 _color = "#00c896" if _sa > _entrada_f else "inherit"
                 stop_salida_str = f'<span style="color:{_color}">{_sa:.2f}</span>'
             else:
-                # Posición cerrada: buscar precio de salida en logs
                 _salidas_sym = (precios_salida or {}).get(_sym, [])
-                _exit_precio = None
                 if _salidas_sym and t.get("ts"):
-                    _entry_ts = t["ts"]
                     for _sal_ts, _sal_precio in _salidas_sym:
-                        if _sal_ts > _entry_ts:
+                        if _sal_ts > t["ts"]:
                             _exit_precio = _sal_precio
                             break
                 if _exit_precio is not None and _entrada_f:
@@ -884,7 +834,24 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                 else:
                     stop_salida_str = "—"
 
-            filas_trades += f"""
+            # PnL: precio actual para abiertos, precio de salida para cerrados
+            _precio_pnl = precio_actual if (_sa is not None) else (_exit_precio if _exit_precio else precio_actual)
+            pnl_cell = "—"
+            pct_cell = "—"
+            try:
+                entrada_f = float(t["entry"])
+                shares_f  = float(t["shares"])
+                if _precio_pnl is not None and entrada_f > 0:
+                    pnl_usd  = (_precio_pnl - entrada_f) * shares_f
+                    pnl_eur  = pnl_usd / usd_per_eur
+                    pct      = (_precio_pnl - entrada_f) / entrada_f * 100
+                    color    = "#00c896" if pnl_eur >= 0 else "#ff4455"
+                    pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
+                    pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
+
+            fila = f"""
             <tr data-date="{t['ts'][:10]}">
                 <td>{t['ts'][:10]}</td>
                 <td><strong>{t['symbol']}</strong></td>
@@ -896,9 +863,18 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                 <td class="num">{pnl_cell}</td>
                 <td class="num">{pct_cell}</td>
             </tr>"""
-    if not filas_trades:
-        filas_trades = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
-                        'Sin trades registrados aún</td></tr>')
+
+            if (_sa is not None) or (_exit_precio is None):
+                filas_trades_abiertos += fila
+            else:
+                filas_trades_cerrados += fila
+
+    if not filas_trades_abiertos:
+        filas_trades_abiertos = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
+                                 'Sin posiciones abiertas</td></tr>')
+    if not filas_trades_cerrados:
+        filas_trades_cerrados = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
+                                 'Sin trades cerrados registrados</td></tr>')
 
     rentabilidad_color = "#00ff88" if stats.get("rentabilidad", 0) >= 0 else "#ff4444"
     dd_color = ("#ff4444" if stats.get("dd_actual", 0) < -5
@@ -1241,44 +1217,35 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
   </div>
 {portfolio_html}
 
-  <!-- TABLA SESIONES -->
+  <!-- TABLA TRADES ACTUALES -->
   <div class="section">
-    <div class="section-header" onclick="toggle('sesiones')">
-      <div class="section-title">// Historial de sesiones</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="toggle-btn" id="sesiones-ver-mas" style="display:none" onclick="event.stopPropagation()"></button>
-        <button class="toggle-btn" id="btn-sesiones">▼ ocultar</button>
-      </div>
+    <div class="section-header" onclick="toggle('trades-abiertos')">
+      <div class="section-title">// Trades actuales</div>
+      <button class="toggle-btn" id="btn-trades-abiertos">▼ ocultar</button>
     </div>
-    <div class="collapsible" id="sesiones" style="max-height:600px">
-      <div class="filter-bar" id="sesiones-filter-bar">
-        <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px">PERÍODO:</span>
-        <button class="filter-btn active" onclick="filtrarSesiones(0,this)">Todo</button>
-        <button class="filter-btn" onclick="filtrarSesiones(90,this)">3 meses</button>
-        <button class="filter-btn" onclick="filtrarSesiones(30,this)">1 mes</button>
-        <button class="filter-btn" onclick="filtrarSesiones(7,this)">1 semana</button>
-      </div>
-      <div class="table-wrap">
+    <div class="collapsible" id="trades-abiertos" style="max-height:9999px">
+      <div class="table-wrap" style="max-height:520px;overflow-y:auto">
         <table>
           <thead>
             <tr>
               <th>Fecha</th>
-              <th class="num">Capital</th>
-              <th class="num">Drawdown</th>
-              <th class="num">Señales</th>
-              <th class="num">Trades</th>
-              <th class="num">Posiciones</th>
-              <th class="num">Activos / Tiempo</th>
-              <th>Risk Guardian</th>
+              <th>Símbolo</th>
+              <th class="num">Acciones</th>
+              <th class="num">Entrada</th>
+              <th class="num">Precio actual</th>
+              <th class="num">Stop inicial</th>
+              <th class="num">Stop / Salida</th>
+              <th class="num">PnL (€)</th>
+              <th class="num">%</th>
             </tr>
           </thead>
-          <tbody id="sesiones-tbody">{filas_sesiones}</tbody>
+          <tbody id="trades-abiertos-tbody">{filas_trades_abiertos}</tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TABLA TRADES -->
+  <!-- TABLA TRADES EJECUTADOS (CERRADOS) -->
   <div class="section">
     <div class="section-header" onclick="toggle('trades')">
       <div class="section-title">// Trades ejecutados</div>
@@ -1307,7 +1274,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
               <th class="num">%</th>
             </tr>
           </thead>
-          <tbody id="trades-tbody">{filas_trades}</tbody>
+          <tbody id="trades-tbody">{filas_trades_cerrados}</tbody>
         </table>
       </div>
     </div>
@@ -1437,54 +1404,6 @@ function filtrarTrades(dias, btn) {{
     r.style.display = (!cutoff || (r.dataset.date && r.dataset.date >= cutoff)) ? '' : 'none';
   }});
 }}
-
-// Sesiones: filtro temporal + paginación integrados
-const SESIONES_LIMITE = 15;
-let sesionesExpandida = false;
-
-function filtrarSesiones(dias, btn) {{
-  document.querySelectorAll('#sesiones-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  const tbody = document.getElementById('sesiones-tbody');
-  if (!tbody) return;
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  const verMasBtn = document.getElementById('sesiones-ver-mas');
-  if (dias === 0) {{
-    sesionesExpandida = false;
-    rows.forEach((r, i) => {{ r.style.display = i < SESIONES_LIMITE ? '' : 'none'; }});
-    if (verMasBtn) {{
-      if (rows.length > SESIONES_LIMITE) {{
-        verMasBtn.style.display = '';
-        verMasBtn.textContent = '▼ Ver todas (' + rows.length + ')';
-      }} else {{
-        verMasBtn.style.display = 'none';
-      }}
-    }}
-  }} else {{
-    const cutoff = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
-    rows.forEach(r => {{ r.style.display = (r.dataset.date && r.dataset.date >= cutoff) ? '' : 'none'; }});
-    if (verMasBtn) verMasBtn.style.display = 'none';
-  }}
-}}
-
-// Inicializar con paginación (Todo seleccionado por defecto)
-(function() {{
-  const tbody = document.getElementById('sesiones-tbody');
-  if (!tbody) return;
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  if (rows.length <= SESIONES_LIMITE) return;
-  rows.slice(SESIONES_LIMITE).forEach(r => r.style.display = 'none');
-  const btn = document.getElementById('sesiones-ver-mas');
-  if (!btn) return;
-  btn.style.display = '';
-  btn.textContent = '▼ Ver todas (' + rows.length + ')';
-  btn.addEventListener('click', function(e) {{
-    e.stopPropagation();
-    sesionesExpandida = !sesionesExpandida;
-    rows.slice(SESIONES_LIMITE).forEach(r => r.style.display = sesionesExpandida ? '' : 'none');
-    btn.textContent = sesionesExpandida ? '▲ Ver menos' : '▼ Ver todas (' + rows.length + ')';
-  }});
-}})();
 
 {portfolio_js}
 
