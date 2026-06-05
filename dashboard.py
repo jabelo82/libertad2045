@@ -250,6 +250,10 @@ def leer_logs():
                     m = re.search(r"[Pp]osiciones ocupadas[:\s]+(\d+)", event)
                     if m:
                         posiciones = int(m.group(1))
+                    # Fallback: "Rebalanceo: evaluando N posiciones" (ciclos con RG bloqueado)
+                    m = re.search(r"evaluando\s+(\d+)\s+posiciones", event)
+                    if m:
+                        posiciones = int(m.group(1))
 
                     # Runtime: diferencia SYSTEM_END − SYSTEM_START (runtime no se logea en CSV)
                     if "SYSTEM_START" in event and ts_start is None:
