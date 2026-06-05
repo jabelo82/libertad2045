@@ -809,18 +809,38 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
 
     precios_trades = precios_trades or {}
 
-    # Símbolos con al menos un TRADE_FILLED — los ORDER (Orden enviada) del mismo
-    # símbolo son el mismo trade en la noche anterior y deben omitirse en las tablas
-    symbols_con_fill = {
-        t["symbol"].strip()
-        for s in sesiones
-        for t in s["trades"]
-        if t.get("source") == "FILLED"
-    }
+    # Índice FILLED por símbolo y fecha: {sym: [ts, ...]}
+    # Un ORDER es duplicado del FILLED si hay un FILLED del mismo símbolo
+    # dentro de los 5 días siguientes (misma operación, fill confirmado al día siguiente)
+    fills_por_simbolo_fecha: "dict[str, list[str]]" = {}
+    for s in sesiones:
+        for t in s["trades"]:
+            if t.get("source") == "FILLED":
+                sym = t["symbol"].strip()
+                fills_por_simbolo_fecha.setdefault(sym, []).append(t["ts"][:10])
 
     def es_orden_duplicada(t):
-        """True si el trade es una Orden enviada para un símbolo que tiene TRADE_FILLED."""
-        return t.get("source") == "ORDER" and t["symbol"].strip() in symbols_con_fill
+        """True si hay un TRADE_FILLED para el mismo símbolo en los 5 días siguientes."""
+        if t.get("source") != "ORDER":
+            return False
+        sym = t["symbol"].strip()
+        fills = fills_por_simbolo_fecha.get(sym, [])
+        if not fills:
+            return False
+        order_date = t["ts"][:10]
+        from datetime import datetime, timedelta
+        try:
+            dt_order = datetime.strptime(order_date, "%Y-%m-%d")
+        except ValueError:
+            return False
+        for fill_date in fills:
+            try:
+                dt_fill = datetime.strptime(fill_date, "%Y-%m-%d")
+                if timedelta(0) <= dt_fill - dt_order <= timedelta(days=5):
+                    return True
+            except ValueError:
+                continue
+        return False
 
     # ── TRADES ACTUALES: desde cartera IBKR ──────────────────────────────────
     # Índice del trade más reciente por símbolo (para entry, shares, stop inicial)
@@ -901,17 +921,18 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             except (ValueError, TypeError):
                 _entrada_f = None
 
+            # Buscar exit price siempre — un trade cerrado puede tener aún
+            # un stop GTC stale en stops_actuales si no se canceló al vender
             _exit_precio = None
-            if _sa is None:
-                _salidas_sym = (precios_salida or {}).get(_sym, [])
-                if _salidas_sym and t.get("ts"):
-                    for _sal_ts, _sal_precio in _salidas_sym:
-                        if _sal_ts > t["ts"]:
-                            _exit_precio = _sal_precio
-                            break
+            _salidas_sym = (precios_salida or {}).get(_sym, [])
+            if _salidas_sym and t.get("ts"):
+                for _sal_ts, _sal_precio in _salidas_sym:
+                    if _sal_ts > t["ts"]:
+                        _exit_precio = _sal_precio
+                        break
 
             if _exit_precio is None:
-                continue  # posición abierta o sin salida registrada → omitir
+                continue  # sin precio de salida → posición abierta o sin datos
 
             _color = "#ff4455" if _exit_precio < (_entrada_f or _exit_precio) else "#00c896"
             stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
