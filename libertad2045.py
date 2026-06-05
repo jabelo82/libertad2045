@@ -251,7 +251,7 @@ def main():
             log_event("ERROR", f"Conexión IBKR fallida: {e} — se intentan stops y rebalanceo con IB anterior")
             send_telegram_critical(f"⚠️ LIBERTAD_2045: conexión IBKR fallida ({e})")
             try:
-                evaluar_stops_por_cierre(ib)
+                evaluar_stops_por_cierre(ib, mode=MODE)
             except Exception as e2:
                 log_event("ERROR", f"C1: stops fallaron con IB caído: {e2}")
             try:
@@ -279,7 +279,7 @@ def main():
             log_event("WARN", "Capital no disponible — stops y rebalanceo corren igualmente")
             send_telegram_critical("⚠️ LIBERTAD_2045: no se pudo leer el capital de IBKR")
             try:
-                posiciones_cerradas = evaluar_stops_por_cierre(ib)
+                posiciones_cerradas = evaluar_stops_por_cierre(ib, mode=MODE)
             except Exception as e:
                 log_event("ERROR", f"C1: stops fallaron sin capital: {e}")
             try:
@@ -313,7 +313,7 @@ def main():
         symbols_abiertos = [p.contract.symbol for p in ib.positions() if p.position > 0]
         datos_cartera = _cargar_datos_posiciones(ib, symbols_abiertos)
 
-        posiciones_cerradas = evaluar_stops_por_cierre(ib, datos=datos_cartera)
+        posiciones_cerradas = evaluar_stops_por_cierre(ib, datos=datos_cartera, mode=MODE)
 
         if posiciones_cerradas:
             log_event("INFO",
