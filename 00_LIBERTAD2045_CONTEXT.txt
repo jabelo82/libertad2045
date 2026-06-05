@@ -59,6 +59,8 @@ Commits principales en producción:
   11bdbfd  Fill SELL: registrar precio real de salida en logs y dashboard
   2c23726  github_publisher: __main__ publica dashboard principal
   3532dc8  dashboard: Trades actuales vs ejecutados, eliminar historial sesiones
+  29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas, retención logs 10y
+  966242f  backtest_expandido: alinear señal tendencia con producción (SMA50>SMA200)
 
 FIXES APLICADOS EN v2.4:
 
@@ -115,21 +117,26 @@ FIXES APLICADOS EN v2.4:
   Ventana datos       : 2Y
 
 --------------------------------------------------------------------------------
-4. BACKTEST v2.4 CON TRAILING_FACTOR=0.75
+4. BACKTEST v2.4_bloq CON TRAILING_FACTOR=0.75 + SMA50>SMA200
 --------------------------------------------------------------------------------
 
   Período 2005–2025:
-    Capital final    : 8.908.547 €
-    CAGR             : 47.03%
-    Profit Factor    : 2.486
-    Win Rate         : 54.3%
-    Max Drawdown     : 11.5%
-    Trades           : 2.386
+    Capital final    : 8.888.417 €
+    CAGR             : ~47%
+    Profit Factor    : 2.607
+    Win Rate         : 54.1%
+    Max Drawdown     : 10.4%
+    Trades           : 2.402
     Montecarlo       : prob. ruina 0.00%, DD p95 7.6%
     Stress test      : 3/3 crisis (2008, 2020, 2022): ×0.75 supera a ×1.00
 
-  Nota: backtest_expandido.py ahora aplica TRAILING_FACTOR=0.75 — alineado
-  con producción desde commit 4095a80.
+  Backtest v2.4_bloq (05/06/2026): señal corregida SMA50>SMA200 en
+  backtest_expandido.py alineada con producción. PF sube 0.12, DD baja 1.1%
+  respecto a versión anterior. Resultados prácticamente idénticos — confirma
+  robustez de la corrección.
+
+  Nota: backtest_expandido.py aplica TRAILING_FACTOR=0.75 (commit 4095a80)
+  y señal SMA50>SMA200 (commit 966242f) — completamente alineado con producción.
 
 --------------------------------------------------------------------------------
 5. INFRAESTRUCTURA
