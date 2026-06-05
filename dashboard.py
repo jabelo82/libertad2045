@@ -202,15 +202,17 @@ def leer_logs():
                     if level == "TRADE_FILLED" or "TRADE_EXECUTED" in event:
                         if symbol and shares:
                             try:
-                                # FIX: deduplicación de fills parciales por (fecha, symbol)
+                                # Deduplicación de fills parciales por (fecha, symbol)
                                 existing = next(
                                     (t for t in trades
-                                     if t["ts"][:10] == ts[:10] and t["symbol"] == symbol),
+                                     if t["ts"][:10] == ts[:10] and t["symbol"] == symbol
+                                     and t.get("source") == "FILLED"),
                                     None
                                 )
                                 if existing is None:
                                     trades.append({"ts": ts, "symbol": symbol,
-                                                   "shares": shares, "entry": entry, "stop": stop})
+                                                   "shares": shares, "entry": entry,
+                                                   "stop": stop, "source": "FILLED"})
                                 else:
                                     try:
                                         existing["shares"] = str(int(existing["shares"]) + int(shares))
@@ -225,7 +227,8 @@ def leer_logs():
                             try:
                                 key = (ts[:10], symbol, entry)
                                 if key not in [(t["ts"][:10], t["symbol"], t["entry"]) for t in trades]:
-                                    trades.append({"ts": ts, "symbol": symbol, "shares": shares, "entry": entry, "stop": stop})
+                                    trades.append({"ts": ts, "symbol": symbol, "shares": shares,
+                                                   "entry": entry, "stop": stop, "source": "ORDER"})
                             except Exception:
                                 pass
 
@@ -806,11 +809,27 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
 
     precios_trades = precios_trades or {}
 
+    # Símbolos con al menos un TRADE_FILLED — los ORDER (Orden enviada) del mismo
+    # símbolo son el mismo trade en la noche anterior y deben omitirse en las tablas
+    symbols_con_fill = {
+        t["symbol"].strip()
+        for s in sesiones
+        for t in s["trades"]
+        if t.get("source") == "FILLED"
+    }
+
+    def es_orden_duplicada(t):
+        """True si el trade es una Orden enviada para un símbolo que tiene TRADE_FILLED."""
+        return t.get("source") == "ORDER" and t["symbol"].strip() in symbols_con_fill
+
     # ── TRADES ACTUALES: desde cartera IBKR ──────────────────────────────────
     # Índice del trade más reciente por símbolo (para entry, shares, stop inicial)
+    # Preferimos FILLED sobre ORDER para el mismo símbolo
     ultimo_trade = {}
     for s in sesiones:
         for t in s['trades']:
+            if es_orden_duplicada(t):
+                continue
             sym = t["symbol"].strip()
             if sym not in ultimo_trade or t["ts"] > ultimo_trade[sym]["ts"]:
                 ultimo_trade[sym] = t
@@ -873,6 +892,8 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
     filas_trades_cerrados = ""
     for s in reversed(sesiones):
         for t in s['trades']:
+            if es_orden_duplicada(t):
+                continue
             _sym = t["symbol"].strip()
             _sa  = (stops_actuales or {}).get(_sym)
             try:
