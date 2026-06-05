@@ -406,7 +406,7 @@ def detectar_senal(df, i):
     if last["ATR"] <= 0:
         return False
 
-    tendencia = last["Close"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]
+    tendencia = last["SMA50"] > last["SMA200"] and last["SMA200"] > prev["SMA200"]
 
     if not tendencia:
         return False
