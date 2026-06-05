@@ -56,6 +56,8 @@ Commits principales en producción:
   701c66b  Fix C1+C2: gestión cartera con IB caído y heartbeat en Risk Guardian
   4095a80  Fix rutas hardcodeadas, PID stale en lockfile y TRAILING_FACTOR=0.75
   dc55105  gitignore: añadir entradas faltantes
+  11bdbfd  Fill SELL: registrar precio real de salida en logs y dashboard
+  2c23726  github_publisher: __main__ publica dashboard principal
 
 FIXES APLICADOS EN v2.4:
 
@@ -80,6 +82,10 @@ FIXES APLICADOS EN v2.4:
                           registrar_fills_recientes: consolida fills parciales,
                           registra stop GTC asociado
   · github_publisher.py   Reintentos MAX_RETRIES=3
+                          __main__ publica dashboard principal (index.html)
+                          antes de los secundarios. yfinance instalado en venv.
+  · libertad2045.py       Fill SELL (SLD): registrado como TRADE_SOLD con precio
+                          real. dashboard.py Fuente 3 lee TRADE_SOLD.
   · universe_updater.py   Notificación Telegram al actualizar universo
   · backtest_expandido.py TRAILING_FACTOR=0.75 en trailing stop
   · run_bot.sh            PROJECT_DIR sobreescribible. PID stale detectado.
