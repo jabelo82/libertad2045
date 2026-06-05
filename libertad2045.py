@@ -43,6 +43,27 @@ def _escribir_last_run():
         log_event("WARN", f"No se pudo escribir last_run.txt: {e}")
 
 
+def _cargar_datos_posiciones(ib, symbols: list) -> dict:
+    """
+    Descarga DataFrames de IBKR para los símbolos con posición abierta.
+    Una sola descarga por símbolo — compartida entre stops, rebalanceo y trailing.
+    """
+    from data_loader import obtener_datos
+    datos = {}
+    for symbol in symbols:
+        try:
+            df = obtener_datos(ib, symbol)
+            if df is not None and len(df) >= 20:
+                datos[symbol] = df
+            else:
+                log_event("WARN", f"_cargar_datos_posiciones: datos insuficientes para {symbol}",
+                          symbol=symbol)
+        except Exception as e:
+            log_event("ERROR", f"_cargar_datos_posiciones: error en {symbol}: {e}",
+                      symbol=symbol)
+    return datos
+
+
 def registrar_fills_recientes(ib):
     """
     Detecta fills de BUY STOP (BOT) y SELL (SLD) ocurridos desde el ciclo anterior.
@@ -287,7 +308,12 @@ def main():
         # incluso en estado de drawdown máximo (alineado con backtest).
         # --------------------------------------------------
 
-        posiciones_cerradas = evaluar_stops_por_cierre(ib)
+        # Descargar datos una sola vez para todas las posiciones abiertas
+        # Compartido entre stops, rebalanceo y trailing — fuente única IBKR
+        symbols_abiertos = [p.contract.symbol for p in ib.positions() if p.position > 0]
+        datos_cartera = _cargar_datos_posiciones(ib, symbols_abiertos)
+
+        posiciones_cerradas = evaluar_stops_por_cierre(ib, datos=datos_cartera)
 
         if posiciones_cerradas:
             log_event("INFO",
@@ -301,7 +327,7 @@ def main():
         # independientemente del estado de riesgo.
         # --------------------------------------------------
 
-        decisiones_rebalanceo = rebalancear(ib, capital, mode=MODE)
+        decisiones_rebalanceo = rebalancear(ib, capital, mode=MODE, datos=datos_cartera)
 
 
         # --------------------------------------------------

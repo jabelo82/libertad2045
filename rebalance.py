@@ -278,7 +278,7 @@ def evaluar_posicion(
 # Punto de entrada principal
 # --------------------------------------------------
 
-def rebalancear(ib, capital: float, mode: str = "SIM") -> List[DecisionRebalanceo]:
+def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[DecisionRebalanceo]:
     """
     Evalúa y ajusta el tamaño de todas las posiciones abiertas.
 
@@ -349,7 +349,9 @@ def rebalancear(ib, capital: float, mode: str = "SIM") -> List[DecisionRebalance
                 continue
 
             # Datos históricos con indicadores (ATR, ATR_PERCENTIL, SMAs)
-            df = obtener_datos(ib, symbol)
+            df = (datos or {}).get(symbol)
+            if df is None:
+                df = obtener_datos(ib, symbol)
             if df is None or len(df) < 20:
                 log_event("WARN",
                           f"Rebalanceo: datos insuficientes para {symbol} — posición omitida",

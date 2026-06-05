@@ -1,6 +1,7 @@
 from ib_insync import *
 
 from logger import log_event
+from position_size import calcular_trailing_stop
 
 
 # --------------------------------------------------
@@ -19,123 +20,10 @@ TRAILING_FACTOR = 0.75  # Aprobado en Experimento 40-ter (stress test 3/3 crisis
 
 
 # --------------------------------------------------
-# Trailing stop dinámico B1
-# --------------------------------------------------
-
-def _calcular_trailing_ibkr(ib, contract, symbol: str):
-    """
-    Fallback de _calcular_trailing_yf cuando yfinance no está disponible.
-
-    Solicita 1 mes de datos diarios desde IBKR y calcula el trailing stop
-    con ATR_MULTIPLIER fijo (sin ajuste por percentil — ventana histórica
-    insuficiente para replicar B1 completo).
-
-    Retorna (nuevo_stop, mult) o (None, None) si falla.
-    """
-    try:
-        import pandas as pd
-
-        bars = ib.reqHistoricalData(
-            contract,
-            endDateTime="",
-            durationStr="1 M",
-            barSizeSetting="1 day",
-            whatToShow="TRADES",
-            useRTH=True,
-            keepUpToDate=False,
-        )
-
-        if not bars or len(bars) < ATR_PERIOD + 2:
-            return None, None
-
-        high  = pd.Series([b.high  for b in bars])
-        low   = pd.Series([b.low   for b in bars])
-        close = pd.Series([b.close for b in bars])
-
-        prev_close = close.shift(1)
-        tr = pd.concat([
-            high - low,
-            (high - prev_close).abs(),
-            (low  - prev_close).abs(),
-        ], axis=1).max(axis=1)
-
-        atr_val = tr.rolling(ATR_PERIOD).mean().iloc[-1]
-
-        if pd.isna(atr_val) or atr_val <= 0:
-            return None, None
-
-        high_hoy   = float(bars[-1].high)
-        nuevo_stop = round(high_hoy - float(atr_val) * ATR_MULTIPLIER, 2)
-
-        return nuevo_stop, ATR_MULTIPLIER
-
-    except Exception as e:
-        log_event("WARN", f"_calcular_trailing_ibkr({symbol}): {e}")
-        return None, None
-
-
-def _calcular_trailing_yf(symbol: str):
-    """
-    Calcula el trailing stop B1 con 3 años de datos de yfinance.
-
-    TR = max(H−L, |H−prev_C|, |L−prev_C|)
-    ATR = TR.rolling(ATR_PERIOD).mean()
-    ATR_PERCENTIL = ATR.rolling(B1_VENTANA).rank(pct=True)
-    mult = (B1_MULT_MAX − (B1_MULT_MAX − B1_MULT_MIN) × percentil) × TRAILING_FACTOR
-    nuevo_stop = High_hoy − ATR × mult
-
-    Retorna (nuevo_stop, mult) o (None, None) si falla.
-    """
-    try:
-        import yfinance as yf
-        import pandas as pd
-
-        ticker_yf = symbol.replace(" ", "-")  # "BRK B" → "BRK-B"
-        df = yf.download(ticker_yf, period="3y", auto_adjust=False, progress=False)
-
-        if df is None or len(df) < B1_VENTANA + ATR_PERIOD + 10:
-            return None, None
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        high  = df["High"]
-        low   = df["Low"]
-        close = df["Close"]
-
-        prev_close = close.shift(1)
-        tr = pd.concat([
-            high - low,
-            (high - prev_close).abs(),
-            (low  - prev_close).abs(),
-        ], axis=1).max(axis=1)
-
-        atr           = tr.rolling(ATR_PERIOD).mean()
-        atr_percentil = atr.rolling(B1_VENTANA).rank(pct=True)
-
-        atr_val       = atr.iloc[-1]
-        percentil_val = atr_percentil.iloc[-1]
-
-        if pd.isna(atr_val) or pd.isna(percentil_val):
-            mult = ATR_MULTIPLIER
-        else:
-            mult = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * float(percentil_val)) * TRAILING_FACTOR, 2)
-
-        high_hoy   = float(df["High"].iloc[-1])
-        nuevo_stop = round(high_hoy - float(atr_val) * mult, 2)
-
-        return nuevo_stop, mult
-
-    except Exception as e:
-        log_event("WARN", f"_calcular_trailing_yf({symbol}): {e}")
-        return None, None
-
-
-# --------------------------------------------------
 # Evaluación de stops por precio de cierre (exp. 27)
 # --------------------------------------------------
 
-def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
+def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=None):
     """
     Implementación de la Palanca 2B — salida por cierre de sesión.
 
@@ -246,19 +134,14 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt"):
             # ── Trailing stop dinámico B1 ─────────────────────────────────
             # Actualiza el stop GTC en IBKR si el nuevo nivel es más alto.
             # Modificación in-place (mismo orderId) para evitar ventana sin protección.
-            nuevo_stop, mult = _calcular_trailing_yf(symbol)
-
-            if nuevo_stop is None:
-                log_event("WARN",
-                          f"yfinance no disponible para {symbol} — usando fallback IBKR "
-                          f"(ATR_PERIOD={ATR_PERIOD}, mult fijo={ATR_MULTIPLIER})",
-                          symbol=symbol)
-                nuevo_stop, mult = _calcular_trailing_ibkr(ib, pos.contract, symbol)
-                if nuevo_stop is not None:
-                    log_event("INFO",
-                              f"Trailing fallback IBKR | {symbol} | "
-                              f"nuevo_stop={nuevo_stop:.2f} | mult={mult}",
-                              symbol=symbol)
+            df_sym = (datos or {}).get(symbol)
+            if df_sym is not None:
+                nuevo_stop, mult = calcular_trailing_stop(df_sym)
+            else:
+                # Fallback: descarga propia (watchdog, relanzo aislado)
+                from data_loader import obtener_datos
+                df_sym = obtener_datos(ib, symbol)
+                nuevo_stop, mult = calcular_trailing_stop(df_sym) if df_sym is not None else (None, None)
 
             if nuevo_stop is not None and nuevo_stop > stop_level:
                 try:

@@ -20,6 +20,7 @@ MAX_POSITION_PCT = 0.25       # Tamaño máximo de una posición: 25% del capita
 B1_MULT_MIN = 2.2             # Multiplicador mínimo (volatilidad en máximos históricos)
 B1_MULT_MAX = 4.0             # Multiplicador máximo (volatilidad en mínimos históricos)
 ATR_MULTIPLIER_BASE = 3.1     # Multiplicador de respaldo si ATR_PERCENTIL no está disponible
+TRAILING_FACTOR = 0.75        # Aprobado en Experimento 40-ter (stress test 3/3 crisis)
 
 
 def _obtener_multiplicador(df):
@@ -111,3 +112,32 @@ def calcular_posicion(df, capital):
         return 0, None, None
 
     return shares, stop_distance, atr
+
+
+def calcular_trailing_stop(df, trailing_factor=TRAILING_FACTOR):
+    """
+    Calcula el nivel de trailing stop B1 para una posición abierta.
+    Fuente única de la lógica B1 — usada por portfolio_manager y rebalance.
+
+    Parámetros:
+        df             : DataFrame de data_loader con columnas ATR, ATR_PERCENTIL, high
+        trailing_factor: multiplicador de compresión del stop (por defecto TRAILING_FACTOR)
+
+    Retorna (nuevo_stop, mult) o (None, None) si los datos son insuficientes.
+    """
+    import pandas as pd
+    try:
+        atr_val       = df["ATR"].iloc[-1]
+        percentil_val = df["ATR_PERCENTIL"].iloc[-1]
+        high_hoy      = df["high"].iloc[-1]
+
+        if pd.isna(atr_val) or pd.isna(percentil_val) or atr_val <= 0:
+            return None, None
+
+        mult       = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * float(percentil_val)) * trailing_factor, 2)
+        nuevo_stop = round(float(high_hoy) - float(atr_val) * mult, 2)
+
+        return nuevo_stop, mult
+
+    except Exception:
+        return None, None
