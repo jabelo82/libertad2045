@@ -57,6 +57,7 @@ VOLATILITY_MODE  = "B1"
 B1_VENTANA       = 252
 B1_MULT_MIN      = 2.2
 B1_MULT_MAX      = 4.0
+TRAILING_FACTOR  = 0.75
 
 B2_VENTANA       = 252
 B2_UMBRAL_ALTO   = 0.40
@@ -597,7 +598,7 @@ def ejecutar_backtest(datos, composicion_df=None):
 
             if not pd.isna(atr) and atr > 0:
                 mult       = obtener_multiplicador(df, i_actual)
-                nuevo_stop = round(bar["High"] - atr * mult, 2)
+                nuevo_stop = round(bar["High"] - atr * mult * TRAILING_FACTOR, 2)
                 if nuevo_stop > pos["stop"]:
                     pos["stop"] = nuevo_stop
 

@@ -10,7 +10,7 @@
 #   10 22 * * * /bin/bash /home/jabelo/PROYECTO_LIBERTAD_2045/run_bot.sh
 # --------------------------------------------------
 
-PROJECT_DIR="/home/jabelo/PROYECTO_LIBERTAD_2045"
+PROJECT_DIR="${PROJECT_DIR:-/home/jabelo/PROYECTO_LIBERTAD_2045}"
 
 # Cargar variables de entorno desde .env
 set -a && source "$PROJECT_DIR/.env" && set +a
@@ -24,8 +24,14 @@ VENV_ACTIVATE="$PROJECT_DIR/venv/bin/activate"
 # --------------------------------------------------
 
 if [ -f "$LOCKFILE" ]; then
-    echo "LIBERTAD_2045 ya está ejecutándose. Abortando."
-    exit 1
+    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
+    if kill -0 "$LOCK_PID" 2>/dev/null; then
+        echo "LIBERTAD_2045 ya está ejecutándose (PID $LOCK_PID). Abortando."
+        exit 1
+    else
+        echo "Lock stale detectado (PID $LOCK_PID inactivo) — eliminando lockfile."
+        rm -f "$LOCKFILE"
+    fi
 fi
 
 # --------------------------------------------------
