@@ -45,12 +45,13 @@ def _escribir_last_run():
 
 def registrar_fills_recientes(ib):
     """
-    Detecta fills de BUY STOP ocurridos desde el ciclo anterior y los registra
-    como TRADE_FILLED con el precio real de ejecución.
+    Detecta fills de BUY STOP (BOT) y SELL (SLD) ocurridos desde el ciclo anterior.
 
-    FIX: consolida fills parciales del mismo símbolo en un único registro,
-    usando el precio promedio ponderado y el total de acciones.
-    FIX: registra el stop_loss buscando la orden hija GTC asociada al fill.
+    BOT → TRADE_FILLED con precio real de ejecución.
+    SLD → TRADE_SOLD con precio real de ejecución.
+
+    Consolida fills parciales del mismo símbolo en un único registro usando
+    precio promedio ponderado. Deduplicación por execId.
     """
     try:
         ib.reqExecutions()
@@ -60,34 +61,36 @@ def registrar_fills_recientes(ib):
         if FILLS_IDS_FILE.exists():
             logged_ids = set(FILLS_IDS_FILE.read_text().strip().splitlines())
 
-        # Agrupar fills por símbolo — consolida parciales
-        fills_por_simbolo = {}
+        # Agrupar fills por símbolo y lado — consolida parciales
+        fills_bot = {}
+        fills_sld = {}
         nuevos_ids = []
 
         for fill in ib.fills():
             exec_id = fill.execution.execId
             if exec_id in logged_ids:
                 continue
-            if fill.execution.side != "BOT":
+            side = fill.execution.side
+            if side not in ("BOT", "SLD"):
                 continue
 
             symbol = fill.contract.symbol
             precio = fill.execution.price
             qty    = int(fill.execution.shares)
 
-            if symbol not in fills_por_simbolo:
-                fills_por_simbolo[symbol] = {
+            bucket = fills_bot if side == "BOT" else fills_sld
+            if symbol not in bucket:
+                bucket[symbol] = {
                     "total_qty":    0,
                     "precio_sum":   0.0,
                     "exec_ids":     [],
                     "contract":     fill.contract,
                 }
+            bucket[symbol]["total_qty"]  += qty
+            bucket[symbol]["precio_sum"] += precio * qty
+            bucket[symbol]["exec_ids"].append(exec_id)
 
-            fills_por_simbolo[symbol]["total_qty"]  += qty
-            fills_por_simbolo[symbol]["precio_sum"] += precio * qty
-            fills_por_simbolo[symbol]["exec_ids"].append(exec_id)
-
-        # Buscar stops GTC activos para recuperar el precio de stop
+        # Buscar stops GTC activos para recuperar el precio de stop (solo BOT)
         ib.reqAllOpenOrders()
         ib.sleep(1)
         stops_gtc = {}
@@ -99,8 +102,8 @@ def registrar_fills_recientes(ib):
                     trade.order, "auxPrice", None
                 )
 
-        # Registrar un único evento consolidado por símbolo
-        for symbol, datos in fills_por_simbolo.items():
+        # Registrar fills de compra (BOT) → TRADE_FILLED
+        for symbol, datos in fills_bot.items():
             total_qty   = datos["total_qty"]
             precio_prom = round(datos["precio_sum"] / total_qty, 2)
             stop_price  = stops_gtc.get(symbol, "")
@@ -117,10 +120,25 @@ def registrar_fills_recientes(ib):
             )
             nuevos_ids.extend(datos["exec_ids"])
 
+        # Registrar fills de venta (SLD) → TRADE_SOLD
+        for symbol, datos in fills_sld.items():
+            total_qty   = datos["total_qty"]
+            precio_prom = round(datos["precio_sum"] / total_qty, 2)
+
+            log_event(
+                "TRADE_SOLD",
+                f"Fill SELL confirmado | precio_real={precio_prom:.2f}",
+                symbol=symbol,
+                shares=total_qty,
+                entry=precio_prom,
+            )
+            nuevos_ids.extend(datos["exec_ids"])
+
         if nuevos_ids:
             todas = list(logged_ids) + nuevos_ids
             FILLS_IDS_FILE.write_text("\n".join(todas[-1000:]))
-            log_event("INFO", f"Fills nuevos registrados: {len(fills_por_simbolo)} símbolos "
+            log_event("INFO", f"Fills nuevos registrados: "
+                               f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
                                f"({len(nuevos_ids)} ejecuciones parciales)")
 
     except Exception as e:

@@ -91,8 +91,8 @@ def leer_precios_salida():
     Fuentes:
       1. INFO "STOP ACTIVADO por cierre | SYMBOL | cierre=X.XX" — precio de cierre
          que activó la evaluación de salida al final de la sesión.
-      2. TRADE_FILLED sin "BUY" en el evento — reservado para fills SELL si el bot
-         empieza a registrarlos con level=TRADE_FILLED en el futuro.
+      2. TRADE_FILLED sin "BUY" en el evento — compatibilidad hacia atrás.
+      3. TRADE_SOLD — fill de venta confirmado por IBKR (precio real de ejecución).
     Retorna {symbol: [(ts_str, precio_float), ...]} con todas las salidas conocidas,
     ordenadas cronológicamente por símbolo.
     """
@@ -128,6 +128,16 @@ def leer_precios_salida():
 
                     # Fuente 2: TRADE_FILLED SLD (fill de venta, si se loguea)
                     if level == "TRADE_FILLED" and "BUY" not in event.upper():
+                        entry_col = partes[6].strip() if len(partes) > 6 else ""
+                        if entry_col:
+                            try:
+                                precio = float(entry_col)
+                                salidas.setdefault(symbol, []).append((ts, precio))
+                            except ValueError:
+                                pass
+
+                    # Fuente 3: TRADE_SOLD — fill de venta confirmado por IBKR
+                    if level == "TRADE_SOLD":
                         entry_col = partes[6].strip() if len(partes) > 6 else ""
                         if entry_col:
                             try:
