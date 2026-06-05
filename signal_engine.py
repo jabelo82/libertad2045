@@ -10,8 +10,7 @@ def detectar_senal(df):
     Condiciones necesarias (todas deben cumplirse):
 
         1. TENDENCIA PRINCIPAL
-           El precio cierra por encima de la SMA200
-           y la SMA200 es creciente respecto al día anterior.
+           SMA50 > SMA200 y la SMA200 es creciente respecto al día anterior.
            → Confirma que el activo está en tendencia alcista de largo plazo.
 
         2. PULLBACK REAL

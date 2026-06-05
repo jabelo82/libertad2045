@@ -40,11 +40,11 @@ from telegram import send_telegram
 # --------------------------------------------------
 
 # Desviación relativa mínima para disparar un ajuste (0.25 = 25 %)
-REBALANCE_THRESHOLD = float(os.getenv("REBALANCE_THRESHOLD", "0.25"))
+REBALANCE_THRESHOLD = float(os.getenv("REBALANCE_THRESHOLD", "0.25"))  # Ver también config.py — REBALANCE_THRESHOLD
 
 # Delta mínimo de acciones para ejecutar el ajuste.
 # Evita micro-operaciones que generarían comisiones sin beneficio real.
-REBALANCE_MIN_SHARES = int(os.getenv("REBALANCE_MIN_SHARES", "5"))
+REBALANCE_MIN_SHARES = int(os.getenv("REBALANCE_MIN_SHARES", "5"))  # Ver también config.py — REBALANCE_MIN_SHARES
 
 
 # --------------------------------------------------

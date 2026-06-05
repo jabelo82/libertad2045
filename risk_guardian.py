@@ -11,14 +11,14 @@ _PROJECT_DIR = Path(__file__).resolve().parent
 # Configurables desde variables de entorno
 # --------------------------------------------------
 
-MIN_CAPITAL        = float(os.getenv("RISK_MIN_CAPITAL",    "2000"))  # Capital mínimo operativo
-MAX_DRAWDOWN_PCT   = float(os.getenv("RISK_MAX_DRAWDOWN",   "0.10"))  # Drawdown máximo: 10%
+MIN_CAPITAL        = float(os.getenv("RISK_MIN_CAPITAL",    "2000"))  # Capital mínimo operativo  # Ver también config.py — MIN_CAPITAL
+MAX_DRAWDOWN_PCT   = float(os.getenv("RISK_MAX_DRAWDOWN",   "0.10"))  # Drawdown máximo: 10%  # Ver también config.py — MAX_DRAWDOWN
 PEAK_FILE          = os.getenv("RISK_PEAK_FILE", str(_PROJECT_DIR / "capital_peak.txt"))
-MAX_LEVERAGE       = float(os.getenv("RISK_MAX_LEVERAGE",   "1.00"))  # Apalancamiento máximo: 100%
- 
+MAX_LEVERAGE       = float(os.getenv("RISK_MAX_LEVERAGE",   "1.00"))  # Apalancamiento máximo: 100%  # Ver también config.py — MAX_LEVERAGE
+
 # Ventana horaria de operación (hora local del servidor)
-HOUR_START         = int(os.getenv("RISK_HOUR_START", "21"))
-HOUR_END           = int(os.getenv("RISK_HOUR_END",   "23"))
+HOUR_START         = int(os.getenv("RISK_HOUR_START", "21"))  # Ver también config.py — HORA_INICIO
+HOUR_END           = int(os.getenv("RISK_HOUR_END",   "23"))  # Ver también config.py — HORA_FIN
  
  
 def _leer_capital_pico():

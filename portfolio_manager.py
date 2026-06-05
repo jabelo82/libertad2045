@@ -8,7 +8,7 @@ from position_size import calcular_trailing_stop
 # Parámetros — sincronizados con experimento 27
 # --------------------------------------------------
 
-MAX_POSITIONS = 10   # Posiciones simultáneas máximas (exp. 10 confirmado)
+MAX_POSITIONS = 10   # Posiciones simultáneas máximas (exp. 10 confirmado)  # Ver también config.py — MAX_POSITIONS
 
 # Trailing stop dinámico B1 (idéntico al backtest_expandido.py)
 ATR_PERIOD     = 14
@@ -16,7 +16,7 @@ ATR_MULTIPLIER = 3.1   # fallback si percentil no disponible
 B1_MULT_MIN    = 2.2
 B1_MULT_MAX    = 4.0
 B1_VENTANA     = 252   # ventana rolling para ATR percentil
-TRAILING_FACTOR = 0.75  # Aprobado en Experimento 40-ter (stress test 3/3 crisis)
+TRAILING_FACTOR = 0.75  # Aprobado en Experimento 40-ter (stress test 3/3 crisis)  # Ver también config.py — TRAILING_FACTOR
 
 
 # --------------------------------------------------

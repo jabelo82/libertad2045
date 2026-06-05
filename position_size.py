@@ -7,7 +7,7 @@ import pandas as pd
 # Confirmados en experimento 16 B1 (2015-2025)
 # --------------------------------------------------
 
-RISK_PERCENT     = 0.0085     # Riesgo por operación: 0.85% del capital
+RISK_PERCENT     = 0.0085     # Riesgo por operación: 0.85% del capital  # Ver también config.py — RISK_PER_TRADE
 MAX_POSITION_PCT = 0.25       # Tamaño máximo de una posición: 25% del capital
 
 # --------------------------------------------------
@@ -17,10 +17,10 @@ MAX_POSITION_PCT = 0.25       # Tamaño máximo de una posición: 25% del capita
 # Percentil bajo (activo poco volátil ahora) → multiplicador alto → stop holgado
 # --------------------------------------------------
 
-B1_MULT_MIN = 2.2             # Multiplicador mínimo (volatilidad en máximos históricos)
-B1_MULT_MAX = 4.0             # Multiplicador máximo (volatilidad en mínimos históricos)
+B1_MULT_MIN = 2.2             # Multiplicador mínimo (volatilidad en máximos históricos)  # Ver también config.py — B1_MULT_MIN
+B1_MULT_MAX = 4.0             # Multiplicador máximo (volatilidad en mínimos históricos)  # Ver también config.py — B1_MULT_MAX
 ATR_MULTIPLIER_BASE = 3.1     # Multiplicador de respaldo si ATR_PERCENTIL no está disponible
-TRAILING_FACTOR = 0.75        # Aprobado en Experimento 40-ter (stress test 3/3 crisis)
+TRAILING_FACTOR = 0.75        # Aprobado en Experimento 40-ter (stress test 3/3 crisis)  # Ver también config.py — TRAILING_FACTOR
 
 
 def _obtener_multiplicador(df):

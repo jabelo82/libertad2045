@@ -209,7 +209,7 @@ Trading con capital real (puerto 4001). Fase futura.
 ------------------------------------------------------------
 
 FASE 2 — PAPER TRADING ACTIVO (desde 2026-04-14)
-Actualización: 2026-05-06
+Actualización: 2026-06-05
 
 Sistema ejecutándose automáticamente:
 
@@ -220,7 +220,7 @@ Sistema ejecutándose automáticamente:
 • watchdog activo: lunes a viernes 12:00 CET
 • ciclo encendido/apagado automático operativo
 
-Estado del portfolio (05 mayo 2026):
+Estado del portfolio (05 junio 2026):
 
 • capital PAPER:  1.113.884,28 € (pico histórico)
 • posiciones abiertas (10/10 MAX_POS):
