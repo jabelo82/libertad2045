@@ -149,6 +149,9 @@ def publicar_pagina(nombre_archivo):
 
 
 if __name__ == "__main__":
+    ok, msg = publicar_dashboard()
+    estado = "✓" if ok else "✗"
+    print(f"  {estado} {msg}")
     paginas = ["exp40_dashboard.html", "montecarlo_075.html"]
     for pagina in paginas:
         ok, msg = publicar_pagina(pagina)
