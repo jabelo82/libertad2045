@@ -65,6 +65,9 @@ Commits principales en producción:
   —        reconstruir_salidas.py: 12 TRADE_SOLD escritos en logs históricos
            (BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC, LLY, OXY, R, TER)
            precios aproximados vía yfinance (cierre del día de primera ausencia)
+  99a633f  dashboard: posiciones=0 cuando RG bloquea — fallback 'evaluando N posiciones'
+  ef64a18  dashboard: eliminar duplicados ORDER/FILLED — solo TRADE_FILLED en tablas
+  —        logs: R 03-24 (orden cancelada) eliminado. INTC 23:59:01 añadido.
 
 FIXES APLICADOS EN v2.4:
 
@@ -90,6 +93,9 @@ FIXES APLICADOS EN v2.4:
                           precio de salida real. Historial de sesiones eliminado.
                           Trades actuales construidos desde cartera IBKR (labels),
                           no desde logs — fuente de verdad para posiciones abiertas.
+                          Duplicados ORDER/FILLED eliminados: si existe TRADE_FILLED
+                          para un símbolo, la Orden enviada (TRADE) se omite.
+                          Posiciones=0 cuando RG bloquea: fallback a línea de rebalanceo.
   · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
                           registrar_fills_recientes: consolida fills parciales,
                           registra stop GTC asociado
