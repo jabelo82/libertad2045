@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-05  |  Versión del sistema: v2.4
+Actualizado: 2026-06-08  |  Versión del sistema: v2.4
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -28,7 +28,7 @@ Actualizado: 2026-06-05  |  Versión del sistema: v2.4
                            supervisión y evolución.
 
 --------------------------------------------------------------------------------
-1. ESTADO ACTUAL (05 JUNIO 2026)
+1. ESTADO ACTUAL (08 JUNIO 2026)
 --------------------------------------------------------------------------------
 
 FASE 2 — PAPER TRADING ACTIVO desde 2026-04-14
@@ -49,6 +49,9 @@ FASE 2 — PAPER TRADING ACTIVO desde 2026-04-14
 Auditoría triple completada (Claude + Cursor + ChatGPT).
 Commits principales en producción:
 
+  f32885b  Fix crítico: evaluar_stops_por_cierre respeta SIM y bloquea SELL sin posición larga
+  a8b5420  Fix: cancelOrder de GTC también respeta modo SIM
+  4f5f882  rebalance: crear stop GTC automáticamente para posiciones sin protección
   a0d5f1e  Fix fills parciales duplicados y stop no registrado en dashboard
   29d04bd  Fix cierre por stop no verifica fill real (caso CBOE 02/06)
   cc1d808  Auditoría v2.4 — 15 fixes aplicados
@@ -118,6 +121,10 @@ FIXES APLICADOS EN v2.4:
                           position_size.py — fuente única B1. yfinance eliminado.
   · position_size.py      calcular_trailing_stop(df) añadida — fuente única lógica B1.
                           TRAILING_FACTOR=0.75 definido aquí.
+  · portfolio_manager.py  evaluar_stops_por_cierre respeta modo SIM completamente
+                          SELL bloqueado si posición no es larga (anti-cortos)
+                          cancelOrder también respeta SIM
+  · rebalance.py          Auto-crea stop GTC para posiciones sin protección
   · rebalance.py          Acepta datos=cache. Usa DataFrame pre-descargado si disponible.
   · signal_engine.py      Docstring corregido: SMA50>SMA200 (antes "close>SMA200").
   · config.py             Creado — referencia centralizada de 20 parámetros del sistema.
@@ -210,13 +217,14 @@ FIXES APLICADOS EN v2.4:
 6. PENDIENTES ANTES DE LIVE (agosto 2026)
 --------------------------------------------------------------------------------
 
-  □ Confirmar cierre CBOE (corto -407 acc., BUY GTC encolada para apertura)
   □ Deduplicar fills históricos en tabla trades del dashboard (DE, JCI)
   □ Precio de salida real para posiciones cerradas
   □ config.py centralizado (deuda técnica)
   □ Actualizar BIOS a versión AN (fiabilidad RTC)
   □ SAI para cortes de luz
   □ market_filter.py integrar en orquestador (Fase 3)
+
+  ✓ INTC, AKAM y CBOE tienen stops GTC manuales colocados el 08/06/2026.
 
 --------------------------------------------------------------------------------
 7. INCIDENTE CBOE (02–05 junio 2026)
@@ -233,5 +241,5 @@ FIXES APLICADOS EN v2.4:
          y NO marca la posición como cerrada (commit 29d04bd).
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-05
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-08
 ================================================================================
