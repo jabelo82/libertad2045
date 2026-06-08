@@ -202,7 +202,7 @@ def leer_logs():
                     if level == "TRADE_FILLED" or "TRADE_EXECUTED" in event:
                         if symbol and shares:
                             try:
-                                side = "SELL" if ("SLD" in event.upper() or level == "TRADE_SOLD") else "BUY"
+                                side = "SELL" if "SLD" in event.upper() else "BUY"
                                 # Deduplicación de fills parciales por (fecha, symbol)
                                 existing = next(
                                     (t for t in trades
@@ -221,16 +221,6 @@ def leer_logs():
                                         pass
                                     if not existing["stop"] and stop:
                                         existing["stop"] = stop
-                            except Exception:
-                                pass
-                    elif level == "TRADE_SOLD":
-                        if symbol and shares:
-                            try:
-                                key = (ts[:10], symbol, entry)
-                                if key not in [(t["ts"][:10], t["symbol"], t["entry"]) for t in trades]:
-                                    trades.append({"ts": ts, "symbol": symbol, "shares": shares,
-                                                   "entry": entry, "stop": stop, "source": "FILLED",
-                                                   "side": "SELL"})
                             except Exception:
                                 pass
                     elif level == "TRADE":
@@ -951,37 +941,29 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                         _exit_precio = _sal_precio
                         break
 
-            # SELL trades son ellos mismos el precio de salida — no necesitan
-            # exit posterior para mostrarse en la tabla
-            is_sell = t.get("side") == "SELL"
-            if _exit_precio is None and not is_sell:
+            if _exit_precio is None:
                 continue  # sin precio de salida → posición abierta o sin datos
 
-            if _exit_precio is None and is_sell:
-                # Usamos el precio de entrada del propio TRADE_SOLD como precio de cierre
-                _exit_precio = _entrada_f
-
-            _color = "#ff4455" if (_exit_precio or 0) < (_entrada_f or _exit_precio or 0) else "#00c896"
-            stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>' if _exit_precio else "—"
+            _color = "#ff4455" if _exit_precio < (_entrada_f or _exit_precio) else "#00c896"
+            stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
             stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
             precio_actual = precios_trades.get(_sym)
             precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
 
             pnl_cell = "—"
             pct_cell = "—"
-            if not is_sell:
-                try:
-                    entrada_f = float(t["entry"])
-                    shares_f  = float(t["shares"])
-                    if entrada_f > 0 and _exit_precio:
-                        pnl_usd  = (_exit_precio - entrada_f) * shares_f
-                        pnl_eur  = pnl_usd / usd_per_eur
-                        pct      = (_exit_precio - entrada_f) / entrada_f * 100
-                        color    = "#00c896" if pnl_eur >= 0 else "#ff4455"
-                        pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
-                        pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
-                except (ValueError, TypeError, ZeroDivisionError):
-                    pass
+            try:
+                entrada_f = float(t["entry"])
+                shares_f  = float(t["shares"])
+                if entrada_f > 0:
+                    pnl_usd  = (_exit_precio - entrada_f) * shares_f
+                    pnl_eur  = pnl_usd / usd_per_eur
+                    pct      = (_exit_precio - entrada_f) / entrada_f * 100
+                    color    = "#00c896" if pnl_eur >= 0 else "#ff4455"
+                    pnl_cell = f'<span style="color:{color}">{pnl_eur:+,.0f} €</span>'
+                    pct_cell = f'<span style="color:{color}">{pct:+.2f}%</span>'
+            except (ValueError, TypeError, ZeroDivisionError):
+                pass
 
             filas_trades_cerrados += f"""
             <tr data-date="{t['ts'][:10]}">
