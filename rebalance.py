@@ -31,7 +31,7 @@ from ib_insync import Order, Stock
 
 from data_loader import obtener_datos
 from logger import log_event
-from position_size import MAX_POSITION_PCT, calcular_posicion
+from position_size import MAX_POSITION_PCT, calcular_posicion, calcular_trailing_stop
 from telegram import send_telegram
 
 
@@ -363,6 +363,48 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     motivo="Datos históricos insuficientes (<20 barras)",
                 ))
                 continue
+
+            # Auto-crear stop GTC si la posición no tiene protección activa
+            if symbol not in stops_gtc and mode in ("PAPER", "LIVE"):
+                log_event("WARN",
+                          f"Posición sin stop GTC — calculando y colocando automáticamente",
+                          symbol=symbol)
+                df_sym = (datos or {}).get(symbol)
+                if df_sym is None:
+                    df_sym = obtener_datos(ib, symbol)
+                if df_sym is not None:
+                    nuevo_stop, mult = calcular_trailing_stop(df_sym)
+                    if nuevo_stop and nuevo_stop > 0:
+                        try:
+                            contrato_s = pos.contract
+                            contrato_s.exchange = "SMART"
+                            if ib.qualifyContracts(contrato_s):
+                                stop_nuevo = Order()
+                                stop_nuevo.action        = "SELL"
+                                stop_nuevo.orderType     = "STP"
+                                stop_nuevo.totalQuantity = int(abs(pos.position))
+                                stop_nuevo.auxPrice      = nuevo_stop
+                                stop_nuevo.tif           = "GTC"
+                                stop_nuevo.transmit      = True
+                                ib.placeOrder(contrato_s, stop_nuevo)
+                                ib.sleep(1)
+                                log_event("INFO",
+                                          f"Stop GTC creado automáticamente | {symbol} | "
+                                          f"stop={nuevo_stop:.2f} | mult={mult}",
+                                          symbol=symbol)
+                                ib.reqAllOpenOrders()
+                                ib.sleep(2)
+                                stops_gtc = _obtener_gtc_stops(ib)
+                                try:
+                                    from telegram import send_telegram
+                                    send_telegram(f"⚠️ LIBERTAD_2045 — Stop GTC creado automáticamente: "
+                                                 f"{symbol} @ {nuevo_stop:.2f}")
+                                except Exception:
+                                    pass
+                        except Exception as e:
+                            log_event("ERROR",
+                                      f"Error creando stop GTC para {symbol}: {e}",
+                                      symbol=symbol)
 
             # Decisión (función pura)
             decision = evaluar_posicion(symbol, shares_actual, precio, capital, df)
