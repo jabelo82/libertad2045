@@ -895,6 +895,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             <tr data-date="{fecha}">
                 <td>{fecha}</td>
                 <td><strong>{sym}</strong></td>
+                <td><span style="color:#00c896">▲ BUY</span></td>
                 <td class="num">{shares}</td>
                 <td class="num">{entrada}</td>
                 <td class="num">{precio_actual_str}</td>
@@ -905,7 +906,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             </tr>"""
 
     if not filas_trades_abiertos:
-        filas_trades_abiertos = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
+        filas_trades_abiertos = ('<tr><td colspan="10" style="text-align:center;opacity:.5">'
                                  'Sin posiciones abiertas</td></tr>')
 
     # ── TRADES EJECUTADOS: desde logs, solo cerrados ──────────────────────────
@@ -959,6 +960,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             <tr data-date="{t['ts'][:10]}">
                 <td>{t['ts'][:10]}</td>
                 <td><strong>{t['symbol']}</strong></td>
+                <td><span style="color:#00c896">▲ BUY</span></td>
                 <td class="num">{t['shares']}</td>
                 <td class="num">{t['entry']}</td>
                 <td class="num">{precio_actual_str}</td>
@@ -969,7 +971,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             </tr>"""
 
     if not filas_trades_cerrados:
-        filas_trades_cerrados = ('<tr><td colspan="9" style="text-align:center;opacity:.5">'
+        filas_trades_cerrados = ('<tr><td colspan="10" style="text-align:center;opacity:.5">'
                                  'Sin trades cerrados registrados</td></tr>')
 
     rentabilidad_color = "#00ff88" if stats.get("rentabilidad", 0) >= 0 else "#ff4444"
@@ -1326,6 +1328,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             <tr>
               <th>Fecha</th>
               <th>Símbolo</th>
+              <th>Tipo</th>
               <th class="num">Acciones</th>
               <th class="num">Entrada</th>
               <th class="num">Precio actual</th>
@@ -1361,6 +1364,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             <tr>
               <th>Fecha</th>
               <th>Símbolo</th>
+              <th>Tipo</th>
               <th class="num">Acciones</th>
               <th class="num">Entrada</th>
               <th class="num">Precio actual</th>
