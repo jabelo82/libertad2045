@@ -26,7 +26,7 @@ def obtener_precio_yfinance(symbol):
         import yfinance as yf
         data = yf.download(symbol, period="2d", auto_adjust=True, progress=False)
         if not data.empty:
-            return float(data["Close"].iloc[-1])
+            return float(data["Close"].squeeze().iloc[-1])
     except Exception as e:
         print(f"[dashboard] yfinance: error obteniendo precio de {symbol}: {e}")
     return None
@@ -47,7 +47,7 @@ def _tipo_cambio(cartera):
         import yfinance as yf
         data = yf.download("EURUSD=X", period="2d", auto_adjust=True, progress=False)
         if not data.empty:
-            val = float(data["Close"].iloc[-1])
+            val = float(data["Close"].squeeze().iloc[-1])
             if val > 0:
                 return val
     except Exception:
