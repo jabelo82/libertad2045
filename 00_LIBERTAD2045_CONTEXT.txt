@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-08  |  Versión del sistema: v2.4
+Actualizado: 2026-06-10  |  Versión del sistema: v2.4
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -28,27 +28,40 @@ Actualizado: 2026-06-08  |  Versión del sistema: v2.4
                            supervisión y evolución.
 
 --------------------------------------------------------------------------------
-1. ESTADO ACTUAL (08 JUNIO 2026)
+1. ESTADO ACTUAL (10 JUNIO 2026)
 --------------------------------------------------------------------------------
 
-FASE 2 — PAPER TRADING ACTIVO desde 2026-04-14
+FASE 3 — LIVE-PREP con 8.000 € reales en IBKR
 
-  Modo de operación  : PAPER (cuenta simulada Interactive Brokers)
-  Capital PAPER      : ~1.189.736 € (ciclo 04/06/2026)
-  Posiciones abiertas: 9/10
-  Transición a LIVE  : 1 agosto 2026 con 4.000 € reales
+  Modo de operación  : PAPER → LIVE (cuenta real, ejecución nocturna)
+  Capital inicial    : 8.000 € (efectivo real en IBKR)
+  NAV actual         : ~7.656 € (diferencia de 344 € son devengos USD acumulados
+                       de la etapa PAPER anterior, no comisiones)
+  Posiciones abiertas: 0 al inicio de la etapa
+  RESET_DATE         : 2026-06-10 (logs anteriores ignorados por dashboard)
+
+  Inicio de la etapa : 10/06/2026
+    · 10 SELL DAY ejecutadas en apertura para cerrar todas las posiciones PAPER
+    · 7 órdenes BUY STOP enviadas hoy:
+        KO(18), JNJ(6), REG(18), ALGN(3), DTE(9), CB(4), TRV(4)
 
   Ejecución automática:
       cron 22:10 L–V  →  run_bot.sh  →  libertad2045.py
       watchdog 12:00 L–V  →  watchdog.sh  →  watchdog.py
+
+  IB Gateway         : puerto 4001 (LIVE — cuenta real)
 
 --------------------------------------------------------------------------------
 2. VERSIÓN ACTIVA: v2.4
 --------------------------------------------------------------------------------
 
 Auditoría triple completada (Claude + Cursor + ChatGPT).
-Commits principales en producción:
+Commits principales en producción (más recientes primero):
 
+  d26fad7  reset: nueva etapa LIVE-prep con 8.000€ — 10/06/2026
+           dashboard.py: RESET_DATE="2026-06-10", stats vacíos con 8.000€
+  6ab9830  backup: dashboard y datos antes de reset a 8.000€ (09/06/2026)
+           Archivos: dashboard_backup_20260609.html/py
   f32885b  Fix crítico: evaluar_stops_por_cierre respeta SIM y bloquea SELL sin posición larga
   a8b5420  Fix: cancelOrder de GTC también respeta modo SIM
   4f5f882  rebalance: crear stop GTC automáticamente para posiciones sin protección
@@ -79,7 +92,14 @@ Commits principales en producción:
            eliminar yfinance de portfolio_manager
   8b195df  docs/config: requirements.txt, config.py centralizado, docstrings y fechas
 
-FIXES APLICADOS EN v2.4:
+FIXES APLICADOS EN v2.4 (10/06/2026 — para etapa LIVE-prep):
+
+  · portfolio_manager.py  evaluar_stops_por_cierre respeta modo SIM completamente
+                          SELL bloqueado si posición no es larga (anti-cortos)
+  · libertad2045.py       cancelOrder también respeta modo SIM
+  · rebalance.py          Auto-crea stop GTC para posiciones sin protección
+
+FIXES ANTERIORES EN v2.4:
 
   CRÍTICOS:
   C1 · libertad2045.py    Fallo IB/capital: stops y rebalanceo corren igualmente
@@ -121,10 +141,6 @@ FIXES APLICADOS EN v2.4:
                           position_size.py — fuente única B1. yfinance eliminado.
   · position_size.py      calcular_trailing_stop(df) añadida — fuente única lógica B1.
                           TRAILING_FACTOR=0.75 definido aquí.
-  · portfolio_manager.py  evaluar_stops_por_cierre respeta modo SIM completamente
-                          SELL bloqueado si posición no es larga (anti-cortos)
-                          cancelOrder también respeta SIM
-  · rebalance.py          Auto-crea stop GTC para posiciones sin protección
   · rebalance.py          Acepta datos=cache. Usa DataFrame pre-descargado si disponible.
   · signal_engine.py      Docstring corregido: SMA50>SMA200 (antes "close>SMA200").
   · config.py             Creado — referencia centralizada de 20 parámetros del sistema.
@@ -138,7 +154,7 @@ FIXES APLICADOS EN v2.4:
   · backtest_expandido.py TRAILING_FACTOR=0.75 en trailing stop
                           Señal tendencia corregida: SMA50>SMA200 (antes Close>SMA200)
                           alineada con producción. PF 2.607, DD 10.4% (2005-2025).
-  · portfolio_manager.py  Posición corta detectada: alerta Telegram crítica + skip.
+  · portfolio_manager.py  Posición corta detectada: alerta crítica Telegram + skip.
   · libertad2045.py       ConnectionError de conectar_ib() capturado — C1 funcional.
   · logger.py             Retención logs 90d → 3650d (10 años, sobreescribible via .env).
   · reconstruir_salidas.py Script de reconstrucción de salidas históricas. Lee logs,
@@ -166,7 +182,7 @@ FIXES APLICADOS EN v2.4:
   Pullback umbral     : close_prev < SMA50_prev − ATR_prev × 0.75
   Pullback ventana    : últimos 3 días
   Universo            : ~502 acciones S&P500
-  Capital inicial     : 4.000 € + 4.000 €/año — NUNCA modificar sin instrucción
+  Capital inicial     : 8.000 € (cuenta real IBKR — etapa LIVE-prep desde 10/06/2026)
   Ventana datos       : 2Y
 
 --------------------------------------------------------------------------------
@@ -198,7 +214,7 @@ FIXES APLICADOS EN v2.4:
   Servidor           : jabelo@192.168.1.139
                        Torre MSI MS-7D48, Zorin OS 18.1, kernel bloqueado
   Proyecto           : ~/PROYECTO_LIBERTAD_2045
-  IB Gateway         : puerto 4002 (PAPER) / 4001 (LIVE)
+  IB Gateway         : puerto 4001 (LIVE) / 4002 (PAPER — ya no en uso)
   IBC                : 3.19.0, Xvfb :99
   GitHub Pages       : jabelo82.github.io/libertad2045
   GitHub repo        : jabelo82/libertad2045
@@ -214,20 +230,47 @@ FIXES APLICADOS EN v2.4:
     22:20 → torre se apaga, programa RTC siguiente ciclo
 
 --------------------------------------------------------------------------------
-6. PENDIENTES ANTES DE LIVE (agosto 2026)
+6. PENDIENTES
 --------------------------------------------------------------------------------
 
+  □ Completar DNI de Juan Ayelo Valiente en el contrato participativo
+  □ Resolver OAuth IBKR (acuerdos pendientes fantasma en portal IBKR)
+  □ Conciliación mensual con Resumen Realizado de IBKR (primer lunes de cada mes)
+  □ Actualizar dashboard con precios reales del CSV de IBKR
   □ Deduplicar fills históricos en tabla trades del dashboard (DE, JCI)
   □ Precio de salida real para posiciones cerradas
-  □ config.py centralizado (deuda técnica)
   □ Actualizar BIOS a versión AN (fiabilidad RTC)
   □ SAI para cortes de luz
   □ market_filter.py integrar en orquestador (Fase 3)
 
-  ✓ INTC, AKAM y CBOE tienen stops GTC manuales colocados el 08/06/2026.
+  ✓ Posiciones PAPER cerradas manualmente (10/06/2026)
+  ✓ Dashboard reseteado a 8.000 € (10/06/2026)
 
 --------------------------------------------------------------------------------
-7. INCIDENTE CBOE (02–05 junio 2026)
+7. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
+--------------------------------------------------------------------------------
+
+  Inversión          : 50.000 € mediante préstamo participativo
+  Reparto beneficios : 60% Juanjo / 40% Javier
+  Plazo mínimo       : 5 años
+  Retirada           : posible a partir del 5º año
+  Estado             : contrato redactado — pendiente añadir DNI de Juanjo
+
+--------------------------------------------------------------------------------
+8. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
+--------------------------------------------------------------------------------
+
+  IBKR añadió 250.000 € por error en la cuenta en lugar de resetear a 8.000 €.
+  El bot operó brevemente con capital inflado (~1.416.000 €) y abrió posiciones.
+  Corregido mediante soporte IBKR: capital restablecido a 8.000 € efectivo.
+  Todas las posiciones abiertas durante el periodo inflado fueron cerradas
+  manualmente el 10/06/2026 (10 SELL DAY ejecutadas en apertura de mercado).
+
+  NAV al 10/06/2026: ~7.656 € (los 344 € de diferencia son devengos USD
+  acumulados de la etapa anterior — no son comisiones ni pérdidas operativas).
+
+--------------------------------------------------------------------------------
+9. INCIDENTE CBOE (02–05 junio 2026)
 --------------------------------------------------------------------------------
 
   02/06: Stop activado por cierre (274.33 ≤ 290.12). Orden MKT SELL devolvió
@@ -240,6 +283,11 @@ FIXES APLICADOS EN v2.4:
   Fix:   portfolio_manager.py ahora recoloca stop GTC si MKT es rechazada
          y NO marca la posición como cerrada (commit 29d04bd).
 
+  Cortos involuntarios documentados en logs históricos:
+    INTC (-438 acc.) — cerrado manualmente 09/06/2026
+    AKAM (-500 acc.) — cerrado manualmente 09/06/2026
+    CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
+
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-08
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-10
 ================================================================================
