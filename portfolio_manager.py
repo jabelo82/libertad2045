@@ -1,3 +1,5 @@
+import os
+
 from ib_insync import *
 
 from logger import log_event
@@ -8,7 +10,8 @@ from position_size import calcular_trailing_stop
 # Parámetros — sincronizados con experimento 27
 # --------------------------------------------------
 
-MAX_POSITIONS = 10   # Posiciones simultáneas máximas (exp. 10 confirmado)  # Ver también config.py — MAX_POSITIONS
+MAX_POSITIONS           = 10   # Posiciones simultáneas máximas (exp. 10 confirmado)  # Ver también config.py — MAX_POSITIONS
+MAX_POSICIONES_ARRANQUE = int(os.getenv("MAX_POSICIONES_ARRANQUE", str(MAX_POSITIONS)))
 
 # Trailing stop dinámico B1 (idéntico al backtest_expandido.py)
 ATR_PERIOD     = 14
@@ -337,7 +340,11 @@ def filtrar_senales(signals, open_positions):
     Se devuelven las mejores señales disponibles hasta cubrir los slots libres.
     """
 
-    available_slots = MAX_POSITIONS - len(open_positions)
+    if len(open_positions) == 0:
+        available_slots = MAX_POSICIONES_ARRANQUE
+        log_event("INFO", f"Portfolio vacío — arranque gradual: máx {MAX_POSICIONES_ARRANQUE} entradas este ciclo")
+    else:
+        available_slots = MAX_POSITIONS - len(open_positions)
 
     if available_slots <= 0:
         log_event("INFO", f"Portfolio lleno ({MAX_POSITIONS}/{MAX_POSITIONS}). "

@@ -462,9 +462,12 @@ def main():
 
         # --------------------------------------------------
         # Ejecutar trades
+        # capital_restante decrece conforme se comprometen posiciones,
+        # evitando que el sizing acumulado supere el capital disponible.
         # --------------------------------------------------
 
-        trades_executed = 0
+        trades_executed  = 0
+        capital_restante = capital
 
         for signal in signals:
 
@@ -473,10 +476,21 @@ def main():
 
             try:
 
-                shares, stop_distance, atr = calcular_posicion(df, capital)
+                shares, stop_distance, atr = calcular_posicion(df, capital_restante)
 
                 if shares <= 0:
                     log_event("INFO", "Posición descartada: shares = 0", symbol=symbol)
+                    continue
+
+                # Coste estimado: precio BUY STOP (máximo del día + buffer) × acciones
+                buy_stop_price  = round(df.iloc[-1].high + 0.05, 2)
+                coste_estimado  = shares * buy_stop_price
+
+                if coste_estimado > capital_restante:
+                    log_event("INFO",
+                              f"Capital insuficiente para {symbol} "
+                              f"({coste_estimado:.2f} > restante {capital_restante:.2f}) — skip",
+                              symbol=symbol)
                     continue
 
                 ejecutar_trade(
@@ -488,7 +502,8 @@ def main():
                     mode=MODE
                 )
 
-                trades_executed += 1
+                capital_restante -= coste_estimado
+                trades_executed  += 1
 
             except Exception as e:
                 log_event("ERROR", f"Error ejecutando trade {symbol}: {e}")
