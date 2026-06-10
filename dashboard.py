@@ -163,7 +163,7 @@ def leer_logs():
         if not fecha:
             continue
         fecha_str = fecha.group(1)
-        if fecha_str <= RESET_DATE:
+        if fecha_str < RESET_DATE:
             continue
 
         capital    = None
