@@ -298,7 +298,7 @@
     <div class="logo">⚙ LIBERTAD_2045</div>
     <div class="mode-badge">PAPER</div>
   </div>
-  <div class="last-update">Actualizado: 10/06/2026 15:49</div>
+  <div class="last-update">Actualizado: 10/06/2026 23:31</div>
 </header>
 
 <main class="main">
@@ -378,12 +378,12 @@
     </div>
     <div class="collapsible" id="cartera" style="max-height:700px">
       <div class="chart-box">
-        <div class="chart-title">Distribución del capital — 7,624 €</div>
+        <div class="chart-title">Distribución del capital — 7,739 €</div>
         <div class="portfolio-layout">
           <div class="pie-wrap">
             <canvas id="chartCartera"></canvas>
             <div class="pie-center">
-              <div class="pie-center-value" id="pieHoverValue">7,624 €</div>
+              <div class="pie-center-value" id="pieHoverValue">7,739 €</div>
               <div class="pie-center-label" id="pieHoverLabel">capital total</div>
             </div>
           </div>
@@ -431,7 +431,7 @@
             </tr>
             <tr data-date="—">
                 <td>—</td>
-                <td><strong>REG</strong></td>
+                <td><strong>CASY</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">—</td>
                 <td class="num">—</td>
@@ -444,6 +444,42 @@
             <tr data-date="—">
                 <td>—</td>
                 <td><strong>TRV</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>ALGN</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>JNJ</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>REG</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">—</td>
                 <td class="num">—</td>
@@ -468,18 +504,6 @@
             <tr data-date="—">
                 <td>—</td>
                 <td><strong>KO</strong></td>
-                <td><span style="color:#00c896">▲ Compra</span></td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-                <td class="num">—</td>
-            </tr>
-            <tr data-date="—">
-                <td>—</td>
-                <td><strong>JNJ</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">—</td>
                 <td class="num">—</td>
@@ -658,9 +682,9 @@ function filtrarTrades(dias, btn) {
 
 // ── PORTFOLIO PIE CHART ────────────────────────────────────────────
 const portfolio = {
-  labels: ["CB", "REG", "TRV", "DTE", "KO", "JNJ", "CASH"],
-  values: [1078, 1174, 987, 1084, 1222, 1170, 909],
-  colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#3a5068"]
+  labels: ["CB", "CASY", "TRV", "ALGN", "JNJ", "REG", "DTE", "KO", "CASH"],
+  values: [1106, 766, 1015, 428, 1197, 1206, 1100, 1259, -338],
+  colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#d19a66", "#98c379", "#3a5068"]
 };
 
 const pieTotal = portfolio.values.reduce((a, b) => a + b, 0);
