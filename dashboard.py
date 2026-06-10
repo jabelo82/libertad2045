@@ -59,6 +59,9 @@ OUTPUT            = os.path.join(os.path.dirname(__file__), "dashboard.html")
 CAPITAL_PEAK_FILE = os.path.join(os.path.dirname(__file__), "capital_peak.txt")
 PORTFOLIO_CACHE   = os.path.join(os.path.dirname(__file__), "portfolio_cache.json")
 
+# Nueva etapa desde esta fecha — los logs anteriores se ignoran
+RESET_DATE        = "2026-06-10"
+
 # clientId exclusivo para el dashboard (bot=1, rebalancer=5, watchdog=6)
 DASHBOARD_CLIENT_ID = 7
 
@@ -160,6 +163,8 @@ def leer_logs():
         if not fecha:
             continue
         fecha_str = fecha.group(1)
+        if fecha_str <= RESET_DATE:
+            continue
 
         capital    = None
         drawdown   = None
@@ -1544,10 +1549,21 @@ def main():
 
     sesiones = leer_logs()
     if not sesiones:
-        print("[dashboard] Sin datos suficientes para generar dashboard")
-        return
-
-    stats = calcular_stats(sesiones)
+        stats = {
+            "capital_actual":  8000.0,
+            "capital_inicial": 8000.0,
+            "capital_pico":    8000.0,
+            "rentabilidad":    0.0,
+            "dd_actual":       0.0,
+            "total_trades":    0,
+            "total_señales":   0,
+            "sesiones":        0,
+            "ultima_fecha":    "—",
+            "modo":            "PAPER",
+        }
+        print(f"[dashboard] Sin sesiones desde {RESET_DATE} — capital inicial 8.000 €")
+    else:
+        stats = calcular_stats(sesiones)
 
     # Recopilar símbolos únicos de todos los trades para obtener precios actuales
     symbols_trades = list({t["symbol"] for s in sesiones for t in s["trades"] if t["symbol"]})
