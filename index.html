@@ -298,7 +298,7 @@
     <div class="logo">⚙ LIBERTAD_2045</div>
     <div class="mode-badge">PAPER</div>
   </div>
-  <div class="last-update">Actualizado: 10/06/2026 15:28</div>
+  <div class="last-update">Actualizado: 10/06/2026 15:49</div>
 </header>
 
 <main class="main">
@@ -307,8 +307,8 @@
   <div class="kpi-grid">
     <div class="kpi">
       <div class="kpi-label">Capital actual</div>
-      <div class="kpi-value" style="color:var(--accent)">7,656 €</div>
-      <div class="kpi-sub">Pico: 7,656 €</div>
+      <div class="kpi-value" style="color:var(--accent)">8,000 €</div>
+      <div class="kpi-sub">Pico: 8,000 €</div>
     </div>
     <div class="kpi ">
       <div class="kpi-label">Rentabilidad</div>
@@ -322,13 +322,13 @@
     </div>
     <div class="kpi">
       <div class="kpi-label">Sesiones</div>
-      <div class="kpi-value">1</div>
-      <div class="kpi-sub">Última: 2026-06-10</div>
+      <div class="kpi-value">0</div>
+      <div class="kpi-sub">Última: —</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Trades ejecutados</div>
-      <div class="kpi-value">7</div>
-      <div class="kpi-sub">Señales detectadas: 7</div>
+      <div class="kpi-value">0</div>
+      <div class="kpi-sub">Señales detectadas: 0</div>
     </div>
   </div>
 
@@ -378,12 +378,12 @@
     </div>
     <div class="collapsible" id="cartera" style="max-height:700px">
       <div class="chart-box">
-        <div class="chart-title">Distribución del capital — 8,000 €</div>
+        <div class="chart-title">Distribución del capital — 7,624 €</div>
         <div class="portfolio-layout">
           <div class="pie-wrap">
             <canvas id="chartCartera"></canvas>
             <div class="pie-center">
-              <div class="pie-center-value" id="pieHoverValue">8,000 €</div>
+              <div class="pie-center-value" id="pieHoverValue">7,624 €</div>
               <div class="pie-center-label" id="pieHoverLabel">capital total</div>
             </div>
           </div>
@@ -416,7 +416,79 @@
               <th class="num">%</th>
             </tr>
           </thead>
-          <tbody id="trades-abiertos-tbody"><tr><td colspan="10" style="text-align:center;opacity:.5">Sin posiciones abiertas</td></tr></tbody>
+          <tbody id="trades-abiertos-tbody">
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>CB</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>REG</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>TRV</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>DTE</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>KO</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr>
+            <tr data-date="—">
+                <td>—</td>
+                <td><strong>JNJ</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+            </tr></tbody>
         </table>
       </div>
     </div>
@@ -465,10 +537,10 @@
 </footer>
 
 <script>
-const fechas = ["2026-06-10"];
-const capitales = [7656.3];
-const senales = [7];
-const posiciones = [0];
+const fechas = [];
+const capitales = [];
+const senales = [];
+const posiciones = [];
 
 // Drawdown desde pico
 const dds = capitales.map((c, i) => {
@@ -586,9 +658,9 @@ function filtrarTrades(dias, btn) {
 
 // ── PORTFOLIO PIE CHART ────────────────────────────────────────────
 const portfolio = {
-  labels: ["CASH"],
-  values: [8000],
-  colors: ["#3a5068"]
+  labels: ["CB", "REG", "TRV", "DTE", "KO", "JNJ", "CASH"],
+  values: [1078, 1174, 987, 1084, 1222, 1170, 909],
+  colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#3a5068"]
 };
 
 const pieTotal = portfolio.values.reduce((a, b) => a + b, 0);
