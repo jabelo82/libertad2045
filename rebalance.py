@@ -484,6 +484,9 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                 int(abs(pos.position)), be_stop,
                                 stops_gtc.get(symbol),
                             )
+                            # Refrescar stops_gtc para que el rebalanceo use el stop actualizado
+                            # y no coloque un segundo GTC stop encima del be_stop
+                            stops_gtc = _obtener_gtc_stops(ib)
                     else:
                         log_event("SIM",
                                   f"Break-even simulado | {symbol} | "

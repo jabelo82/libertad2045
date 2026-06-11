@@ -352,12 +352,11 @@ def main():
 
         # --------------------------------------------------
         # V3 FIX: Verificar datos de posiciones abiertas ANTES del escaneo
+        # Usa datos_cartera ya cargado — evita llamadas extra a IBKR
         # --------------------------------------------------
         try:
-            posiciones_abiertas = [p.contract.symbol for p in ib.positions() if p.position > 0]
-            for sym_pos in posiciones_abiertas:
-                df_pos = obtener_datos(ib, sym_pos)
-                if df_pos is None or len(df_pos) < 20:
+            for sym_pos in symbols_abiertos:
+                if sym_pos not in datos_cartera or len(datos_cartera[sym_pos]) < 20:
                     log_event("WARN",
                               f"FALLO DE DATOS en posicion abierta: {sym_pos}",
                               symbol=sym_pos)
@@ -580,6 +579,24 @@ def main():
                 log_event("WARN", f"Git backup falló: {msg_git}")
         except Exception as e_git:
             log_event("WARN", f"Git backup no completado: {e_git}")
+
+        # --------------------------------------------------
+        # Reprogramar RTC para el próximo ciclo
+        # Garantiza que el wakeup automático esté configurado
+        # incluso si el usuario apaga manualmente antes del
+        # timer systemd (trading-night-shutdown.timer, 22:20).
+        # --------------------------------------------------
+        try:
+            result = subprocess.run(
+                ["sudo", "/usr/local/bin/trading-boot-rtcwake.sh"],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0:
+                log_event("INFO", "RTC reprogramado para próximo ciclo")
+            else:
+                log_event("WARN", f"RTC no reprogramado: {result.stderr.strip()}")
+        except Exception as e_rtc:
+            log_event("WARN", f"RTC reprogram error: {e_rtc}")
 
 
     except Exception as e:
