@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-10  |  Versión del sistema: v2.4
+Actualizado: 2026-06-16  |  Versión del sistema: v2.4
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -211,9 +211,25 @@ FIXES ANTERIORES EN v2.4:
 5. INFRAESTRUCTURA
 --------------------------------------------------------------------------------
 
-  Servidor           : jabelo@192.168.1.139
-                       Torre MSI MS-7D48, Zorin OS 18.1, kernel bloqueado
-  Proyecto           : ~/PROYECTO_LIBERTAD_2045
+  ARQUITECTURA DEFINITIVA (desde 16/06/2026):
+    VPS Hetzner  → PRODUCCIÓN (Libertad_2045 24/7, siempre encendido)
+    ProBook      → DESARROLLO (Claude Code, commits, pruebas)
+    Torre MSI    → JUBILADA
+
+  VPS HETZNER (operativo desde 16/06/2026):
+    Proveedor    : Hetzner CX23 — Nuremberg, Alemania
+    IP pública   : 46.225.106.85
+    SO           : Ubuntu 24.04.4 LTS
+    Acceso       : ssh root@46.225.106.85 (clave SSH ProBook ~/.ssh/id_rsa)
+    Estado       : servidor creado y accesible — pendiente de configurar
+
+  PROBOOK (desarrollo):
+    Proyecto     : ~/PROYECTO_LIBERTAD_2045
+    Uso          : Claude Code, commits, pruebas locales
+
+  TORRE MSI MS-7D48 (jubilada):
+    Anterior IP  : jabelo@192.168.1.139 / Zorin OS 18.1
+
   IB Gateway         : puerto 4001 (LIVE) / 4002 (PAPER — ya no en uso)
   IBC                : 3.19.0, Xvfb :99
   GitHub Pages       : jabelo82.github.io/libertad2045
@@ -222,12 +238,18 @@ FIXES ANTERIORES EN v2.4:
   ClientIDs IBKR:
     Bot=1, Dashboard=7, Rebalancer=5, Watchdog_old=6, Watchdog_new=8, Manual=9
 
-  Ciclo automático:
-    11:50 → RTC despierta torre (ciclo mediodía)
+  Ciclo automático (VPS — permanente, sin RTC):
     12:00 → watchdog
-    22:00 → RTC despierta torre (ciclo noche)
     22:10 → bot de trading
-    22:20 → torre se apaga, programa RTC siguiente ciclo
+
+  CHECKLIST MIGRACIÓN A VPS:
+    ✓ Paso 1: servidor creado y accesible (16/06/2026)
+    □ Paso 2: actualizar paquetes e instalar dependencias
+    □ Paso 3: instalar IB Gateway + IBC 3.19.0 + Xvfb
+    □ Paso 4: clonar repo y configurar proyecto
+    □ Paso 5: configurar crons y automatización
+    □ Paso 6: copiar logs e historial
+    □ Paso 7: verificación final
 
 --------------------------------------------------------------------------------
 6. PENDIENTES
@@ -289,5 +311,5 @@ FIXES ANTERIORES EN v2.4:
     CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-10
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-16
 ================================================================================
