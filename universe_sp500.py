@@ -1,14 +1,14 @@
 # --------------------------------------------------
 # LIBERTAD_2045 — Universo de activos
 #
-# ~502 empresas del S&P500 con historia validada
+# ~501 empresas del S&P500 con historia validada
 # 2015-2025. Experimento 25 confirmó 325 activos
 # con trades reales en el período.
 #
 # Revisión recomendada cada 6 meses para reflejar
 # cambios en la composición del índice.
 #
-# Última revisión: 2026-05-25
+# Última revisión: 2026-06-15
 # --------------------------------------------------
 
 
@@ -19,17 +19,17 @@ SP500 = [
     "AKAM",  "AMAT",  "AMD",  "ANET",  "APH",
     "APP",  "AVGO",  "CDNS",  "CDW",  "CIEN",
     "COHR",  "CRM",  "CRWD",  "CSCO",  "CTSH",
-    "DDOG",  "DELL",  "EPAM",  "FFIV",  "FICO",
-    "FSLR",  "FTNT",  "GDDY",  "GEN",  "GLW",
-    "HPE",  "HPQ",  "IBM",  "INTC",  "INTU",
-    "IT",  "JBL",  "KEYS",  "KLAC",  "LITE",
-    "LRCX",  "MCHP",  "MPWR",  "MSFT",  "MSI",
-    "MU",  "NOW",  "NTAP",  "NVDA",  "NXPI",
-    "ON",  "ORCL",  "PANW",  "PLTR",  "PTC",
-    "QCOM",  "ROP",  "SMCI",  "SNDK",  "SNPS",
-    "STX",  "SWKS",  "TDY",  "TEL",  "TER",
-    "TRMB",  "TXN",  "TYL",  "VRSN",  "WDAY",
-    "WDC",  "ZBRA",
+    "DDOG",  "DELL",  "FFIV",  "FICO",  "FSLR",
+    "FTNT",  "GDDY",  "GEN",  "GLW",  "HPE",
+    "HPQ",  "IBM",  "INTC",  "INTU",  "IT",
+    "JBL",  "KEYS",  "KLAC",  "LITE",  "LRCX",
+    "MCHP",  "MPWR",  "MSFT",  "MSI",  "MU",
+    "NOW",  "NTAP",  "NVDA",  "NXPI",  "ON",
+    "ORCL",  "PANW",  "PLTR",  "PTC",  "QCOM",
+    "ROP",  "SMCI",  "SNDK",  "SNPS",  "STX",
+    "SWKS",  "TDY",  "TEL",  "TER",  "TRMB",
+    "TXN",  "TYL",  "VRSN",  "WDAY",  "WDC",
+    "ZBRA",
 
     # Comunicaciones
     "CHTR",  "CMCSA",  "DIS",  "EA",  "FOX",
