@@ -59,6 +59,15 @@ def cancelar_ordenes_pendientes(ib):
             continue
 
         # Cancelar órdenes DAY: entradas que no se ejecutaron
+        # Proteger órdenes MKT SELL DAY — son cierres de posición, no entradas.
+        # Cancelarlas dejaría posiciones abiertas sin protección ni cierre pendiente.
+        if order.action == "SELL" and order.orderType == "MKT":
+            protegidas += 1
+            log_event("INFO", "Orden MKT SELL DAY protegida (cierre de posición)",
+                      symbol=getattr(order, "symbol", ""),
+                      entry=getattr(order, "auxPrice", ""))
+            continue
+
         try:
             ib.cancelOrder(order)
             canceladas += 1

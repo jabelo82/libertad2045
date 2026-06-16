@@ -514,6 +514,25 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     accion_orden  = "BUY" if decision.accion == "AMPLIAR" else "SELL"
                     shares_abs    = abs(decision.shares_delta)
 
+                    # Guard anti-doble-SELL (fix cortos involuntarios):
+                    # Si ya existe una orden MKT SELL pendiente para este símbolo
+                    # (colocada por evaluar_stops_por_cierre en el mismo ciclo),
+                    # omitir este SELL para evitar abrir un corto involuntario.
+                    if accion_orden == "SELL":
+                        ordenes_venta_pendientes = [
+                            t for t in ib.openTrades()
+                            if t.contract.symbol == symbol
+                            and t.order.action == "SELL"
+                            and t.order.orderType == "MKT"
+                        ]
+                        if ordenes_venta_pendientes:
+                            log_event("WARN",
+                                      f"Rebalanceo SELL omitido — ya existe orden MKT SELL "
+                                      f"pendiente para {symbol}",
+                                      symbol=symbol)
+                            decisiones.append(decision)
+                            continue
+
                     # Orden MKT DAY — solo horario regular (outsideRth=False).
                     # Si el mercado está cerrado IBKR la encola como PreSubmitted
                     # y la ejecuta en la próxima apertura; no se cancela aquí.
