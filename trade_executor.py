@@ -107,10 +107,18 @@ def ejecutar_trade(ib, symbol, df, shares, stop_distance, buffer=0.05, mode="SIM
     stop.parentId = real_order_id   # Vinculada al orderId real, no a un valor fantasma
     stop.transmit = True            # Esta orden transmite el par completo a IBKR
 
-    ib.placeOrder(contract, stop)
-
-    # Dar tiempo a IBKR para procesar el par de órdenes
-    ib.sleep(1)
+    try:
+        ib.placeOrder(contract, stop)
+        ib.sleep(1)
+    except Exception as e:
+        log_event("ERROR",
+                  f"Stop GTC fallido para {symbol} — cancelando entrada BUY para evitar orden huérfana: {e}",
+                  symbol=symbol, entry=buy_stop_price, stop=stop_loss_price)
+        try:
+            ib.cancelOrder(trade.order)
+        except Exception:
+            pass
+        return
 
     # --------------------------------------------------
     # Registro en log

@@ -120,28 +120,29 @@ def _reemplazar_stop_gtc(
     stop_anterior,
 ) -> bool:
     """
-    Cancela el stop GTC previo y coloca uno nuevo para las acciones actualizadas.
+    Coloca el nuevo stop GTC y, solo si tiene éxito, cancela el anterior.
     Retorna True si el reemplazo se completó sin errores.
-    """
-    # Cancelar el stop anterior si existe
-    if stop_anterior is not None:
-        try:
-            ib.cancelOrder(stop_anterior.order)
-            ib.sleep(1)
-            log_event("INFO", f"Stop GTC anterior cancelado", symbol=symbol)
-        except Exception as e:
-            log_event("WARN", f"Rebalanceo: error cancelando stop GTC de {symbol}: {e}",
-                      symbol=symbol)
 
-    # Colocar stop GTC nuevo — misma estructura que trade_executor.py
+    Orden de operaciones (H-8 fix): validar → colocar nuevo → cancelar viejo.
+    Nunca cancelar el stop existente si el nuevo no es válido o falla.
+    """
+    # Validar precio antes de tocar nada
+    if not (stop_price and stop_price > 0):
+        log_event("ERROR",
+                  f"Rebalanceo: stop_price inválido ({stop_price}) para {symbol} "
+                  f"— stop GTC anterior conservado sin cambios",
+                  symbol=symbol)
+        return False
+
+    # Colocar stop GTC nuevo PRIMERO
     try:
         nuevo_stop = Order()
-        nuevo_stop.action       = "SELL"
-        nuevo_stop.orderType    = "STP"
+        nuevo_stop.action        = "SELL"
+        nuevo_stop.orderType     = "STP"
         nuevo_stop.totalQuantity = shares_nuevas
-        nuevo_stop.auxPrice     = stop_price
-        nuevo_stop.tif          = "GTC"
-        nuevo_stop.transmit     = True
+        nuevo_stop.auxPrice      = stop_price
+        nuevo_stop.tif           = "GTC"
+        nuevo_stop.transmit      = True
 
         ib.placeOrder(contrato, nuevo_stop)
         ib.sleep(1)
@@ -149,12 +150,26 @@ def _reemplazar_stop_gtc(
         log_event("INFO",
                   f"Nuevo stop GTC | qty={shares_nuevas} | stop={stop_price:.2f}",
                   symbol=symbol, shares=shares_nuevas, stop=stop_price)
-        return True
 
     except Exception as e:
-        log_event("ERROR", f"Rebalanceo: error colocando nuevo stop GTC de {symbol}: {e}",
+        log_event("ERROR",
+                  f"Rebalanceo: error colocando nuevo stop GTC de {symbol}: {e} "
+                  f"— stop GTC anterior conservado sin cambios",
                   symbol=symbol)
         return False
+
+    # Cancelar el stop anterior solo si el nuevo se colocó sin errores
+    if stop_anterior is not None:
+        try:
+            ib.cancelOrder(stop_anterior.order)
+            ib.sleep(1)
+            log_event("INFO", f"Stop GTC anterior cancelado", symbol=symbol)
+        except Exception as e:
+            log_event("WARN",
+                      f"Rebalanceo: error cancelando stop GTC anterior de {symbol}: {e}",
+                      symbol=symbol)
+
+    return True
 
 
 # --------------------------------------------------
@@ -292,12 +307,18 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
     incluir el resumen en su propio mensaje de Telegram.
     """
 
+    decisiones: List[DecisionRebalanceo] = []
+
+    if capital <= 0:
+        log_event("WARN",
+                  "rebalancear: capital=0 o negativo — rebalanceo omitido "
+                  "para evitar cierre masivo involuntario")
+        return decisiones
+
     log_event("INFO",
               f"REBALANCE_START | capital={capital:.2f} | "
               f"modo={mode} | umbral={REBALANCE_THRESHOLD:.0%} | "
               f"min_shares={REBALANCE_MIN_SHARES}")
-
-    decisiones: List[DecisionRebalanceo] = []
 
     # --------------------------------------------------
     # 1. Posiciones largas abiertas
@@ -518,7 +539,10 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     # Si ya existe una orden MKT SELL pendiente para este símbolo
                     # (colocada por evaluar_stops_por_cierre en el mismo ciclo),
                     # omitir este SELL para evitar abrir un corto involuntario.
+                    # reqAllOpenOrders garantiza caché actualizada incluso tras reconexión.
                     if accion_orden == "SELL":
+                        ib.reqAllOpenOrders()
+                        ib.sleep(1)
                         ordenes_venta_pendientes = [
                             t for t in ib.openTrades()
                             if t.contract.symbol == symbol

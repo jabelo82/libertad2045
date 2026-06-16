@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from ib_insync import MarketOrder
 from conexion_ib import conectar_ib, desconectar_ib
 from data_loader import obtener_datos
 from signal_engine import detectar_senal
@@ -319,6 +320,39 @@ def main():
             log_event("INFO",
                       f"Stops por cierre activados: {len(posiciones_cerradas)} → "
                       f"{posiciones_cerradas}")
+
+
+        # --------------------------------------------------
+        # Detectar y cerrar cortos involuntarios (H-3)
+        # Un corto involuntario implica doble SELL previo — ningún otro módulo
+        # los cierra automáticamente, y en LIVE implican pérdida potencial ilimitada.
+        # --------------------------------------------------
+
+        for pos in ib.positions():
+            if pos.position < 0:
+                symbol = pos.contract.symbol
+                shares = int(abs(pos.position))
+                log_event("ERROR",
+                          f"CORTO INVOLUNTARIO DETECTADO — cerrando {symbol} {shares} acc",
+                          symbol=symbol)
+                send_telegram_critical(
+                    f"🔴 LIBERTAD_2045 — CORTO INVOLUNTARIO: {symbol} "
+                    f"({pos.position} acc). Cerrando automáticamente."
+                )
+                try:
+                    contrato = pos.contract
+                    contrato.exchange = "SMART"
+                    if ib.qualifyContracts(contrato) and MODE in ("PAPER", "LIVE"):
+                        orden_cierre = MarketOrder("BUY", shares)
+                        orden_cierre.tif = "DAY"
+                        ib.placeOrder(contrato, orden_cierre)
+                        ib.sleep(2)
+                        log_event("INFO",
+                                  f"Orden BUY enviada para cerrar corto de {symbol}",
+                                  symbol=symbol)
+                except Exception as e:
+                    log_event("ERROR", f"Error cerrando corto de {symbol}: {e}",
+                              symbol=symbol)
 
 
         # --------------------------------------------------
