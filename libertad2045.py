@@ -249,16 +249,9 @@ def main():
         try:
             ib = conectar_ib()
         except ConnectionError as e:
-            log_event("ERROR", f"Conexión IBKR fallida: {e} — se intentan stops y rebalanceo con IB anterior")
+            log_event("ERROR", f"Conexión IBKR fallida: {e}")
             send_telegram_critical(f"⚠️ LIBERTAD_2045: conexión IBKR fallida ({e})")
-            try:
-                evaluar_stops_por_cierre(ib, mode=MODE)
-            except Exception as e2:
-                log_event("ERROR", f"C1: stops fallaron con IB caído: {e2}")
-            try:
-                rebalancear(ib, 0, mode=MODE)
-            except Exception as e2:
-                log_event("ERROR", f"C1: rebalanceo falló con IB caído: {e2}")
+            log_event("ERROR", "C1: IB caído — stops y rebalanceo no ejecutables sin conexión activa")
             _escribir_last_run()
             return
 
@@ -311,6 +304,8 @@ def main():
 
         # Descargar datos una sola vez para todas las posiciones abiertas
         # Compartido entre stops, rebalanceo y trailing — fuente única IBKR
+        ib.reqPositions()
+        ib.sleep(1)
         symbols_abiertos = [p.contract.symbol for p in ib.positions() if p.position > 0]
         datos_cartera = _cargar_datos_posiciones(ib, symbols_abiertos)
 

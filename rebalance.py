@@ -22,8 +22,11 @@ No genera nuevas entradas ni evalúa señales. No llama a risk_check —
 ese control lo hace el orquestador antes de invocar este módulo.
 """
 
+import json
 import os
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
@@ -45,6 +48,53 @@ REBALANCE_THRESHOLD = float(os.getenv("REBALANCE_THRESHOLD", "0.25"))  # Ver tam
 # Delta mínimo de acciones para ejecutar el ajuste.
 # Evita micro-operaciones que generarían comisiones sin beneficio real.
 REBALANCE_MIN_SHARES = int(os.getenv("REBALANCE_MIN_SHARES", "5"))  # Ver también config.py — REBALANCE_MIN_SHARES
+
+
+# --------------------------------------------------
+# H-4: Archivo de estado para órdenes AMPLIAR pendientes
+# Persiste entre ciclos para detectar fills de apertura y actualizar el stop GTC.
+# --------------------------------------------------
+
+_PROJECT_DIR            = Path(__file__).resolve().parent
+_PENDING_REBALANCE_FILE = _PROJECT_DIR / "pending_rebalance.json"
+
+
+def _leer_pendientes() -> dict:
+    """Lee pending_rebalance.json. Devuelve {} si no existe o está corrupto."""
+    try:
+        if _PENDING_REBALANCE_FILE.exists():
+            return json.loads(_PENDING_REBALANCE_FILE.read_text())
+    except Exception as e:
+        log_event("WARN", f"pending_rebalance: error leyendo archivo: {e}")
+    return {}
+
+
+def _guardar_pendientes(pendientes: dict) -> None:
+    try:
+        _PENDING_REBALANCE_FILE.write_text(json.dumps(pendientes, indent=2))
+    except Exception as e:
+        log_event("WARN", f"pending_rebalance: error guardando archivo: {e}")
+
+
+def _guardar_pendiente_ampliar(symbol: str, shares_esperadas: int, shares_delta: int) -> None:
+    pendientes = _leer_pendientes()
+    pendientes[symbol] = {
+        "shares_esperadas": shares_esperadas,
+        "shares_delta":     shares_delta,
+        "timestamp":        datetime.now().isoformat(),
+    }
+    _guardar_pendientes(pendientes)
+    log_event("INFO",
+              f"pending_rebalance: AMPLIAR guardado para {symbol} "
+              f"(shares_esperadas={shares_esperadas})",
+              symbol=symbol)
+
+
+def _eliminar_pendiente_ampliar(symbol: str) -> None:
+    pendientes = _leer_pendientes()
+    if symbol in pendientes:
+        del pendientes[symbol]
+        _guardar_pendientes(pendientes)
 
 
 # --------------------------------------------------
@@ -321,6 +371,43 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
               f"min_shares={REBALANCE_MIN_SHARES}")
 
     # --------------------------------------------------
+    # H-4: Procesar órdenes AMPLIAR pendientes de ciclos anteriores
+    # Si el fill ocurrió: eliminar entrada (el ciclo normal actualiza el stop GTC).
+    # Si el fill no ocurrió aún: marcar símbolo para no duplicar el AMPLIAR.
+    # --------------------------------------------------
+
+    pendientes_procesados: set = set()
+
+    if mode in ("PAPER", "LIVE"):
+        pendientes = _leer_pendientes()
+        if pendientes:
+            try:
+                pos_actuales = {p.contract.symbol: int(p.position)
+                                for p in ib.positions() if p.position > 0}
+            except Exception as e:
+                log_event("WARN", f"pending_rebalance: error leyendo posiciones: {e}")
+                pos_actuales = {}
+
+            for sym, entrada in list(pendientes.items()):
+                shares_esperadas = entrada.get("shares_esperadas", 0)
+                pos_actual = pos_actuales.get(sym, 0)
+
+                if pos_actual >= shares_esperadas:
+                    log_event("INFO",
+                              f"pending_rebalance: fill confirmado {sym} "
+                              f"(pos={pos_actual} >= esperadas={shares_esperadas}) "
+                              f"— stop GTC se actualizará en ciclo normal",
+                              symbol=sym)
+                    _eliminar_pendiente_ampliar(sym)
+                else:
+                    pendientes_procesados.add(sym)
+                    log_event("INFO",
+                              f"pending_rebalance: AMPLIAR aún pendiente {sym} "
+                              f"(pos={pos_actual} < esperadas={shares_esperadas}) "
+                              f"— omitiendo nuevo AMPLIAR este ciclo",
+                              symbol=sym)
+
+    # --------------------------------------------------
     # 1. Posiciones largas abiertas
     # --------------------------------------------------
 
@@ -416,12 +503,26 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                 ib.reqAllOpenOrders()
                                 ib.sleep(2)
                                 stops_gtc = _obtener_gtc_stops(ib)
-                                try:
-                                    from telegram import send_telegram
-                                    send_telegram(f"⚠️ LIBERTAD_2045 — Stop GTC creado automáticamente: "
-                                                 f"{symbol} @ {nuevo_stop:.2f}")
-                                except Exception:
-                                    pass
+                                if symbol not in stops_gtc:
+                                    log_event("ERROR",
+                                              f"Stop GTC auto-creado NO confirmado en IBKR para {symbol} "
+                                              f"— posición desprotegida",
+                                              symbol=symbol)
+                                    try:
+                                        from telegram import send_telegram_critical
+                                        send_telegram_critical(
+                                            f"🔴 LIBERTAD_2045 — Stop GTC automático NO confirmado: "
+                                            f"{symbol}. Posición desprotegida. Revisar manualmente."
+                                        )
+                                    except Exception:
+                                        pass
+                                else:
+                                    try:
+                                        from telegram import send_telegram
+                                        send_telegram(f"⚠️ LIBERTAD_2045 — Stop GTC creado automáticamente: "
+                                                     f"{symbol} @ {nuevo_stop:.2f}")
+                                    except Exception:
+                                        pass
                         except Exception as e:
                             log_event("ERROR",
                                       f"Error creando stop GTC para {symbol}: {e}",
@@ -471,6 +572,8 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
             # Actúa de forma independiente al ajuste de tamaño.
             # --------------------------------------------------
 
+            be_stop_aplicado = None  # H-11: nivel BE activo en este ciclo para este símbolo
+
             entry_price = getattr(pos, "avgCost", None)
             atr_actual  = df["ATR"].iloc[-1] if df is not None else float("nan")
 
@@ -508,6 +611,7 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                             # Refrescar stops_gtc para que el rebalanceo use el stop actualizado
                             # y no coloque un segundo GTC stop encima del be_stop
                             stops_gtc = _obtener_gtc_stops(ib)
+                            be_stop_aplicado = be_stop  # H-11: registrar nivel BE para preservarlo
                     else:
                         log_event("SIM",
                                   f"Break-even simulado | {symbol} | "
@@ -556,6 +660,15 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                       symbol=symbol)
                             decisiones.append(decision)
                             continue
+
+                    # H-4: Omitir AMPLIAR si ya hay uno pendiente de apertura en ciclo anterior
+                    if accion_orden == "BUY" and symbol in pendientes_procesados:
+                        log_event("INFO",
+                                  f"Rebalanceo AMPLIAR omitido para {symbol} "
+                                  f"— ya existe AMPLIAR pendiente de ciclo anterior",
+                                  symbol=symbol)
+                        decisiones.append(decision)
+                        continue
 
                     # Orden MKT DAY — solo horario regular (outsideRth=False).
                     # Si el mercado está cerrado IBKR la encola como PreSubmitted
@@ -609,6 +722,11 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                   f"{accion_orden} {shares_abs} acc. | "
                                   f"estado={estado} — stop GTC se actualizará en el próximo ciclo",
                                   symbol=symbol)
+                        # H-4: persistir AMPLIAR pendiente para seguimiento entre ciclos
+                        if decision.accion == "AMPLIAR":
+                            _guardar_pendiente_ampliar(
+                                symbol, decision.shares_optimo, decision.shares_delta
+                            )
                         # Orden pendiente: no tocar el stop GTC hasta que se ejecute
                         decisiones.append(decision)
                         continue
@@ -622,12 +740,30 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                         # No close: close - stop_dist queda más bajo que el modelo.
                         stop_price_nuevo = round(df["high"].iloc[-1] - stop_dist_nuevo, 2)
 
+                        # H-9: stop por encima del precio actual → se activaría en apertura
+                        if stop_price_nuevo >= precio:
+                            log_event("WARN",
+                                      f"Rebalanceo: stop calculado ({stop_price_nuevo:.2f}) >= "
+                                      f"precio actual ({precio:.2f}) para {symbol} "
+                                      f"— stop GTC no actualizado",
+                                      symbol=symbol)
+                            decisiones.append(decision)
+                            continue
+
                         if stop_price_nuevo > 0:
-                            _reemplazar_stop_gtc(
-                                ib, symbol, contrato,
-                                shares_nuevas, stop_price_nuevo,
-                                stops_gtc.get(symbol),
-                            )
+                            # H-11: no bajar el stop si el break-even ya está activo y es superior
+                            if be_stop_aplicado is not None and stop_price_nuevo < be_stop_aplicado:
+                                log_event("INFO",
+                                          f"Rebalanceo: stop calculado ({stop_price_nuevo:.2f}) < "
+                                          f"break-even ({be_stop_aplicado:.2f}) para {symbol} "
+                                          f"— preservando break-even",
+                                          symbol=symbol)
+                            else:
+                                _reemplazar_stop_gtc(
+                                    ib, symbol, contrato,
+                                    shares_nuevas, stop_price_nuevo,
+                                    stops_gtc.get(symbol),
+                                )
                         else:
                             log_event("WARN",
                                       f"Rebalanceo: stop_price calculado <= 0 para {symbol} "

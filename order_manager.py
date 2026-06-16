@@ -17,6 +17,8 @@ def cancelar_ordenes_pendientes(ib):
     después de la limpieza de órdenes.
     """
 
+    ib.reqAllOpenOrders()
+    ib.sleep(1)
     open_orders = ib.openOrders()
 
     if not open_orders:
