@@ -243,6 +243,25 @@ def main():
     try:
 
         # --------------------------------------------------
+        # Validación coherencia TRADING_MODE / IBKR_PORT
+        # LIVE → puerto 4001 (cuenta real). PAPER → puerto 4002 (cuenta paper).
+        # Detiene el sistema si la combinación es incoherente — evita operar LIVE
+        # con logs PAPER o enviar órdenes reales desde modo PAPER.
+        # --------------------------------------------------
+
+        _port = int(os.getenv("IBKR_PORT", "4002"))
+        if MODE == "LIVE" and _port != 4001:
+            msg = f"CONFIGURACIÓN INVÁLIDA: TRADING_MODE=LIVE pero IBKR_PORT={_port} (esperado 4001)"
+            log_event("CRITICAL", msg)
+            send_telegram_critical(f"🔴 {msg}")
+            return
+        if MODE == "PAPER" and _port == 4001:
+            msg = f"CONFIGURACIÓN INVÁLIDA: TRADING_MODE=PAPER pero IBKR_PORT=4001 (cuenta LIVE real)"
+            log_event("CRITICAL", msg)
+            send_telegram_critical(f"🔴 {msg}")
+            return
+
+        # --------------------------------------------------
         # Conexión con Interactive Brokers
         # --------------------------------------------------
 

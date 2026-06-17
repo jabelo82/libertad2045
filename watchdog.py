@@ -29,6 +29,7 @@ RTC_WAKEALARM  = Path("/sys/class/rtc/rtc0/wakealarm")
 IBKR_HOST          = os.getenv("IBKR_HOST",  "127.0.0.1")
 IBKR_PORT          = int(os.getenv("IBKR_PORT", "4002"))
 WATCHDOG_CLIENT_ID = 8
+LOCK_FILE          = Path("/tmp/libertad2045.lock")
 
 sys.path.insert(0, str(PROJECT_DIR))
 
@@ -51,7 +52,41 @@ def _prev_business_day(d):
     return d
 
 
+def _get_process_age_hours(pid: int):
+    """Devuelve la edad del proceso en horas, o None si no se puede determinar."""
+    try:
+        import psutil
+        return (datetime.now().timestamp() - psutil.Process(pid).create_time()) / 3600
+    except Exception:
+        pass
+    try:
+        stat_fields = Path(f"/proc/{pid}/stat").read_text().split()
+        starttime_ticks = int(stat_fields[21])
+        clk_tck = os.sysconf("SC_CLK_TCK")
+        uptime_s = float(Path("/proc/uptime").read_text().split()[0])
+        return (uptime_s - starttime_ticks / clk_tck) / 3600
+    except Exception:
+        return None
+
+
 def check_heartbeat():
+    # --------------------------------------------------
+    # Detectar proceso colgado antes de evaluar el heartbeat.
+    # Si el proceso lleva más de 4h, alertar y no relanzar —
+    # el timeout de run_bot.sh lo terminará automáticamente.
+    # --------------------------------------------------
+    if LOCK_FILE.exists():
+        try:
+            pid = int(LOCK_FILE.read_text().strip())
+            age_h = _get_process_age_hours(pid)
+            if age_h is not None and age_h > 4:
+                msg = (f"PROCESO COLGADO: PID {pid} lleva {age_h:.1f}h en ejecución. "
+                       f"El timeout de run_bot.sh lo terminará automáticamente.")
+                _send(f"🔴 LIBERTAD_2045 — {msg}", critico=True)
+                return True, msg, 0
+        except (ValueError, OSError):
+            pass
+
     if not HEARTBEAT_FILE.exists():
         return False, "Archivo heartbeat no encontrado", None
 
@@ -117,6 +152,18 @@ def check_ordenes_gtc(ib):
                 elif t.orderStatus.status in ("PreSubmitted", "Submitted"):
                     gtc_activas.append(info)
         detalle = {"gtc_activas": len(gtc_activas), "gtc_canceladas": len(gtc_canceladas), "canceladas": gtc_canceladas}
+
+        # Verificación cruzada: posiciones largas sin stop GTC activo
+        ib.reqPositions()
+        ib.sleep(1)
+        posiciones_largas = [p.contract.symbol for p in ib.positions() if p.position > 0]
+        simbolos_con_stop = {info["symbol"] for info in gtc_activas}
+        sin_proteccion = [s for s in posiciones_largas if s not in simbolos_con_stop]
+        if sin_proteccion:
+            detalle["sin_proteccion"] = sin_proteccion
+            _send(f"🔴 LIBERTAD_2045 — Posiciones SIN stop GTC: {sin_proteccion}", critico=True)
+            return False, f"POSICIONES SIN STOP GTC: {sin_proteccion}", detalle
+
         if gtc_canceladas:
             simbolos = [o["symbol"] for o in gtc_canceladas]
             return False, f"{len(gtc_canceladas)} orden(es) GTC cancelada(s): {simbolos}", detalle
@@ -170,8 +217,8 @@ def relanzar_bot():
                 critico=True,
             )
         else:
-            env["TRADING_MODE"] = "PAPER"
-            modo_relaunch = "PAPER"
+            modo_relaunch = os.getenv("TRADING_MODE", "PAPER")
+            print(f"[INFO] Relanzando bot en modo {modo_relaunch}")
 
         log_path = PROJECT_DIR / "logs" / f"watchdog_relaunch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         RELAUNCH_WAIT = 30

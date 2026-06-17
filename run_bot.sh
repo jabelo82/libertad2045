@@ -56,4 +56,4 @@ source "$VENV_ACTIVATE" || {
 # Ejecutar el motor de trading
 # --------------------------------------------------
 
-python "$PROJECT_DIR/libertad2045.py"
+timeout 3600 python "$PROJECT_DIR/libertad2045.py"

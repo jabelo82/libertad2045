@@ -21,15 +21,22 @@ HOUR_START         = int(os.getenv("RISK_HOUR_START", "21"))  # Ver también con
 HOUR_END           = int(os.getenv("RISK_HOUR_END",   "23"))  # Ver también config.py — HORA_FIN
  
  
-def _leer_capital_pico():
+def _leer_capital_pico(capital_actual=None):
     """
     Lee el capital pico registrado en disco.
     Si el archivo no existe, devuelve None.
+    Si capital_actual se proporciona y el pico es más del doble, alerta de posible archivo stale.
     """
     try:
         path = Path(PEAK_FILE)
         if path.exists():
-            return float(path.read_text().strip())
+            pico = float(path.read_text().strip())
+            if capital_actual is not None and pico > capital_actual * 2:
+                log_event("WARN",
+                          f"capital_peak.txt ({pico:.2f}) es más del doble del capital actual "
+                          f"({capital_actual:.2f}) — posible archivo stale de otra cuenta. "
+                          f"Verificar antes de operar en LIVE.")
+            return pico
     except Exception as e:
         log_event("WARN", f"No se pudo leer capital pico: {e}")
     return None
@@ -121,7 +128,7 @@ def risk_check(ib):
     # 4. Drawdown máximo desde capital pico
     # --------------------------------------------------
  
-    capital_pico = _leer_capital_pico()
+    capital_pico = _leer_capital_pico(capital_actual=net_liq)
     _guardar_capital_pico(net_liq)
 
     if capital_pico is None:
@@ -191,6 +198,28 @@ def risk_check(ib):
     log_event("INFO", f"Risk Guardian: OK — capital {net_liq:.2f} | "
                        f"hora {hour}h | drawdown dentro de límites | "
                        f"sin apalancamiento")
- 
+
     return True
+
+
+def resetear_capital_peak(capital_inicial: float) -> None:
+    """
+    Resetea capital_peak.txt al capital de inicio de una cuenta nueva.
+
+    Llamar manualmente antes del primer ciclo LIVE para evitar que el
+    Risk Guardian calcule drawdown contra el pico de la cuenta PAPER anterior.
+
+    Uso desde consola:
+        cd ~/PROYECTO_LIBERTAD_2045
+        venv/bin/python -c "from risk_guardian import resetear_capital_peak; resetear_capital_peak(4000)"
+    """
+    try:
+        Path(PEAK_FILE).write_text(str(capital_inicial))
+        log_event("INFO",
+                  f"capital_peak.txt reseteado a {capital_inicial:.2f} "
+                  f"— inicio de nueva cuenta (LIVE transition)")
+        print(f"capital_peak.txt reseteado a {capital_inicial:.2f}")
+    except Exception as e:
+        log_event("ERROR", f"No se pudo resetear capital_peak.txt: {e}")
+        raise
  
