@@ -191,15 +191,18 @@ def check_rtc():
 def _mercado_usa_abierto() -> bool:
     """
     True si el mercado regular USA (NYSE/NASDAQ) está abierto ahora.
-    Horario regular: 09:30–16:00 ET = 13:30–20:00 UTC, L-V.
+    Horario regular: 09:30–16:00 ET (America/New_York), L-V.
+    Usa zoneinfo para respetar el cambio de horario EST/EDT automáticamente.
     No cubre half-days ni festivos — es una guardia de seguridad, no un calendario exacto.
     """
-    now_utc  = datetime.utcnow()
-    if now_utc.weekday() >= 5:
+    from zoneinfo import ZoneInfo
+    ny     = ZoneInfo("America/New_York")
+    now_ny = datetime.now(ny)
+    if now_ny.weekday() >= 5:
         return False
-    apertura = now_utc.replace(hour=13, minute=30, second=0, microsecond=0)
-    cierre   = now_utc.replace(hour=20, minute=0,  second=0, microsecond=0)
-    return apertura <= now_utc <= cierre
+    apertura = now_ny.replace(hour=9,  minute=30, second=0, microsecond=0)
+    cierre   = now_ny.replace(hour=16, minute=0,  second=0, microsecond=0)
+    return apertura <= now_ny <= cierre
 
 
 def relanzar_bot():

@@ -77,7 +77,7 @@ def registrar_fills_recientes(ib):
     """
     try:
         ib.reqExecutions()
-        ib.sleep(1)
+        ib.sleep(3)
 
         logged_ids = set()
         if FILLS_IDS_FILE.exists():
@@ -158,7 +158,7 @@ def registrar_fills_recientes(ib):
 
         if nuevos_ids:
             todas = list(logged_ids) + nuevos_ids
-            FILLS_IDS_FILE.write_text("\n".join(todas[-1000:]))
+            FILLS_IDS_FILE.write_text("\n".join(todas[-10000:]))
             log_event("INFO", f"Fills nuevos registrados: "
                                f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
                                f"({len(nuevos_ids)} ejecuciones parciales)")
