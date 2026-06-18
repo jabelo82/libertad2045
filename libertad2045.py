@@ -190,8 +190,8 @@ def git_backup(capital: float | None) -> tuple[bool, str]:
     if _nombres:
         run(["git", "add", "--"] + _nombres)
 
-    status = run(["git", "status", "--porcelain"])
-    if not status.stdout.strip():
+    status = run(["git", "diff", "--cached", "--quiet"])
+    if status.returncode == 0:
         return True, "Git ya estaba al día (sin cambios)"
 
     result = run(["git", "commit", "-m", msg])
