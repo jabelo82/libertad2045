@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-18  |  Versión del sistema: v2.4
+Actualizado: 2026-06-18  |  Versión del sistema: v2.5
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ Actualizado: 2026-06-18  |  Versión del sistema: v2.4
   FASE 2 — PAPER TRADING activa desde 14/04/2026
 
   Modo de operación  : PAPER
-  Versión del sistema: v2.4
+  Versión del sistema: v2.5
   Capital actual     : ~7.661,28 € (ciclo 18/06/2026)
 
   Máquina principal  : Torre (jabelo@192.168.1.139) — Zorin OS 18.1
@@ -114,13 +114,19 @@ Actualizado: 2026-06-18  |  Versión del sistema: v2.4
     5. Primer ciclo nocturno a las 22:10.
 
 --------------------------------------------------------------------------------
-4. VERSIÓN ACTIVA: v2.4
+4. VERSIÓN ACTIVA: v2.5
 --------------------------------------------------------------------------------
 
-Auditoría v2.4 completada en 4 rondas (17/06/2026).
+Auditoría v2.5 completada (18/06/2026) — 6 fixes + validación cuantitativa rebalanceo.
+Auditoría v2.4 completada en 4 rondas (17/06/2026) — 26 hallazgos cerrados.
 Commits principales en producción (más recientes primero):
 
-  f174fbc  fix: git_backup detecta cambios staged en lugar de working tree
+  90ef0f8  feat: comparar_rebalanceo.py — validación cuantitativa del rebalanceo
+  b70c864  fix: A-5 verificar estado stop GTC, A-4 detectar duplicados,
+           C-2 SIGTERM handler, A-3 validar frescura datos
+  89d9b0a  fix: rebalanceo usa calcular_trailing_stop (TRAILING_FACTOR=0.75)
+  ca1990e  feat: watchdog verifica git_backup del ciclo nocturno anterior
+  2e33402  fix: git_backup detecta cambios staged en lugar de working tree
   23233ef  fix: añadir tzdata a requirements.txt (ZoneInfo US/Eastern)
   4df3359  Auditoría v2.4 ronda 4: A-1 reducir pendiente, M-2 timezone NY,
            M-4 TTL pendientes, M-5 avgCost warn, B-1 lockfile atómico,
@@ -166,21 +172,115 @@ Commits principales en producción (más recientes primero):
            única, eliminar yfinance de portfolio_manager
   8b195df  docs/config: requirements.txt, config.py centralizado, docstrings
 
+FIXES APLICADOS EN v2.5 (auditoría 18/06/2026):
+  Ver sección 5 (Auditoría v2.5) para el detalle completo.
+
 FIXES APLICADOS EN v2.4 (auditoría 17/06/2026 — 4 rondas, 26 hallazgos):
   Ver sección 5 (Auditoría v2.4) para el detalle completo.
 
 FIXES ANTERIORES EN v2.4:
-  Ver versión del archivo de fecha 16/06/2026 para el histórico completo.
   Principales: 15 fixes de auditoría triple (signal_engine, conexion_ib,
   watchdog, data_loader, rebalance, portfolio_manager, dashboard, risk_guardian,
   libertad2045, position_size, config, requirements).
 
 --------------------------------------------------------------------------------
-5. AUDITORÍA v2.4 (17/06/2026)
+5. AUDITORÍAS
 --------------------------------------------------------------------------------
 
+  ── v2.5 (18/06/2026) ─────────────────────────────────────────────────────
+
+  6 fixes aplicados + análisis de rebalanceo en producción + validación backtest
+  Commits: 90ef0f8, b70c864, 89d9b0a, ca1990e, 2e33402
+
+  FIXES APLICADOS:
+
+  C-1  chmod 600 .env en torre y VPS (aplicado manualmente en sesión)
+       Archivo .env contiene TELEGRAM_TOKEN y GITHUB_TOKEN — permisos
+       restrictivos son obligatorios antes de LIVE.
+
+  C-2  SIGTERM handler en libertad2045.py — apagado limpio tras timeout:
+       run_bot.sh usa `timeout 3600` que envía SIGTERM, lo que en CPython
+       bypassea los bloques `finally`. El handler captura SIGTERM y lanza
+       `SystemExit`, que sí propaga a través de `finally` → lockfile liberado
+       + conexión IB cerrada limpiamente.
+
+  C-4  Stop del rebalanceo usa calcular_trailing_stop() con TRAILING_FACTOR=0.75:
+       El bug anterior usaba calcular_posicion() que devuelve la distancia bruta
+       ATR×mult sin aplicar TRAILING_FACTOR=0.75. Cada reemplazo de stop por
+       rebalanceo dejaba el stop un ~25% más ancho que el modelo. Corregido
+       llamando directamente a calcular_trailing_stop(df) que aplica el factor.
+
+  A-3  Validar frescura de datos (máx 5 días) en portfolio_manager y rebalance:
+       Si la última barra de precios tiene >5 días de antigüedad, el stop no se
+       evalúa ni actualiza (evita usar datos stale de festivos o gaps de datos).
+
+  A-4  Detectar stops GTC duplicados en portfolio_manager y rebalance:
+       Si IBKR tiene dos stops GTC activos para el mismo símbolo, se registra
+       CRITICAL en log + alerta Telegram crítica. Se conserva el stop con precio
+       más alto (mayor protección).
+
+  A-5  Verificar estado del nuevo stop GTC antes de cancelar el anterior:
+       En _reemplazar_stop_gtc(), después de placeOrder() se verifica el estado
+       del nuevo stop (sleep 1s). Si el estado es Inactive/Cancelled/Rejected,
+       se aborta y se conserva el stop anterior. El sistema no queda sin
+       protección por un fallo en el reemplazo.
+
+  fix  git_backup detecta cambios staged en lugar de working tree:
+       git status --porcelain detectaba dashboard.html (working tree) y el bot
+       intentaba commitear sin staged → git commit fallaba silenciosamente.
+       Corregido con git diff --cached --quiet + returncode == 0.
+
+  feat watchdog verifica git_backup del ciclo nocturno anterior:
+       A las 12:00, el watchdog lee el CSV del día hábil anterior y busca la
+       línea "Git backup falló". Reporta OK/FALLO/sin dato en el informe de
+       Telegram del mediodía. Función check_git_backup() en watchdog.py.
+
+  VALIDACIÓN DEL REBALANCEO:
+
+  Análisis de logs de producción (14/04–18/06/2026):
+    · 630 evaluaciones de posición en ciclos de rebalanceo
+    · 24 ajustes ejecutados (tasa 3.8%)
+    · 0 stops activados tras AMPLIAR (ningún AMPLIAR precedió a un stop)
+    · Todas las posiciones rebalanceadas cerradas por señal (TRADE_SOLD)
+
+  Backtest comparativo CON vs SIN rebalanceo (2006-2025):
+    Métrica           CON rebalanceo   SIN rebalanceo   Delta
+    Capital final      8.888.418 €      8.481.305 €   +407.113 €
+    Win rate                54,1%            54,2%        -0,1%
+    Profit factor          2,6071           2,6511       -0,044
+    Max drawdown           10,4%            10,5%        -0,0%
+    Trades                  2.402            2.404           -2
+    Rebalanceos ej.           268              58*
+    *Los 58 sin rebalanceo son solo REDUCIR por MAX_POSITION_PCT (límite duro).
+
+    Frecuencia: 268 ajustes en ~5.000 días hábiles = 1 ajuste cada 19 días.
+    Veredicto: +4,8% de capital final sin coste en drawdown. ACTIVO PARA LIVE.
+    Script: comparar_rebalanceo.py (commit 90ef0f8)
+
+  PENDIENTES ANTES DE LIVE (muy recomendables — no bloqueantes):
+
+  M-1  outsideRth=False en MKT SELL de portfolio_manager
+       Las MKT de cierre se colocan a las 22:10 CET para ejecutar en apertura
+       del día siguiente. outsideRth omitido puede causar ejecución fuera de RTH.
+
+  M-3  sleep(1) tras cancelaciones en order_manager
+       Actualmente no hay pausa tras cancelOrder. Una cancelación seguida
+       inmediatamente de un nuevo placeOrder puede generar error 10147 en IBKR.
+
+  M-5  watchdog.sh timeout 300
+       El watchdog.sh no tiene timeout propio. Si watchdog.py se cuelga, el
+       proceso queda zombie hasta el reinicio del sistema.
+
+  A-1  Documentar explícitamente si rebalanceo AMPLIAR respeta drawdown gate
+       En backtest y producción, AMPLIAR usa capital disponible sin verificar
+       explícitamente el drawdown gate. Decisión pendiente: bloquear AMPLIAR
+       si Risk Guardian está activo, o permitirlo (argumento: no abre posición
+       nueva, solo ajusta tamaño de una existente).
+
+  ── v2.4 (17/06/2026) ─────────────────────────────────────────────────────
+
   4 rondas de revisión — 26 hallazgos cerrados
-  Commits: cf99d55, 54b6018, d049793, 82a347a, 4df3359, 23233ef, f174fbc
+  Commits: cf99d55, 54b6018, d049793, 82a347a, 4df3359, 23233ef, 2e33402
 
   CRÍTICOS RESUELTOS:
 
@@ -240,8 +340,18 @@ FIXES ANTERIORES EN v2.4:
     Win Rate         : 54,1%
     Max Drawdown     : 10,4%
     Trades           : 2.402
+    Rebalanceos      : 268 (incluido desde el inicio — confirmado 18/06/2026)
     Veredicto        : supera baseline v2 en todas las métricas financieras
                        relevantes
+
+  COMPARATIVA CON vs SIN REBALANCEO (18/06/2026):
+    CON rebalanceo   : 8.888.418 € — PF 2,6071 — DD 10,4%
+    SIN rebalanceo   : 8.481.305 € — PF 2,6511 — DD 10,5%
+    Delta            : +407.113 € (+4,8%) sin coste en drawdown
+    Mecanismo        : compounding — posiciones infradimensionadas al inicio
+                       se corrigen conforme crece el capital, amplificando
+                       las ganancias en tramos alcistas
+    Script           : comparar_rebalanceo.py (commit 90ef0f8)
 
   BACKTEST v2.4_bloq (05/06/2026) — REFERENCIA ANTERIOR:
     Período          : 2005–2025
@@ -256,6 +366,7 @@ FIXES ANTERIORES EN v2.4:
 
   Nota: backtest_expandido.py aplica TRAILING_FACTOR=0.75 (commit 4095a80)
   y señal SMA50>SMA200 (commit 966242f) — completamente alineado con producción.
+  La simulación de rebalanceo (umbral 25%, mín. 5 acc.) estaba ya incluida en v3.
 
 --------------------------------------------------------------------------------
 8. INFRAESTRUCTURA
@@ -323,7 +434,7 @@ FIXES ANTERIORES EN v2.4:
 
   RESULTADO GIT BACKUP (ciclo anterior 18/06, 22:14:38):
     WARN: Git backup falló: git commit falló: (stderr vacío)
-    → Bug corregido en sesión 18/06 (commit f174fbc). Verificación pendiente
+    → Bug corregido en sesión 18/06 (commit 2e33402). Verificación pendiente
       en el próximo ciclo (viernes 19/06/2026 a las 22:10).
 
 --------------------------------------------------------------------------------
@@ -353,12 +464,19 @@ FIXES ANTERIORES EN v2.4:
   GIT BACKUP CON STDERR VACÍO:
     git status --porcelain detectaba dashboard.html (working tree) y el bot
     intentaba commitear sin nada en staged → git commit fallaba silenciosamente.
-    Corregido con git diff --cached --quiet (commit f174fbc).
+    Corregido con git diff --cached --quiet (commit 2e33402).
 
 --------------------------------------------------------------------------------
 11. PENDIENTES
 --------------------------------------------------------------------------------
 
+  ANTES DE LIVE — MUY RECOMENDABLES:
+  □ M-1: outsideRth=False en MKT SELL de portfolio_manager
+  □ M-3: sleep(1) tras cancelaciones en order_manager
+  □ M-5: watchdog.sh timeout 300
+  □ A-1: documentar si rebalanceo AMPLIAR respeta drawdown gate (ver sección 5)
+
+  OTROS PENDIENTES:
   □ Completar DNI de Juan Ayelo Valiente en el contrato participativo
   □ Resolver OAuth IBKR (acuerdos pendientes fantasma en portal IBKR)
   □ Conciliación mensual con Resumen Realizado de IBKR (primer lunes de mes)
@@ -368,14 +486,17 @@ FIXES ANTERIORES EN v2.4:
   □ SAI para cortes de luz (Torre — si sigue como máquina principal)
   □ market_filter.py integrar en orquestador (Fase 3)
   □ Decidir fecha de corte a VPS como máquina principal
-  □ Verificar git_backup en ciclo viernes 19/06/2026 (commit f174fbc)
+  □ Verificar git_backup en ciclo viernes 19/06/2026 (commit 2e33402)
 
+  COMPLETADOS:
   ✓ Posiciones PAPER cerradas manualmente (10/06/2026)
   ✓ Dashboard reseteado a 8.000 € (10/06/2026)
   ✓ Migración VPS completada (18/06/2026)
   ✓ Auditoría v2.4 — 26 hallazgos cerrados (17/06/2026)
+  ✓ Auditoría v2.5 — 6 fixes + validación rebalanceo (18/06/2026)
   ✓ Fix cortos involuntarios JNJ/KO (17/06/2026)
   ✓ Actualizar BIOS a versión AN — descartado (Torre en retirada)
+  ✓ Validación cuantitativa del rebalanceo — +4,8% sobre 20 años (18/06/2026)
 
 --------------------------------------------------------------------------------
 12. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
@@ -420,5 +541,5 @@ FIXES ANTERIORES EN v2.4:
     CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-18
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.5 — 2026-06-18
 ================================================================================
