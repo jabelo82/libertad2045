@@ -177,7 +177,29 @@ def _obtener_gtc_stops(ib) -> dict:
         if (trade.order.orderType in ("STP", "TRAIL")
                 and trade.order.action == "SELL"
                 and trade.order.tif == "GTC"):
-            stops[trade.contract.symbol] = trade
+            symbol = trade.contract.symbol
+            if symbol in stops:
+                precio_exist = getattr(stops[symbol].order, "auxPrice", 0) or 0
+                precio_nuevo = getattr(trade.order, "auxPrice", 0) or 0
+                log_event("CRITICAL",
+                          f"STOP GTC DUPLICADO (rebalance): {symbol} — "
+                          f"órdenes {stops[symbol].order.orderId} ({precio_exist:.2f}) "
+                          f"y {trade.order.orderId} ({precio_nuevo:.2f}) — "
+                          f"conservando precio mayor",
+                          symbol=symbol)
+                try:
+                    from telegram import send_telegram_critical
+                    send_telegram_critical(
+                        f"🔴 LIBERTAD_2045 — Stop GTC duplicado: {symbol} | "
+                        f"Órdenes {stops[symbol].order.orderId} y {trade.order.orderId}. "
+                        f"Revisar manualmente."
+                    )
+                except Exception:
+                    pass
+                if precio_nuevo > precio_exist:
+                    stops[symbol] = trade
+            else:
+                stops[symbol] = trade
 
     return stops
 
@@ -199,6 +221,16 @@ def _precio_cierre_reciente(ib, symbol: str) -> Optional[float]:
             keepUpToDate=False,
         )
         if bars:
+            bar_date = bars[-1].date
+            if hasattr(bar_date, "date"):
+                bar_date = bar_date.date()
+            antiguedad = (datetime.now().date() - bar_date).days
+            if antiguedad > 5:
+                log_event("WARN",
+                          f"Rebalanceo: datos de {symbol} con {antiguedad}d de antigüedad "
+                          f"(última barra: {bar_date}) — precio ignorado",
+                          symbol=symbol)
+                return None
             return bars[-1].close
     except Exception as e:
         log_event("ERROR", f"Rebalanceo: error obteniendo precio de {symbol}: {e}",
@@ -239,8 +271,24 @@ def _reemplazar_stop_gtc(
         nuevo_stop.tif           = "GTC"
         nuevo_stop.transmit      = True
 
-        ib.placeOrder(contrato, nuevo_stop)
+        trade_nuevo = ib.placeOrder(contrato, nuevo_stop)
         ib.sleep(1)
+
+        estado = trade_nuevo.orderStatus.status if trade_nuevo else "Unknown"
+        if estado in ("Inactive", "Cancelled", "Rejected"):
+            log_event("ERROR",
+                      f"Rebalanceo: nuevo stop GTC de {symbol} rechazado "
+                      f"(estado={estado}) — stop anterior conservado sin cambios",
+                      symbol=symbol)
+            try:
+                from telegram import send_telegram_critical
+                send_telegram_critical(
+                    f"🔴 LIBERTAD_2045 — Stop GTC rechazado: {symbol} | "
+                    f"stop={stop_price:.2f} | estado={estado}"
+                )
+            except Exception:
+                pass
+            return False
 
         log_event("INFO",
                   f"Nuevo stop GTC | qty={shares_nuevas} | stop={stop_price:.2f}",

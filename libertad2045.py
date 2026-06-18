@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -224,7 +225,15 @@ def obtener_capital(ib):
     return None
 
 
+def _handle_sigterm(signum, frame):
+    """SIGTERM del timeout de run_bot.sh: propaga SystemExit para que el
+    bloque finally libere el lockfile y cierre la conexión IB limpiamente."""
+    raise SystemExit("SIGTERM recibido — apagado limpio")
+
+
 def main():
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
 
     acquire_lock()
 

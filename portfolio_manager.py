@@ -1,4 +1,5 @@
 import os
+from datetime import date
 
 from ib_insync import *
 
@@ -57,13 +58,34 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
         ib.reqAllOpenOrders()
         ib.sleep(1)
         # Mapa symbol → orden GTC de stop loss
-        stops_gtc = {}               
+        stops_gtc = {}
         for trade in ib.trades():
             if (trade.order.orderType in ("STP", "TRAIL") and
                     trade.order.action == "SELL" and
                     trade.order.tif == "GTC"):
                 symbol = trade.contract.symbol
-                stops_gtc[symbol] = trade
+                if symbol in stops_gtc:
+                    precio_exist = getattr(stops_gtc[symbol].order, "auxPrice", 0) or 0
+                    precio_nuevo = getattr(trade.order, "auxPrice", 0) or 0
+                    log_event("CRITICAL",
+                              f"STOP GTC DUPLICADO: {symbol} — "
+                              f"órdenes {stops_gtc[symbol].order.orderId} ({precio_exist:.2f}) "
+                              f"y {trade.order.orderId} ({precio_nuevo:.2f}) — "
+                              f"conservando precio mayor",
+                              symbol=symbol)
+                    try:
+                        from telegram import send_telegram_critical
+                        send_telegram_critical(
+                            f"🔴 LIBERTAD_2045 — Stop GTC duplicado: {symbol} | "
+                            f"Órdenes {stops_gtc[symbol].order.orderId} y {trade.order.orderId}. "
+                            f"Revisar manualmente."
+                        )
+                    except Exception:
+                        pass
+                    if precio_nuevo > precio_exist:
+                        stops_gtc[symbol] = trade
+                else:
+                    stops_gtc[symbol] = trade
 
         for pos in positions:
 
@@ -105,6 +127,17 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
 
                 if not bars:
                     log_event("WARN", f"Sin datos de cierre para {symbol} — stop no evaluado",
+                              symbol=symbol)
+                    continue
+
+                bar_date = bars[-1].date
+                if hasattr(bar_date, "date"):
+                    bar_date = bar_date.date()
+                antiguedad = (date.today() - bar_date).days
+                if antiguedad > 5:
+                    log_event("WARN",
+                              f"Datos de {symbol} con {antiguedad}d de antigüedad "
+                              f"(última barra: {bar_date}) — stop no evaluado",
                               symbol=symbol)
                     continue
 
