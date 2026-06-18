@@ -808,6 +808,13 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                         decisiones.append(decision)
                         continue
 
+                    # DECISIÓN A-1 (documentada 18/06/2026): AMPLIAR se permite incluso con
+                    # Risk Guardian activo (drawdown > 10%) porque no abre exposición nueva,
+                    # solo ajusta el tamaño de una posición existente que ya superó el filtro
+                    # de riesgo en su entrada original. REDUCIR siempre se permite (reduce
+                    # exposición). Si se quisiera bloquear AMPLIAR durante drawdown, añadir
+                    # aquí: `if risk_guardian_activo: continue`.
+
                     # Orden MKT DAY — solo horario regular (outsideRth=False).
                     # Si el mercado está cerrado IBKR la encola como PreSubmitted
                     # y la ejecuta en la próxima apertura; no se cancela aquí.

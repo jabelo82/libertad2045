@@ -240,7 +240,8 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
                         continue
 
                     orden_cierre = MarketOrder("SELL", shares)
-                    orden_cierre.tif = "DAY"
+                    orden_cierre.tif        = "DAY"
+                    orden_cierre.outsideRth = False
 
                     if mode in ("PAPER", "LIVE"):
                         trade = ib.placeOrder(contrato, orden_cierre)

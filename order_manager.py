@@ -42,6 +42,7 @@ def cancelar_ordenes_pendientes(ib):
                 # GTC hijo de una entrada DAY no ejecutada → cancelar también
                 try:
                     ib.cancelOrder(order)
+                    ib.sleep(1)
                     canceladas += 1
 
                     log_event("INFO", "Orden GTC hijo cancelada (entrada DAY no ejecutada)",
@@ -72,6 +73,7 @@ def cancelar_ordenes_pendientes(ib):
 
         try:
             ib.cancelOrder(order)
+            ib.sleep(1)
             canceladas += 1
 
             log_event("INFO", "Orden DAY cancelada",
