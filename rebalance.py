@@ -825,15 +825,13 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                         decisiones.append(decision)
                         continue
 
-                    # Reemplazar stop GTC con la nueva cantidad (solo si ya filled)
+                    # Reemplazar stop GTC con la nueva cantidad (solo si ya filled).
+                    # Usar calcular_trailing_stop (misma función que el trailing normal)
+                    # para garantizar que TRAILING_FACTOR=0.75 se aplica también aquí.
                     shares_nuevas = decision.shares_optimo
-                    _, stop_dist_nuevo, _ = calcular_posicion(df, capital)
+                    stop_price_nuevo, _ = calcular_trailing_stop(df)
 
-                    if stop_dist_nuevo and stop_dist_nuevo > 0:
-                        # Usar high del último bar (igual que el trailing stop B1 y la entrada)
-                        # No close: close - stop_dist queda más bajo que el modelo.
-                        stop_price_nuevo = round(df["high"].iloc[-1] - stop_dist_nuevo, 2)
-
+                    if stop_price_nuevo is not None and stop_price_nuevo > 0:
                         # H-9: stop por encima del precio actual → se activaría en apertura
                         if stop_price_nuevo >= precio:
                             log_event("WARN",
@@ -844,28 +842,22 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                             decisiones.append(decision)
                             continue
 
-                        if stop_price_nuevo > 0:
-                            # H-11: no bajar el stop si el break-even ya está activo y es superior
-                            if be_stop_aplicado is not None and stop_price_nuevo < be_stop_aplicado:
-                                log_event("INFO",
-                                          f"Rebalanceo: stop calculado ({stop_price_nuevo:.2f}) < "
-                                          f"break-even ({be_stop_aplicado:.2f}) para {symbol} "
-                                          f"— preservando break-even",
-                                          symbol=symbol)
-                            else:
-                                _reemplazar_stop_gtc(
-                                    ib, symbol, contrato,
-                                    shares_nuevas, stop_price_nuevo,
-                                    stops_gtc.get(symbol),
-                                )
-                        else:
-                            log_event("WARN",
-                                      f"Rebalanceo: stop_price calculado <= 0 para {symbol} "
-                                      f"— stop GTC no actualizado",
+                        # H-11: no bajar el stop si el break-even ya está activo y es superior
+                        if be_stop_aplicado is not None and stop_price_nuevo < be_stop_aplicado:
+                            log_event("INFO",
+                                      f"Rebalanceo: stop calculado ({stop_price_nuevo:.2f}) < "
+                                      f"break-even ({be_stop_aplicado:.2f}) para {symbol} "
+                                      f"— preservando break-even",
                                       symbol=symbol)
+                        else:
+                            _reemplazar_stop_gtc(
+                                ib, symbol, contrato,
+                                shares_nuevas, stop_price_nuevo,
+                                stops_gtc.get(symbol),
+                            )
                     else:
                         log_event("WARN",
-                                  f"Rebalanceo: no se pudo calcular stop_distance para {symbol} "
+                                  f"Rebalanceo: no se pudo calcular stop para {symbol} "
                                   f"— stop GTC no actualizado",
                                   symbol=symbol)
 
