@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-16  |  Versión del sistema: v2.4
+Actualizado: 2026-06-18  |  Versión del sistema: v2.4
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -28,43 +28,120 @@ Actualizado: 2026-06-16  |  Versión del sistema: v2.4
                            supervisión y evolución.
 
 --------------------------------------------------------------------------------
-1. ESTADO ACTUAL (10 JUNIO 2026)
+1. ESTADO ACTUAL (18 JUNIO 2026)
 --------------------------------------------------------------------------------
 
-FASE 3 — LIVE-PREP con 8.000 € reales en IBKR
+  FASE 2 — PAPER TRADING activa desde 14/04/2026
 
-  Modo de operación  : PAPER → LIVE (cuenta real, ejecución nocturna)
-  Capital inicial    : 8.000 € (efectivo real en IBKR)
-  NAV actual         : ~7.656 € (diferencia de 344 € son devengos USD acumulados
-                       de la etapa PAPER anterior, no comisiones)
-  Posiciones abiertas: 0 al inicio de la etapa
-  RESET_DATE         : 2026-06-10 (logs anteriores ignorados por dashboard)
+  Modo de operación  : PAPER
+  Versión del sistema: v2.4
+  Capital actual     : ~7.661,28 € (ciclo 18/06/2026)
 
-  Inicio de la etapa : 10/06/2026
-    · 10 SELL DAY ejecutadas en apertura para cerrar todas las posiciones PAPER
-    · 7 órdenes BUY STOP enviadas hoy:
-        KO(18), JNJ(6), REG(18), ALGN(3), DTE(9), CB(4), TRV(4)
+  Máquina principal  : Torre (jabelo@192.168.1.139) — Zorin OS 18.1
+  VPS Hetzner CX23   : 46.225.106.85 — migración completada, listo para ser
+                       máquina principal. Corte pendiente de decidir.
 
   Ejecución automática:
       cron 22:10 L–V  →  run_bot.sh  →  libertad2045.py
       watchdog 12:00 L–V  →  watchdog.sh  →  watchdog.py
 
-  IB Gateway         : puerto 4001 (LIVE — cuenta real)
+  IB Gateway         : puerto 4002 (PAPER)
 
 --------------------------------------------------------------------------------
-2. VERSIÓN ACTIVA: v2.4
+2. VPS HETZNER — INFRAESTRUCTURA COMPLETA
 --------------------------------------------------------------------------------
 
-Auditoría triple completada (Claude + Cursor + ChatGPT).
+  Proveedor          : Hetzner CX23 — Núremberg, Alemania — ~7,25 €/mes
+  IP pública         : 46.225.106.85
+  SO                 : Ubuntu 24.04.4 LTS, kernel 6.8.0-124-generic
+
+  ACCESO SSH:
+    ssh root@46.225.106.85
+    Clave             : ~/.ssh/id_rsa del ProBook (ed25519)
+    Requiere          : ssh-add ~/.ssh/id_rsa  o bien configurar
+                        ~/.ssh/config con IdentityFile ~/.ssh/id_rsa
+
+  IB GATEWAY + IBC:
+    IB Gateway 10.45  : ~/Jts/ibgateway/1037/
+    IBC 3.19.0        : ~/ibc/,  config en ~/ibc/config.ini
+    Script arranque   : ~/ibc_autostart.sh
+
+    Fix aplicado      : --add-opens en ~/Jts/ibgateway/1037/ibgateway.vmoptions
+                        (incompatibilidad IBC 3.19.0 + Java 17 + IBG 10.45)
+    Fix aplicado      : ReadOnlyApi=no en ~/ibc/config.ini
+
+  SYSTEMD:
+    Servicio          : ~/.config/systemd/user/ibgateway.service (enabled)
+    Linger activado   : loginctl enable-linger root
+    Comando verificar : systemctl --user status ibgateway.service
+
+  PROYECTO:
+    Directorio        : ~/PROYECTO_LIBERTAD_2045/
+    Crons activos     : 10 22 * * 1-5  →  bot de trading
+                        0 12 * * 1-5   →  watchdog
+
+  DEPENDENCIAS EXTRA:
+    tzdata añadida a requirements.txt (commit 23233ef)
+
+  ESTADO VERIFICADO (18/06/2026):
+    Gateway operativo  ✓
+    Puerto 4002 abierto  ✓
+    CONEXION_OK  ✓
+
+--------------------------------------------------------------------------------
+3. TRANSICIÓN A LIVE (AGOSTO 2026)
+--------------------------------------------------------------------------------
+
+  Fecha objetivo     : 1 de agosto 2026
+
+  PASOS PARA EL CORTE (ejecutar desde el VPS o la torre según dónde esté el
+  bot en ese momento):
+
+    1. Resetear capital_peak al capital inicial real:
+         venv/bin/python -c "from risk_guardian import resetear_capital_peak; \
+                              resetear_capital_peak(4000)"
+
+    2. Editar .env:
+         TRADING_MODE=LIVE
+         IBKR_PORT=4001
+
+    3. Editar ~/ibc/config.ini:
+         TradingMode=live
+
+    4. Reiniciar IB Gateway:
+         systemctl --user restart ibgateway.service
+
+    5. Primer ciclo nocturno a las 22:10.
+
+--------------------------------------------------------------------------------
+4. VERSIÓN ACTIVA: v2.4
+--------------------------------------------------------------------------------
+
+Auditoría v2.4 completada en 4 rondas (17/06/2026).
 Commits principales en producción (más recientes primero):
 
+  f174fbc  fix: git_backup detecta cambios staged en lugar de working tree
+  23233ef  fix: añadir tzdata a requirements.txt (ZoneInfo US/Eastern)
+  4df3359  Auditoría v2.4 ronda 4: A-1 reducir pendiente, M-2 timezone NY,
+           M-4 TTL pendientes, M-5 avgCost warn, B-1 lockfile atómico,
+           B-3 cap 10k, B-4 sleep fills
+  d049793  Auditoría v2.4 ronda 3: C-1 capital_peak stale, C-2 validación
+           LIVE/PORT, L-5 watchdog preserva modo, A-2 cruce stops,
+           A-4+B-2 timeout proceso
+  82a347a  Auditoría v2.4 ronda 2: H-1 reqAllOpenOrders, H-2 reqPositions,
+           H-6 C1 sin conexión, H-7 verificación stop auto, H-9 stop>=precio,
+           H-11 preservar break-even, H-4 pending_rebalance
+  54b6018  Auditoría v2.4: H-10 capital=0, H-8 stop GTC orden, H-5 BUY
+           huérfano, H-3 cierre cortos automático, FIX-1 reqAllOpenOrders
+  cf99d55  Fix cortos involuntarios: guard anti-doble-SELL en rebalance +
+           protección MKT SELL en order_manager
   d26fad7  reset: nueva etapa LIVE-prep con 8.000€ — 10/06/2026
-           dashboard.py: RESET_DATE="2026-06-10", stats vacíos con 8.000€
   6ab9830  backup: dashboard y datos antes de reset a 8.000€ (09/06/2026)
-           Archivos: dashboard_backup_20260609.html/py
-  f32885b  Fix crítico: evaluar_stops_por_cierre respeta SIM y bloquea SELL sin posición larga
+  f32885b  Fix crítico: evaluar_stops_por_cierre respeta SIM y bloquea SELL
+           sin posición larga
   a8b5420  Fix: cancelOrder de GTC también respeta modo SIM
-  4f5f882  rebalance: crear stop GTC automáticamente para posiciones sin protección
+  4f5f882  rebalance: crear stop GTC automáticamente para posiciones sin
+           protección
   a0d5f1e  Fix fills parciales duplicados y stop no registrado en dashboard
   29d04bd  Fix cierre por stop no verifica fill real (caso CBOE 02/06)
   cc1d808  Auditoría v2.4 — 15 fixes aplicados
@@ -76,99 +153,66 @@ Commits principales en producción (más recientes primero):
   2c23726  github_publisher: __main__ publica dashboard principal
   3532dc8  dashboard: Trades actuales vs ejecutados, eliminar historial sesiones
   3d88ea3  dashboard: Trades actuales desde cartera IBKR, cerrados desde logs
-  29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas, retención logs 10y
-  966242f  backtest_expandido: alinear señal tendencia con producción (SMA50>SMA200)
+  29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas,
+           retención logs 10y
+  966242f  backtest_expandido: alinear señal tendencia con producción
+           (SMA50>SMA200)
   —        reconstruir_salidas.py: 12 TRADE_SOLD escritos en logs históricos
            (BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC, LLY, OXY, R, TER)
-           precios aproximados vía yfinance (cierre del día de primera ausencia)
-  99a633f  dashboard: posiciones=0 cuando RG bloquea — fallback 'evaluando N posiciones'
-  ef64a18  dashboard: eliminar duplicados ORDER/FILLED — solo TRADE_FILLED en tablas
-  —        logs: R 03-24 (orden cancelada) eliminado. INTC 23:59:01 añadido.
-  9a18de6  dashboard: fix PnL oculto — INTC+BWA ocultos por stop GTC stale;
-           dedup ORDER/FILLED por ventana 5 días (CBOE 03-30 recuperado).
+  9a18de6  dashboard: fix PnL oculto — dedup ORDER/FILLED, ventana 5 días.
            PnL total cuadra: 23 trades, +176.855 € ≈ +18.17% KPI.
   eab1499  risk_guardian: fail-safe cuando GrossPositionValue no disponible
-  acc258d  Refactoring C: cache datos cartera, calcular_trailing_stop() fuente única,
-           eliminar yfinance de portfolio_manager
-  8b195df  docs/config: requirements.txt, config.py centralizado, docstrings y fechas
+  acc258d  Refactoring C: cache datos cartera, calcular_trailing_stop() fuente
+           única, eliminar yfinance de portfolio_manager
+  8b195df  docs/config: requirements.txt, config.py centralizado, docstrings
 
-FIXES APLICADOS EN v2.4 (10/06/2026 — para etapa LIVE-prep):
-
-  · portfolio_manager.py  evaluar_stops_por_cierre respeta modo SIM completamente
-                          SELL bloqueado si posición no es larga (anti-cortos)
-  · libertad2045.py       cancelOrder también respeta modo SIM
-  · rebalance.py          Auto-crea stop GTC para posiciones sin protección
+FIXES APLICADOS EN v2.4 (auditoría 17/06/2026 — 4 rondas, 26 hallazgos):
+  Ver sección 5 (Auditoría v2.4) para el detalle completo.
 
 FIXES ANTERIORES EN v2.4:
-
-  CRÍTICOS:
-  C1 · libertad2045.py    Fallo IB/capital: stops y rebalanceo corren igualmente
-                          antes de salir. Función _escribir_last_run() añadida.
-  C2 · libertad2045.py    Risk Guardian: last_run.txt se escribe al bloquear.
-       risk_guardian.py   Mensajes "Sistema detenido" → "Entradas bloqueadas".
-
-  AUDITORÍA (15 fixes):
-  · signal_engine.py      Tendencia: SMA50>SMA200 (antes close>SMA200)
-                          Guarda len(df)<5 antes del bucle pullback
-  · conexion_ib.py        Puerto defecto 7497→4002. Timeout 10→20s
-  · watchdog.py           reqAllOpenOrders en check_ordenes_gtc
-                          Detección crash temprano post-relaunch (30s)
-  · data_loader.py        duration="2 Y" funcional (antes hardcodeado "1 Y")
-  · rebalance.py          sleep(1)→sleep(2) en _obtener_gtc_stops
-  · portfolio_manager.py  MKT rechazada recoloca stop GTC automáticamente
-                          auto_adjust=True en yfinance (splits)
-  · dashboard.py          Deduplicación fills O(n²)→O(1) con set
-                          Sección "Trades actuales" (posiciones abiertas) separada
-                          de "Trades ejecutados" (cerrados). PnL cerrados usa
-                          precio de salida real. Historial de sesiones eliminado.
-                          Trades actuales construidos desde cartera IBKR (labels),
-                          no desde logs — fuente de verdad para posiciones abiertas.
-                          Duplicados ORDER/FILLED eliminados: si existe TRADE_FILLED
-                          en los 5 días siguientes a la ORDER, la Orden enviada se omite
-                          (ventana temporal evita filtrar trades distintos del mismo símbolo).
-                          Posiciones=0 cuando RG bloquea: fallback a línea de rebalanceo.
-                          Exit price buscado siempre, independiente de stop GTC activo —
-                          evita ocultar trades cerrados con stop stale (INTC, BWA).
-  · risk_guardian.py      GrossPositionValue no disponible → bloquea entradas
-                          (fail-safe) + alerta Telegram. Antes omitía el ciclo.
-  · libertad2045.py       git_backup excluye *.txt. Indentación línea 256.
-                          registrar_fills_recientes: consolida fills parciales,
-                          registra stop GTC asociado.
-                          _cargar_datos_posiciones(): descarga DataFrames una vez,
-                          compartido entre stops, rebalanceo y trailing (Refactoring C).
-  · portfolio_manager.py  _calcular_trailing_yf() y _calcular_trailing_ibkr()
-                          eliminadas. Trailing usa calcular_trailing_stop() de
-                          position_size.py — fuente única B1. yfinance eliminado.
-  · position_size.py      calcular_trailing_stop(df) añadida — fuente única lógica B1.
-                          TRAILING_FACTOR=0.75 definido aquí.
-  · rebalance.py          Acepta datos=cache. Usa DataFrame pre-descargado si disponible.
-  · signal_engine.py      Docstring corregido: SMA50>SMA200 (antes "close>SMA200").
-  · config.py             Creado — referencia centralizada de 20 parámetros del sistema.
-  · requirements.txt      Creado — versiones pinneadas del venv.
-  · github_publisher.py   Reintentos MAX_RETRIES=3
-                          __main__ publica dashboard principal (index.html)
-                          antes de los secundarios. yfinance instalado en venv.
-  · libertad2045.py       Fill SELL (SLD): registrado como TRADE_SOLD con precio
-                          real. dashboard.py Fuente 3 lee TRADE_SOLD.
-  · universe_updater.py   Notificación Telegram al actualizar universo
-  · backtest_expandido.py TRAILING_FACTOR=0.75 en trailing stop
-                          Señal tendencia corregida: SMA50>SMA200 (antes Close>SMA200)
-                          alineada con producción. PF 2.607, DD 10.4% (2005-2025).
-  · portfolio_manager.py  Posición corta detectada: alerta crítica Telegram + skip.
-  · libertad2045.py       ConnectionError de conectar_ib() capturado — C1 funcional.
-  · logger.py             Retención logs 90d → 3650d (10 años, sobreescribible via .env).
-  · reconstruir_salidas.py Script de reconstrucción de salidas históricas. Lee logs,
-                          detecta cierres por primera ausencia en Posiciones ocupadas,
-                          cruza con TRADE_SOLD/STOP_ACTIVADO existentes, usa yfinance
-                          batch como fallback. --dry-run disponible. 12 trades escritos
-                          (05/06/2026): BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC,
-                          LLY, OXY, R, TER. 8 BUY STOP no ejecutados ignorados.
-  · run_bot.sh            PROJECT_DIR sobreescribible. PID stale detectado.
-  · watchdog.sh           PROJECT_DIR sobreescribible.
-  · .gitignore            Entradas faltantes añadidas
+  Ver versión del archivo de fecha 16/06/2026 para el histórico completo.
+  Principales: 15 fixes de auditoría triple (signal_engine, conexion_ib,
+  watchdog, data_loader, rebalance, portfolio_manager, dashboard, risk_guardian,
+  libertad2045, position_size, config, requirements).
 
 --------------------------------------------------------------------------------
-3. PARÁMETROS OPERATIVOS
+5. AUDITORÍA v2.4 (17/06/2026)
+--------------------------------------------------------------------------------
+
+  4 rondas de revisión — 26 hallazgos cerrados
+  Commits: cf99d55, 54b6018, d049793, 82a347a, 4df3359, 23233ef, f174fbc
+
+  CRÍTICOS RESUELTOS:
+
+  Cortos involuntarios:
+    · Guard anti-doble-SELL en rebalance.py
+    · Protección MKT SELL en order_manager (no cancela si hay posición larga)
+    · Detección y cierre automático de cortos en orquestador (H-3)
+
+  H-10: capital=0 ya no cierra toda la cartera (era bug de falso trigger)
+  H-8:  stop GTC nunca se cancela antes de confirmar que el nuevo está activo
+  H-5:  entrada BUY se cancela si el stop GTC hijo falla (no queda huérfana)
+
+  PARA TRANSICIÓN LIVE:
+  C-1:  resetear_capital_peak() lista y documentada (ver sección 3)
+  C-2:  validación TRADING_MODE/IBKR_PORT al arranque — el sistema para si
+        la configuración es incoherente (LIVE+4002 o PAPER+4001)
+
+  OPERATIVOS:
+  L-5:  watchdog preserva el modo configurado en .env al relanzar el bot
+  A-2:  watchdog verifica cruzada posiciones vs stops GTC activos
+  A-4+B-2: timeout 3600s en run_bot.sh + detección de proceso colgado en
+            watchdog (kill si supera el timeout)
+  M-2:  timezone New York corregida (ZoneInfo US/Eastern — tzdata añadida)
+  B-1:  lockfile atómico (O_EXCL) — evita race condition en doble arranque
+  B-3:  capital máximo operativo limitado a 10.000 € en PAPER (anti-inflado)
+
+  MENOR:
+  fix git_backup: detecta cambios staged en lugar de working tree
+    (git diff --cached --quiet vs git status --porcelain)
+
+--------------------------------------------------------------------------------
+6. PARÁMETROS OPERATIVOS
 --------------------------------------------------------------------------------
 
   Estrategia          : Momentum + pullback SMA50 en tendencia (SMA50>SMA200)
@@ -182,55 +226,60 @@ FIXES ANTERIORES EN v2.4:
   Pullback umbral     : close_prev < SMA50_prev − ATR_prev × 0.75
   Pullback ventana    : últimos 3 días
   Universo            : ~502 acciones S&P500
-  Capital inicial     : 8.000 € (cuenta real IBKR — etapa LIVE-prep desde 10/06/2026)
   Ventana datos       : 2Y
 
 --------------------------------------------------------------------------------
-4. BACKTEST v2.4_bloq CON TRAILING_FACTOR=0.75 + SMA50>SMA200
+7. BACKTEST
 --------------------------------------------------------------------------------
 
-  Período 2005–2025:
+  BACKTEST v3 (17/06/2026) — VERSIÓN OFICIAL ACTUAL:
+    Período          : 2006–2025
+    Capital final    : 8.888.418 €
+    TIR              : 37,81%
+    Profit Factor    : 2,6071
+    Win Rate         : 54,1%
+    Max Drawdown     : 10,4%
+    Trades           : 2.402
+    Veredicto        : supera baseline v2 en todas las métricas financieras
+                       relevantes
+
+  BACKTEST v2.4_bloq (05/06/2026) — REFERENCIA ANTERIOR:
+    Período          : 2005–2025
     Capital final    : 8.888.417 €
     CAGR             : ~47%
-    Profit Factor    : 2.607
-    Win Rate         : 54.1%
-    Max Drawdown     : 10.4%
+    Profit Factor    : 2,607
+    Win Rate         : 54,1%
+    Max Drawdown     : 10,4%
     Trades           : 2.402
-    Montecarlo       : prob. ruina 0.00%, DD p95 7.6%
-    Stress test      : 3/3 crisis (2008, 2020, 2022): ×0.75 supera a ×1.00
-
-  Backtest v2.4_bloq (05/06/2026): señal corregida SMA50>SMA200 en
-  backtest_expandido.py alineada con producción. PF sube 0.12, DD baja 1.1%
-  respecto a versión anterior. Resultados prácticamente idénticos — confirma
-  robustez de la corrección.
+    Montecarlo       : prob. ruina 0,00%, DD p95 7,6%
+    Stress test      : 3/3 crisis (2008, 2020, 2022): ×0,75 supera a ×1,00
 
   Nota: backtest_expandido.py aplica TRAILING_FACTOR=0.75 (commit 4095a80)
   y señal SMA50>SMA200 (commit 966242f) — completamente alineado con producción.
 
 --------------------------------------------------------------------------------
-5. INFRAESTRUCTURA
+8. INFRAESTRUCTURA
 --------------------------------------------------------------------------------
 
-  ARQUITECTURA DEFINITIVA (desde 16/06/2026):
-    VPS Hetzner  → PRODUCCIÓN (Libertad_2045 24/7, siempre encendido)
-    ProBook      → DESARROLLO (Claude Code, commits, pruebas)
-    Torre MSI    → JUBILADA
+  ARQUITECTURA ACTUAL (en transición — corte pendiente):
+    Torre MSI        → PRODUCCIÓN ACTUAL (bot corriendo, crons activos)
+    VPS Hetzner      → PRODUCCIÓN LISTA (migración completada, corte pendiente)
+    ProBook          → DESARROLLO (Claude Code, commits, pruebas)
 
-  VPS HETZNER (operativo desde 16/06/2026):
-    Proveedor    : Hetzner CX23 — Nuremberg, Alemania
-    IP pública   : 46.225.106.85
-    SO           : Ubuntu 24.04.4 LTS
-    Acceso       : ssh root@46.225.106.85 (clave SSH ProBook ~/.ssh/id_rsa)
-    Estado       : servidor creado y accesible — pendiente de configurar
+  TORRE MSI MS-7D48 (máquina principal actual):
+    IP               : jabelo@192.168.1.139
+    SO               : Zorin OS 18.1
+    Proyecto         : ~/PROYECTO_LIBERTAD_2045
+    Crons            : 22:10 bot, 12:00 watchdog
+
+  VPS HETZNER (listo para producción):
+    Ver sección 2 para el detalle completo de configuración.
 
   PROBOOK (desarrollo):
-    Proyecto     : ~/PROYECTO_LIBERTAD_2045
-    Uso          : Claude Code, commits, pruebas locales
+    Proyecto         : ~/PROYECTO_LIBERTAD_2045
+    Uso              : Claude Code, commits, pruebas locales
 
-  TORRE MSI MS-7D48 (jubilada):
-    Anterior IP  : jabelo@192.168.1.139 / Zorin OS 18.1
-
-  IB Gateway         : puerto 4001 (LIVE) / 4002 (PAPER — ya no en uso)
+  IB Gateway         : puerto 4002 (PAPER) / 4001 (LIVE — para agosto 2026)
   IBC                : 3.19.0, Xvfb :99
   GitHub Pages       : jabelo82.github.io/libertad2045
   GitHub repo        : jabelo82/libertad2045
@@ -238,38 +287,98 @@ FIXES ANTERIORES EN v2.4:
   ClientIDs IBKR:
     Bot=1, Dashboard=7, Rebalancer=5, Watchdog_old=6, Watchdog_new=8, Manual=9
 
-  Ciclo automático (VPS — permanente, sin RTC):
+  Ciclo automático:
     12:00 → watchdog
     22:10 → bot de trading
 
   CHECKLIST MIGRACIÓN A VPS:
     ✓ Paso 1: servidor creado y accesible (16/06/2026)
-    □ Paso 2: actualizar paquetes e instalar dependencias
-    □ Paso 3: instalar IB Gateway + IBC 3.19.0 + Xvfb
-    □ Paso 4: clonar repo y configurar proyecto
-    □ Paso 5: configurar crons y automatización
-    □ Paso 6: copiar logs e historial
-    □ Paso 7: verificación final
+    ✓ Paso 2: actualizar paquetes e instalar dependencias
+    ✓ Paso 3: instalar IB Gateway + IBC 3.19.0 + Xvfb
+    ✓ Paso 4: clonar repo y configurar proyecto
+    ✓ Paso 5: configurar crons y automatización
+    ✓ Paso 6: copiar logs e historial
+    ✓ Paso 7: verificación final — Gateway operativo, CONEXION_OK (18/06/2026)
+    □ Paso 8: corte definitivo (fecha por decidir)
 
 --------------------------------------------------------------------------------
-6. PENDIENTES
+9. SESIÓN 18/06/2026 — CICLO NOCHE
+--------------------------------------------------------------------------------
+
+  Capital final      : 7.661,28 €
+  Drawdown           : 4,23%
+  Apalancamiento     : 0,68x
+
+  POSICIONES (8 existentes dentro del umbral de rebalanceo):
+    HUBB : fill confirmado a 521,50 — trailing stop subido a 498,41
+    MRNA : trailing stop subido 55,69 → 60,93
+    WAB  : trailing stop actualizado
+    KEYS : trailing stop actualizado
+
+  NUEVA ENTRADA:
+    VRT  : BUY STOP 337,84 | stop 293,39 | 1 acción | PAPER
+
+  DESCARTADAS:
+    GEV  : descartada — shares=0 (riesgo/capital insuficiente)
+
+  RESULTADO GIT BACKUP (ciclo anterior 18/06, 22:14:38):
+    WARN: Git backup falló: git commit falló: (stderr vacío)
+    → Bug corregido en sesión 18/06 (commit f174fbc). Verificación pendiente
+      en el próximo ciclo (viernes 19/06/2026 a las 22:10).
+
+--------------------------------------------------------------------------------
+10. BUGS CERRADOS EN SESIÓN 17/06/2026
+--------------------------------------------------------------------------------
+
+  CORTOS INVOLUNTARIOS JNJ Y KO:
+    JNJ (-6 acc.) y KO (-18 acc.) detectados y cerrados manualmente.
+
+    Causa raíz:
+      1. rebalance.py enviaba doble SELL (falta de guard anti-duplicado)
+      2. order_manager cancelaba MKT SELL de cierre si ya había GTC activo,
+         dejando la posición expuesta a un segundo SELL del siguiente ciclo
+
+    Corrección:
+      · Guard anti-doble-SELL en rebalance.py (verifica SELL previo enviado)
+      · Protección en order_manager: no cancela MKT SELL si la posición es
+        larga (solo cancela DAY stops redundantes)
+      · Cierre automático de cortos involuntarios en el orquestador (H-3)
+
+    Commits: cf99d55, 54b6018
+
+  CAPITAL=0 CERRANDO CARTERA (H-10):
+    Si capital=0 (fallo de lectura), el bot ya no interpreta esto como
+    señal de cierre masivo. Fix en ronda 1 de la auditoría.
+
+  GIT BACKUP CON STDERR VACÍO:
+    git status --porcelain detectaba dashboard.html (working tree) y el bot
+    intentaba commitear sin nada en staged → git commit fallaba silenciosamente.
+    Corregido con git diff --cached --quiet (commit f174fbc).
+
+--------------------------------------------------------------------------------
+11. PENDIENTES
 --------------------------------------------------------------------------------
 
   □ Completar DNI de Juan Ayelo Valiente en el contrato participativo
   □ Resolver OAuth IBKR (acuerdos pendientes fantasma en portal IBKR)
-  □ Conciliación mensual con Resumen Realizado de IBKR (primer lunes de cada mes)
+  □ Conciliación mensual con Resumen Realizado de IBKR (primer lunes de mes)
   □ Actualizar dashboard con precios reales del CSV de IBKR
   □ Deduplicar fills históricos en tabla trades del dashboard (DE, JCI)
   □ Precio de salida real para posiciones cerradas
-  □ Actualizar BIOS a versión AN (fiabilidad RTC)
-  □ SAI para cortes de luz
+  □ SAI para cortes de luz (Torre — si sigue como máquina principal)
   □ market_filter.py integrar en orquestador (Fase 3)
+  □ Decidir fecha de corte a VPS como máquina principal
+  □ Verificar git_backup en ciclo viernes 19/06/2026 (commit f174fbc)
 
   ✓ Posiciones PAPER cerradas manualmente (10/06/2026)
   ✓ Dashboard reseteado a 8.000 € (10/06/2026)
+  ✓ Migración VPS completada (18/06/2026)
+  ✓ Auditoría v2.4 — 26 hallazgos cerrados (17/06/2026)
+  ✓ Fix cortos involuntarios JNJ/KO (17/06/2026)
+  ✓ Actualizar BIOS a versión AN — descartado (Torre en retirada)
 
 --------------------------------------------------------------------------------
-7. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
+12. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
 --------------------------------------------------------------------------------
 
   Inversión          : 50.000 € mediante préstamo participativo
@@ -279,7 +388,7 @@ FIXES ANTERIORES EN v2.4:
   Estado             : contrato redactado — pendiente añadir DNI de Juanjo
 
 --------------------------------------------------------------------------------
-8. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
+13. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
 --------------------------------------------------------------------------------
 
   IBKR añadió 250.000 € por error en la cuenta en lugar de resetear a 8.000 €.
@@ -292,7 +401,7 @@ FIXES ANTERIORES EN v2.4:
   acumulados de la etapa anterior — no son comisiones ni pérdidas operativas).
 
 --------------------------------------------------------------------------------
-9. INCIDENTE CBOE (02–05 junio 2026)
+14. INCIDENTE CBOE (02–05 junio 2026)
 --------------------------------------------------------------------------------
 
   02/06: Stop activado por cierre (274.33 ≤ 290.12). Orden MKT SELL devolvió
@@ -311,5 +420,5 @@ FIXES ANTERIORES EN v2.4:
     CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-16
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.4 — 2026-06-18
 ================================================================================
