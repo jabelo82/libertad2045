@@ -9,7 +9,8 @@ Comprobaciones en orden:
     2. IB Gateway — conexión activa con IBKR
     3. Órdenes GTC — stops activos y sin cancelaciones inesperadas
     4. RTC wakeup — alarma programada para el próximo ciclo
-    5. Relanzar — si el bot no corrió, relanzar automáticamente
+    5. Git backup — verificación del backup del ciclo anterior
+    6. Relanzar — si el bot no corrió, relanzar automáticamente
 """
 
 import os
@@ -205,6 +206,39 @@ def _mercado_usa_abierto() -> bool:
     return apertura <= now_ny <= cierre
 
 
+def check_git_backup():
+    """
+    Verifica si el git_backup del último ciclo nocturno fue exitoso.
+    Lee el CSV del día hábil anterior y busca la entrada correspondiente.
+    Devuelve (True/False/None, msg):
+        True  → backup OK
+        False → backup falló (alerta)
+        None  → sin datos suficientes para determinar (no alerta)
+    """
+    log_dir   = PROJECT_DIR / "logs"
+    prev_bday = _prev_business_day(datetime.now().date())
+    csv_path  = log_dir / f"LIBERTAD_{prev_bday}.csv"
+
+    if not csv_path.exists():
+        return None, f"Sin log del ciclo anterior ({prev_bday})"
+
+    try:
+        contenido = csv_path.read_text()
+    except OSError as e:
+        return None, f"No se pudo leer el log {prev_bday}: {e}"
+
+    for line in contenido.splitlines():
+        if "Git backup falló" in line:
+            partes = line.split(",", 3)
+            detalle = partes[2].strip() if len(partes) > 2 else line
+            return False, f"git_backup FALLÓ en ciclo {prev_bday}: {detalle}"
+
+    if "Git backup:" in contenido:
+        return True, f"git_backup OK ({prev_bday})"
+
+    return None, f"git_backup no registrado en ciclo {prev_bday}"
+
+
 def relanzar_bot():
     try:
         env = os.environ.copy()
@@ -279,6 +313,16 @@ def main():
     if not ok_rtc:
         alertas.append(f"🔴 RTC Wakeup: {msg_rtc}")
 
+    ok_git, msg_git = check_git_backup()
+    if ok_git is not None:
+        resultados["git_backup"] = (ok_git, msg_git)
+        print(f"[{'OK' if ok_git else 'FAIL'}] Git backup: {msg_git}")
+        if not ok_git:
+            alertas.append(f"🔴 Git backup: {msg_git}")
+            _send(f"⚠️ LIBERTAD_2045 — {msg_git}", critico=True)
+    else:
+        print(f"[INFO] Git backup: {msg_git}")
+
     if not resultados["heartbeat"][0]:
         print("\n[ACCIÓN] Bot no ejecutado — relanzando...")
         ok_rl, msg_rl = relanzar_bot()
@@ -308,6 +352,9 @@ def main():
         f"{icono_gtc} Stops GTC    : {resultados['gtc'][1]}\n"
         f"{icono_rtc} RTC wakeup   : {resultados['rtc'][1]}\n"
     )
+    if "git_backup" in resultados:
+        icono_git = "✅" if resultados["git_backup"][0] else "❌"
+        informe += f"{icono_git} Git backup   : {resultados['git_backup'][1]}\n"
     if bot_relanzado:
         informe += f"\n🔄 Bot relanzado automáticamente\n"
     informe += f"\nEstado: {'✅ Todo OK' if todo_ok and not bot_relanzado else '⚠️ Revisar alertas'}"
