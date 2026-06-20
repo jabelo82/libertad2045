@@ -525,10 +525,10 @@ def main():
         trades_executed  = 0
         capital_restante = capital
 
-        for signal in signals:
+        for senal in signals:
 
-            symbol = signal["symbol"]
-            df     = signal["df"]
+            symbol = senal["symbol"]
+            df     = senal["df"]
 
             try:
 
