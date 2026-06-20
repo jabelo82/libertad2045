@@ -199,6 +199,12 @@ def git_backup(capital: float | None) -> tuple[bool, str]:
     if result.returncode != 0:
         return False, f"git commit falló: {result.stderr.strip()}"
 
+    # publicar_dashboard puede haber creado un commit en origin vía API de GitHub
+    # antes de que lleguemos aquí; sincronizamos antes de push para evitar el reject.
+    result = run(["git", "pull", "--rebase", "origin", "main"])
+    if result.returncode != 0:
+        return False, f"git pull --rebase falló: {result.stderr.strip()}"
+
     result = run(["git", "push", "origin", "main"])
     if result.returncode != 0:
         return False, f"git push falló: {result.stderr.strip()}"
