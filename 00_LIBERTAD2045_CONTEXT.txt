@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-18  |  Versión del sistema: v2.5
+Actualizado: 2026-06-20  |  Versión del sistema: v2.5
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ Actualizado: 2026-06-18  |  Versión del sistema: v2.5
 
   Modo de operación  : PAPER
   Versión del sistema: v2.5
-  Capital actual     : ~7.661,28 € (ciclo 18/06/2026)
+  Capital actual     : ~7.660,63 € (ciclo 20/06/2026)
 
   Máquina principal  : Torre (jabelo@192.168.1.139) — Zorin OS 18.1
   VPS Hetzner CX23   : 46.225.106.85 — migración completada, listo para ser
@@ -121,6 +121,10 @@ Auditoría v2.5 completada (18/06/2026) — 6 fixes + validación cuantitativa r
 Auditoría v2.4 completada en 4 rondas (17/06/2026) — 26 hallazgos cerrados.
 Commits principales en producción (más recientes primero):
 
+  83ac75c  docs: INFRAESTRUCTURA_IBG.md — Restart=always en ibgateway.service
+  12f26f1  fix: git_backup añade pull --rebase antes del push (publisher race)
+  9e9eaba  fix: renombrar variable de bucle 'signal' a 'senal' — UnboundLocalError
+           (regresión C-2 del commit b70c864)
   90ef0f8  feat: comparar_rebalanceo.py — validación cuantitativa del rebalanceo
   b70c864  fix: A-5 verificar estado stop GTC, A-4 detectar duplicados,
            C-2 SIGTERM handler, A-3 validar frescura datos
@@ -438,7 +442,58 @@ FIXES ANTERIORES EN v2.4:
       en el próximo ciclo (viernes 19/06/2026 a las 22:10).
 
 --------------------------------------------------------------------------------
-10. BUGS CERRADOS EN SESIÓN 17/06/2026
+10. INCIDENTE Y FIXES — 20/06/2026
+--------------------------------------------------------------------------------
+
+  BUG CRÍTICO — BOT NO CORRIÓ LA NOCHE DEL 19/06 (FESTIVO JUNETEENTH):
+
+    Causa:   Regresión del commit b70c864 (fix C-2, SIGTERM handler).
+             La variable de bucle `for signal in signals:` en libertad2045.py
+             sombreaba el módulo `signal` importado. Python trata `signal` como
+             variable local de toda la función main(), causando UnboundLocalError
+             al ejecutar signal.signal(signal.SIGTERM, ...) en la línea 236.
+    Fix:     Variable de bucle renombrada a `senal` (líneas 528-531).
+             Commit 9e9eaba
+    Nota:    El sistema no tiene lógica de calendario de festivos USA (solo
+             filtra L-V). El bot intentó correr el 19/06 (viernes) sin saber
+             que era festivo — pendiente a considerar.
+
+  INCIDENTE — IB GATEWAY DE LA TORRE CAÍDO POR SESIÓN DUPLICADA:
+
+    Causa:   Apertura de la app móvil de IBKR con las mismas credenciales
+             disparó el escenario 6 de IBC ("Existing session detected"),
+             cerrando el Gateway con exit code 0.
+             Como Restart=on-failure solo reacciona a exit code ≠0, el servicio
+             no se relanzó automáticamente.
+    Fix:     Restart=on-failure → Restart=always en ibgateway.service,
+             aplicado en torre y VPS. Commit 83ac75c (docs actualizados).
+    Lección: Evitar abrir la app/web de IBKR con las mismas credenciales
+             mientras el bot opera en torre o VPS.
+
+  BUG — git_backup FALLABA POR CONFLICTO CON PUBLISHER DE GITHUB PAGES:
+
+    Causa:   publicar_dashboard() sube index.html vía API de GitHub creando
+             un commit directo en origin/main. Cuando git_backup() intentaba
+             el push justo después, el remote estaba 1 commit por delante →
+             reject de fast-forward.
+    Fix:     Añadido `git pull --rebase origin main` entre el commit y el push
+             en git_backup(). Commit 12f26f1
+
+  VERIFICACIÓN END-TO-END (forzado manualmente, sábado sin mercado):
+
+    Bypass temporal de ventana horaria: RISK_HOUR_START=0 RISK_HOUR_END=23
+    (solo para la prueba puntual — no persistido en ningún archivo).
+    Resultado: 501 activos escaneados | 4 señales | 2 tras filtro |
+               1 trade ejecutado (VRT BUY STOP 337,84) | dashboard publicado OK
+    Confirma que el fix del signal shadowing funciona en el flujo completo.
+
+  COMMITS DE LA SESIÓN:
+    9e9eaba  fix: renombrar variable de bucle 'signal' a 'senal'
+    12f26f1  fix: git_backup añade pull --rebase antes del push
+    83ac75c  docs: INFRAESTRUCTURA_IBG.md — Restart=always
+
+--------------------------------------------------------------------------------
+11. BUGS CERRADOS EN SESIÓN 17/06/2026
 --------------------------------------------------------------------------------
 
   CORTOS INVOLUNTARIOS JNJ Y KO:
@@ -467,7 +522,7 @@ FIXES ANTERIORES EN v2.4:
     Corregido con git diff --cached --quiet (commit 2e33402).
 
 --------------------------------------------------------------------------------
-11. PENDIENTES
+12. PENDIENTES
 --------------------------------------------------------------------------------
 
   ANTES DE LIVE — MUY RECOMENDABLES:
@@ -486,7 +541,9 @@ FIXES ANTERIORES EN v2.4:
   □ SAI para cortes de luz (Torre — si sigue como máquina principal)
   □ market_filter.py integrar en orquestador (Fase 3)
   □ Decidir fecha de corte a VPS como máquina principal
-  □ Verificar git_backup en ciclo viernes 19/06/2026 (commit 2e33402)
+  □ Calendario festivos USA: el sistema solo filtra L-V pero no conoce festivos
+    (bot intentó correr el 19/06 — Juneteenth). Considerar integrar lista de
+    festivos NYSE para evitar ciclos en balde.
 
   COMPLETADOS:
   ✓ Posiciones PAPER cerradas manualmente (10/06/2026)
@@ -497,9 +554,13 @@ FIXES ANTERIORES EN v2.4:
   ✓ Fix cortos involuntarios JNJ/KO (17/06/2026)
   ✓ Actualizar BIOS a versión AN — descartado (Torre en retirada)
   ✓ Validación cuantitativa del rebalanceo — +4,8% sobre 20 años (18/06/2026)
+  ✓ Fix signal shadowing (UnboundLocalError regresión C-2) — 20/06/2026
+  ✓ Fix git_backup: pull --rebase antes del push — 20/06/2026
+  ✓ ibgateway.service: Restart=always en torre y VPS — 20/06/2026
+  ✓ Verificar git_backup en ciclo nocturno (commit 2e33402 + 12f26f1) — 20/06/2026
 
 --------------------------------------------------------------------------------
-12. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
+13. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
 --------------------------------------------------------------------------------
 
   Inversión          : 50.000 € mediante préstamo participativo
@@ -509,7 +570,7 @@ FIXES ANTERIORES EN v2.4:
   Estado             : contrato redactado — pendiente añadir DNI de Juanjo
 
 --------------------------------------------------------------------------------
-13. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
+14. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
 --------------------------------------------------------------------------------
 
   IBKR añadió 250.000 € por error en la cuenta en lugar de resetear a 8.000 €.
@@ -522,7 +583,7 @@ FIXES ANTERIORES EN v2.4:
   acumulados de la etapa anterior — no son comisiones ni pérdidas operativas).
 
 --------------------------------------------------------------------------------
-14. INCIDENTE CBOE (02–05 junio 2026)
+15. INCIDENTE CBOE (02–05 junio 2026)
 --------------------------------------------------------------------------------
 
   02/06: Stop activado por cierre (274.33 ≤ 290.12). Orden MKT SELL devolvió
@@ -541,5 +602,5 @@ FIXES ANTERIORES EN v2.4:
     CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.5 — 2026-06-18
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.5 — 2026-06-20
 ================================================================================
