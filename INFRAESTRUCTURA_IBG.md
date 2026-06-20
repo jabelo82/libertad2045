@@ -88,7 +88,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/home/jabelo/ibc_autostart.sh
-Restart=on-failure
+Restart=always
 RestartSec=60
 StandardOutput=append:/home/jabelo/ibc_reboot.log
 StandardError=append:/home/jabelo/ibc_reboot.log
@@ -144,6 +144,8 @@ WantedBy=default.target
 
 **Fix:** Cambiado a `Restart=on-failure` con `RestartSec=60`. Si IBG cae con error, systemd lo relanza al minuto automáticamente.
 
+**Actualización 2026-06-20:** Cambiado a `Restart=always`. IBC cierra con exit code 0 cuando detecta "Existing session detected" (sesión duplicada desde otro dispositivo), por lo que `on-failure` no disparaba el reinicio en ese escenario. Con `always`, systemd relanza IBG independientemente del código de salida.
+
 ---
 
 ## Causa raíz del incidente de 05/05/2026
@@ -185,7 +187,7 @@ systemctl --user restart ibgateway.service
 
 IBC gestiona el ciclo de vida de IB Gateway. Por defecto, IBC reinicia IBG una vez al día en la ventana de mantenimiento de IB (~23:45 ET = ~05:45 Madrid). Este restart es **interno** a `gatewaystart.sh` — IBG para y arranca dentro del mismo proceso, por lo que `ibgateway.service` no lo ve como una caída y no interviene. Es normal y esperado.
 
-Lo que sí puede causar una salida con error (y disparar `Restart=on-failure`) es:
+Lo que sí puede causar una salida con error (y disparar `Restart=always`) es:
 - Crash de Java (OOM, excepción no capturada)
 - `on2fatimeout=exit` en config.ini: si IBC pide 2FA y no responde nadie, sale con error
 - Fallo de red que IBC no puede recuperar
