@@ -298,7 +298,7 @@
     <div class="logo">⚙ LIBERTAD_2045</div>
     <div class="mode-badge">PAPER</div>
   </div>
-  <div class="last-update">Actualizado: 18/06/2026 22:14</div>
+  <div class="last-update">Actualizado: 20/06/2026 12:50</div>
 </header>
 
 <main class="main">
@@ -312,23 +312,23 @@
     </div>
     <div class="kpi danger">
       <div class="kpi-label">Rentabilidad</div>
-      <div class="kpi-value" style="color:#ff4444">-1.01%</div>
+      <div class="kpi-value" style="color:#ff4444">-1.02%</div>
       <div class="kpi-sub">Desde inicio PAPER</div>
     </div>
     <div class="kpi warn">
       <div class="kpi-label">Drawdown actual</div>
-      <div class="kpi-value" style="color:#ffaa00">-1.01%</div>
+      <div class="kpi-value" style="color:#ffaa00">-1.02%</div>
       <div class="kpi-sub">Límite: -10.00%</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Sesiones</div>
-      <div class="kpi-value">7</div>
-      <div class="kpi-sub">Última: 2026-06-18</div>
+      <div class="kpi-value">8</div>
+      <div class="kpi-sub">Última: 2026-06-20</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Trades ejecutados</div>
-      <div class="kpi-value">35</div>
-      <div class="kpi-sub">Señales detectadas: 46</div>
+      <div class="kpi-value">36</div>
+      <div class="kpi-sub">Señales detectadas: 50</div>
     </div>
   </div>
 
@@ -633,10 +633,10 @@
 </footer>
 
 <script>
-const fechas = ["2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18"];
-const capitales = [7739.48, 7738.49, 7713.0, 7646.86, 7628.94, 7595.93, 7661.28];
-const senales = [3, 0, 12, 15, 9, 3, 4];
-const posiciones = [8, 8, 7, 6, 7, 7, 8];
+const fechas = ["2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-20"];
+const capitales = [7739.48, 7738.49, 7713.0, 7646.86, 7628.94, 7595.93, 7661.28, 7660.63];
+const senales = [3, 0, 12, 15, 9, 3, 4, 4];
+const posiciones = [8, 8, 7, 6, 7, 7, 8, 8];
 
 // Drawdown desde pico
 const dds = capitales.map((c, i) => {
@@ -755,7 +755,7 @@ function filtrarTrades(dias, btn) {
 // ── PORTFOLIO PIE CHART ────────────────────────────────────────────
 const portfolio = {
   labels: ["HUBB", "WAB", "TRV", "ALGN", "ABNB", "DTE", "MRNA", "KEYS", "CASH"],
-  values: [430, 675, 1010, 448, 585, 1091, 367, 298, 2756],
+  values: [430, 674, 1010, 448, 584, 1089, 367, 298, 2760],
   colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#d19a66", "#98c379", "#3a5068"]
 };
 
