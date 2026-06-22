@@ -108,7 +108,7 @@ def ejecutar_trade(ib, symbol, df, shares, stop_distance, buffer=0.05, mode="SIM
     stop.transmit = True            # Esta orden transmite el par completo a IBKR
 
     try:
-        ib.placeOrder(contract, stop)
+        stop_trade = ib.placeOrder(contract, stop)
         ib.sleep(1)
     except Exception as e:
         log_event("ERROR",
@@ -116,6 +116,27 @@ def ejecutar_trade(ib, symbol, df, shares, stop_distance, buffer=0.05, mode="SIM
                   symbol=symbol, entry=buy_stop_price, stop=stop_loss_price)
         try:
             ib.cancelOrder(trade.order)
+        except Exception:
+            pass
+        return
+
+    # Verificar que IBKR aceptó el stop GTC — un rechazo silencioso dejaría
+    # la entrada activa sin stop-loss.
+    estado_stop = stop_trade.orderStatus.status if stop_trade else "Unknown"
+    if estado_stop in ("Inactive", "Cancelled", "Rejected"):
+        log_event("ERROR",
+                  f"Stop GTC RECHAZADO por IBKR ({estado_stop}) — cancelando entrada para evitar posición sin stop",
+                  symbol=symbol, entry=buy_stop_price, stop=stop_loss_price)
+        try:
+            ib.cancelOrder(trade.order)
+        except Exception:
+            pass
+        try:
+            from telegram import send_telegram_critical
+            send_telegram_critical(
+                f"🔴 LIBERTAD_2045 — Stop GTC rechazado: {symbol} "
+                f"(estado={estado_stop}). Entrada cancelada. Revisar manualmente."
+            )
         except Exception:
             pass
         return

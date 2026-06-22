@@ -113,39 +113,53 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
                     pass
                 continue  # No tocar — SELL empeoraría el corto
 
-            # Obtener precio de cierre del día
-            try:
-                bars = ib.reqHistoricalData(
-                    pos.contract,
-                    endDateTime="",
-                    durationStr="2 D",
-                    barSizeSetting="1 day",
-                    whatToShow="TRADES",
-                    useRTH=True,
-                    keepUpToDate=False
-                )
-
-                if not bars:
-                    log_event("WARN", f"Sin datos de cierre para {symbol} — stop no evaluado",
-                              symbol=symbol)
-                    continue
-
-                bar_date = bars[-1].date
-                if hasattr(bar_date, "date"):
-                    bar_date = bar_date.date()
-                antiguedad = (date.today() - bar_date).days
-                if antiguedad > 5:
+            # Obtener precio de cierre del día.
+            # Primero intenta reutilizar datos_cartera ya descargados este ciclo
+            # (siempre frescos, evita una llamada extra a reqHistoricalData por posición).
+            # Si el símbolo no está en datos_cartera, hace descarga individual.
+            precio_cierre = None
+            df_cierre = (datos or {}).get(symbol)
+            if df_cierre is not None and len(df_cierre) >= 1:
+                try:
+                    precio_cierre = float(df_cierre["close"].iloc[-1])
+                except Exception as e_cache:
                     log_event("WARN",
-                              f"Datos de {symbol} con {antiguedad}d de antigüedad "
-                              f"(última barra: {bar_date}) — stop no evaluado",
+                              f"No se pudo leer precio de cierre de datos_cartera para {symbol}: {e_cache}",
                               symbol=symbol)
+
+            if precio_cierre is None:
+                try:
+                    bars = ib.reqHistoricalData(
+                        pos.contract,
+                        endDateTime="",
+                        durationStr="2 D",
+                        barSizeSetting="1 day",
+                        whatToShow="TRADES",
+                        useRTH=True,
+                        keepUpToDate=False
+                    )
+
+                    if not bars:
+                        log_event("WARN", f"Sin datos de cierre para {symbol} — stop no evaluado",
+                                  symbol=symbol)
+                        continue
+
+                    bar_date = bars[-1].date
+                    if hasattr(bar_date, "date"):
+                        bar_date = bar_date.date()
+                    antiguedad = (date.today() - bar_date).days
+                    if antiguedad > 5:
+                        log_event("WARN",
+                                  f"Datos de {symbol} con {antiguedad}d de antigüedad "
+                                  f"(última barra: {bar_date}) — stop no evaluado",
+                                  symbol=symbol)
+                        continue
+
+                    precio_cierre = bars[-1].close
+
+                except Exception as e:
+                    log_event("ERROR", f"Error obteniendo cierre de {symbol}: {e}", symbol=symbol)
                     continue
-
-                precio_cierre = bars[-1].close
-
-            except Exception as e:
-                log_event("ERROR", f"Error obteniendo cierre de {symbol}: {e}", symbol=symbol)
-                continue
 
             # Obtener nivel de stop actual
             stop_level = None

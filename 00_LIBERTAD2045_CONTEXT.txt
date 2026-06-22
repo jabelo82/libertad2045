@@ -263,17 +263,17 @@ FIXES ANTERIORES EN v2.4:
 
   PENDIENTES ANTES DE LIVE (muy recomendables — no bloqueantes):
 
-  M-1  outsideRth=False en MKT SELL de portfolio_manager
-       Las MKT de cierre se colocan a las 22:10 CET para ejecutar en apertura
-       del día siguiente. outsideRth omitido puede causar ejecución fuera de RTH.
+  ✓ M-1  outsideRth=False en MKT SELL de portfolio_manager
+         RESUELTO — implementado en portfolio_manager.py:244 y rebalance.py:826.
+         Verificado en auditoría v2.6 (22/06/2026).
 
-  M-3  sleep(1) tras cancelaciones en order_manager
-       Actualmente no hay pausa tras cancelOrder. Una cancelación seguida
-       inmediatamente de un nuevo placeOrder puede generar error 10147 en IBKR.
+  ✓ M-3  sleep(1) tras cancelaciones en order_manager
+         RESUELTO — ib.sleep(1) presente en order_manager.py tras cada cancelOrder
+         (líneas 45 y 76). Verificado en auditoría v2.6 (22/06/2026).
 
-  M-5  watchdog.sh timeout 300
-       El watchdog.sh no tiene timeout propio. Si watchdog.py se cuelga, el
-       proceso queda zombie hasta el reinicio del sistema.
+  ✓ M-5  watchdog.sh timeout 300
+         RESUELTO — timeout 300 presente en watchdog.sh:7.
+         Verificado en auditoría v2.6 (22/06/2026).
 
   A-1  Documentar explícitamente si rebalanceo AMPLIAR respeta drawdown gate
        En backtest y producción, AMPLIAR usa capital disponible sin verificar
@@ -526,10 +526,33 @@ FIXES ANTERIORES EN v2.4:
 --------------------------------------------------------------------------------
 
   ANTES DE LIVE — MUY RECOMENDABLES:
-  □ M-1: outsideRth=False en MKT SELL de portfolio_manager
-  □ M-3: sleep(1) tras cancelaciones en order_manager
-  □ M-5: watchdog.sh timeout 300
-  □ A-1: documentar si rebalanceo AMPLIAR respeta drawdown gate (ver sección 5)
+  ✓ M-1: outsideRth=False en MKT SELL — RESUELTO (auditoría v2.6, 22/06/2026)
+  ✓ M-3: sleep(1) tras cancelaciones — RESUELTO (auditoría v2.6, 22/06/2026)
+  ✓ M-5: watchdog.sh timeout 300 — RESUELTO (auditoría v2.6, 22/06/2026)
+  ✓ A-1: AMPLIAR en rebalanceo permite drawdown — documentado en rebalance.py (DECISIÓN A-1, 18/06/2026)
+
+  AUDITORÍA v2.6 (22/06/2026) — fixes aplicados:
+  ✓ C-3: festivos NYSE integrados en libertad2045.py (lista 2026-2027)
+  ✓ A-1: watchdog detecta stops GTC sin posición (riesgo SHORT)
+  ✓ A-2: trade_executor verifica estado stop GTC tras placeOrder
+  ✓ A-3: watchdog guard — no relaunch LIVE si shutdown mediodía inminente
+  ✓ A-4: BUY MKT cierre cortos — outsideRth=False
+  ✓ A-5: order_manager protege BUY DAY de AMPLIAR pendiente
+  ✓ M-1: rebalanceo no baja stop por debajo del nivel GTC activo en IBKR
+  ✓ M-2: order_manager usa contract.symbol en logs (no getattr(order,"symbol"))
+  ✓ M-4: evaluar_stops_por_cierre reutiliza datos_cartera para precio cierre
+  ✓ M-5: registrar_fills_recientes loguea ERROR explícito si fallo de escritura
+  ✓ B-1: logger.py default LOG_RETENTION_DAYS=90 (coherente con política)
+  ✓ B-2: ibc_autostart.sh verifica que Xvfb arrancó antes de lanzar Gateway
+  ✓ B-3: git_backup reintenta push tras "rejected" (segunda descarga rebase)
+  ✓ B-4: github_publisher no loguea cuerpo de respuesta de error GitHub
+  ✓ B-5: clientIds documentados en config.py
+
+  PENDIENTES CRÍTICOS ANTES DE LIVE (requieren acción manual):
+  □ C-1: resetear capital_peak.txt a 4000 antes del primer ciclo LIVE
+         Comando: venv/bin/python -c "from risk_guardian import resetear_capital_peak; resetear_capital_peak(4000)"
+  □ C-2: ibc/config.ini → TradingMode=live + restart ibgateway.service
+  □ C-3 (festivos): actualizar lista NYSE_HOLIDAYS en libertad2045.py cada año
 
   OTROS PENDIENTES:
   □ Completar DNI de Juan Ayelo Valiente en el contrato participativo
@@ -541,9 +564,6 @@ FIXES ANTERIORES EN v2.4:
   □ SAI para cortes de luz (Torre — si sigue como máquina principal)
   □ market_filter.py integrar en orquestador (Fase 3)
   □ Decidir fecha de corte a VPS como máquina principal
-  □ Calendario festivos USA: el sistema solo filtra L-V pero no conoce festivos
-    (bot intentó correr el 19/06 — Juneteenth). Considerar integrar lista de
-    festivos NYSE para evitar ciclos en balde.
 
   COMPLETADOS:
   ✓ Posiciones PAPER cerradas manualmente (10/06/2026)

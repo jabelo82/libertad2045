@@ -165,6 +165,20 @@ def check_ordenes_gtc(ib):
             _send(f"🔴 LIBERTAD_2045 — Posiciones SIN stop GTC: {sin_proteccion}", critico=True)
             return False, f"POSICIONES SIN STOP GTC: {sin_proteccion}", detalle
 
+        # Verificación inversa: stops GTC sin posición activa.
+        # Excluir entradas BUY pendientes (stop colocado antes de que el BUY STOP llene).
+        # Un GTC huérfano puede crear un SHORT si se activa.
+        day_order_symbols = {t.contract.symbol for t in ib.openTrades()
+                             if t.order.tif == "DAY" and t.order.action == "BUY"}
+        stops_huerfanos = [s for s in simbolos_con_stop
+                           if s not in posiciones_largas and s not in day_order_symbols]
+        if stops_huerfanos:
+            detalle["stops_huerfanos"] = stops_huerfanos
+            _send(
+                f"🔴 LIBERTAD_2045 — Stops GTC SIN posición (riesgo SHORT): {stops_huerfanos}",
+                critico=True,
+            )
+
         if gtc_canceladas:
             simbolos = [o["symbol"] for o in gtc_canceladas]
             return False, f"{len(gtc_canceladas)} orden(es) GTC cancelada(s): {simbolos}", detalle
@@ -255,6 +269,17 @@ def relanzar_bot():
             )
         else:
             modo_relaunch = os.getenv("TRADING_MODE", "PAPER")
+            # Guard LIVE a mediodía: el shutdown de mediodía dispara a las 12:10.
+            # Si el relaunch es a las 12:05+ en LIVE, el bot tendría <5 min antes
+            # de recibir SIGTERM — los trades podrían ejecutarse sin supervisión esa tarde.
+            shutdown_inminente = datetime.now().hour == 12 and datetime.now().minute >= 5
+            if shutdown_inminente and modo_relaunch == "LIVE":
+                _send(
+                    "⚠️ LIBERTAD_2045 — LIVE: bot NO relanzado a mediodía "
+                    "(shutdown inminente en <5 min) — esperar ciclo noche (22:10).",
+                    critico=True,
+                )
+                return False, "Relaunch omitido — shutdown de mediodía inminente en modo LIVE"
             print(f"[INFO] Relanzando bot en modo {modo_relaunch}")
 
         log_path = PROJECT_DIR / "logs" / f"watchdog_relaunch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"

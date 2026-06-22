@@ -66,7 +66,7 @@ def publicar_dashboard():
                 if r.status_code in (200, 201):
                     return True, f"Dashboard publicado ({timestamp})"
                 else:
-                    ultimo_error = f"Error GitHub: {r.status_code} {r.text[:100]}"
+                    ultimo_error = f"Error GitHub: {r.status_code}"
                     if intento < MAX_RETRIES:
                         time.sleep(RETRY_DELAY)
             except Exception as e:
@@ -134,7 +134,7 @@ def publicar_pagina(nombre_archivo):
                     url = f"https://jabelo82.github.io/libertad2045/{nombre_archivo}"
                     return True, f"Publicado: {url} ({timestamp})"
                 else:
-                    ultimo_error = f"Error GitHub: {r.status_code} {r.text[:100]}"
+                    ultimo_error = f"Error GitHub: {r.status_code}"
                     if intento < MAX_RETRIES:
                         time.sleep(RETRY_DELAY)
             except Exception as e:

@@ -905,11 +905,25 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                       f"— preservando break-even",
                                       symbol=symbol)
                         else:
-                            _reemplazar_stop_gtc(
-                                ib, symbol, contrato,
-                                shares_nuevas, stop_price_nuevo,
-                                stops_gtc.get(symbol),
-                            )
+                            # M-1: no bajar el stop por debajo del nivel GTC ya activo en IBKR.
+                            # El trailing stop solo puede subir, nunca bajar.
+                            stop_actual_gtc = None
+                            if stops_gtc.get(symbol):
+                                stop_actual_gtc = getattr(
+                                    stops_gtc[symbol].order, "auxPrice", None
+                                )
+                            if stop_actual_gtc and stop_price_nuevo < stop_actual_gtc:
+                                log_event("INFO",
+                                          f"Rebalanceo: stop calculado ({stop_price_nuevo:.2f}) < "
+                                          f"stop activo en IBKR ({stop_actual_gtc:.2f}) para {symbol} "
+                                          f"— stop no bajado",
+                                          symbol=symbol)
+                            else:
+                                _reemplazar_stop_gtc(
+                                    ib, symbol, contrato,
+                                    shares_nuevas, stop_price_nuevo,
+                                    stops_gtc.get(symbol),
+                                )
                     else:
                         log_event("WARN",
                                   f"Rebalanceo: no se pudo calcular stop para {symbol} "

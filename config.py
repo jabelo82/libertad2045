@@ -4,6 +4,15 @@ config.py — Parámetros centralizados de LIBERTAD_2045
 Referencia única de todos los parámetros operativos del sistema.
 Los módulos aún definen sus propias constantes (deuda técnica documentada);
 este archivo es la fuente de verdad para revisión y futura refactorización.
+
+── ClientIDs IBKR (no reutilizar) ──────────────────────────────────────────
+  Bot principal  : 1   (conexion_ib.py, IBKR_CLIENT_ID env)
+  Dashboard      : 7   (dashboard.py, DASHBOARD_CLIENT_ID)
+  Watchdog       : 8   (watchdog.py, WATCHDOG_CLIENT_ID)
+  Manual/consola : 9   (reservado, no usar en código automático)
+  Reservado      : 5   (etiquetado "Rebalancer" en historial, actualmente sin uso)
+  No usar        : 2,3,4,6 (otros procesos o pruebas pasadas)
+─────────────────────────────────────────────────────────────────────────────
 """
 
 # ── Estrategia ────────────────────────────────────────────────────────────────

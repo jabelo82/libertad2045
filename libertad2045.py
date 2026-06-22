@@ -159,7 +159,11 @@ def registrar_fills_recientes(ib):
 
         if nuevos_ids:
             todas = list(logged_ids) + nuevos_ids
-            FILLS_IDS_FILE.write_text("\n".join(todas[-10000:]))
+            try:
+                FILLS_IDS_FILE.write_text("\n".join(todas[-10000:]))
+            except Exception as e_write:
+                log_event("ERROR",
+                          f"registrar_fills_recientes: fallo persistiendo logged_exec_ids.txt: {e_write}")
             log_event("INFO", f"Fills nuevos registrados: "
                                f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
                                f"({len(nuevos_ids)} ejecuciones parciales)")
@@ -207,7 +211,17 @@ def git_backup(capital: float | None) -> tuple[bool, str]:
 
     result = run(["git", "push", "origin", "main"])
     if result.returncode != 0:
-        return False, f"git push falló: {result.stderr.strip()}"
+        if "rejected" in result.stderr.lower():
+            # Otro proceso (p.ej. publicar_dashboard) puede haber creado un commit
+            # tras nuestro pull anterior. Reintentamos una vez más.
+            result = run(["git", "pull", "--rebase", "origin", "main"])
+            if result.returncode != 0:
+                return False, f"git pull --rebase (retry) falló: {result.stderr.strip()}"
+            result = run(["git", "push", "origin", "main"])
+            if result.returncode != 0:
+                return False, f"git push (retry) falló: {result.stderr.strip()}"
+        else:
+            return False, f"git push falló: {result.stderr.strip()}"
 
     return True, msg
 
@@ -274,6 +288,27 @@ def main():
             msg = f"CONFIGURACIÓN INVÁLIDA: TRADING_MODE=PAPER pero IBKR_PORT=4001 (cuenta LIVE real)"
             log_event("CRITICAL", msg)
             send_telegram_critical(f"🔴 {msg}")
+            return
+
+        # --------------------------------------------------
+        # Festivos NYSE — ciclo omitido si el mercado está cerrado
+        # Lista actualizada anualmente. El sistema opera L-V pero los
+        # mercados NYSE/NASDAQ permanecen cerrados en estas fechas.
+        # --------------------------------------------------
+
+        NYSE_HOLIDAYS = {
+            "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03",
+            "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07",
+            "2026-11-26", "2026-12-25",
+            "2027-01-01", "2027-01-18", "2027-02-15", "2027-04-02",
+            "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06",
+            "2027-11-25", "2027-12-24",
+        }
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        if hoy in NYSE_HOLIDAYS:
+            log_event("INFO", f"Festivo NYSE ({hoy}) — ciclo omitido")
+            send_telegram(f"LIBERTAD_2045: festivo NYSE ({hoy}) — sin operación")
+            _escribir_last_run()
             return
 
         # --------------------------------------------------
@@ -374,6 +409,7 @@ def main():
                     if ib.qualifyContracts(contrato) and MODE in ("PAPER", "LIVE"):
                         orden_cierre = MarketOrder("BUY", shares)
                         orden_cierre.tif = "DAY"
+                        orden_cierre.outsideRth = False
                         ib.placeOrder(contrato, orden_cierre)
                         ib.sleep(2)
                         log_event("INFO",
