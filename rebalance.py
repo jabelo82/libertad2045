@@ -238,6 +238,23 @@ def _precio_cierre_reciente(ib, symbol: str) -> Optional[float]:
     return None
 
 
+def _hay_stop_gtc_activo(ib, symbol: str, stop_price: float, shares: int) -> bool:
+    """
+    Comprueba si ya existe en IBKR un stop GTC activo para el símbolo con
+    exactamente el precio y cantidad indicados. Previene crear duplicados.
+    """
+    for trade in ib.trades():
+        if (trade.contract.symbol == symbol and
+                trade.order.orderType in ("STP", "TRAIL") and
+                trade.order.action == "SELL" and
+                trade.order.tif == "GTC" and
+                trade.orderStatus.status in ("PreSubmitted", "Submitted") and
+                int(trade.order.totalQuantity) == shares and
+                abs(getattr(trade.order, "auxPrice", 0) - stop_price) < 0.01):
+            return True
+    return False
+
+
 def _reemplazar_stop_gtc(
     ib,
     symbol: str,
@@ -247,10 +264,14 @@ def _reemplazar_stop_gtc(
     stop_anterior,
 ) -> bool:
     """
-    Coloca el nuevo stop GTC y, solo si tiene éxito, cancela el anterior.
-    Retorna True si el reemplazo se completó sin errores.
+    Actualiza el stop GTC de una posición con cero riesgo de duplicado.
 
-    Orden de operaciones (H-8 fix): validar → colocar nuevo → cancelar viejo.
+    Estrategia:
+        · Si la cantidad no cambia → modificar in-place el stop existente
+          (mismo orderId, IBKR lo interpreta como modificación). Sin ventana.
+        · Si la cantidad cambia → crear nuevo y cancelar el anterior (H-8).
+          Antes de crear, verificar que no existe ya un stop idéntico (guard).
+
     Nunca cancelar el stop existente si el nuevo no es válido o falla.
     """
     # Validar precio antes de tocar nada
@@ -261,7 +282,33 @@ def _reemplazar_stop_gtc(
                   symbol=symbol)
         return False
 
-    # Colocar stop GTC nuevo PRIMERO
+    # ── Vía rápida: cantidad idéntica → modificar in-place (sin duplicado posible) ──
+    if (stop_anterior is not None and
+            int(stop_anterior.order.totalQuantity) == shares_nuevas):
+        try:
+            stop_anterior.order.auxPrice = stop_price
+            ib.placeOrder(stop_anterior.contract, stop_anterior.order)
+            ib.sleep(0.5)
+            log_event("INFO",
+                      f"Stop GTC actualizado in-place | qty={shares_nuevas} | stop={stop_price:.2f}",
+                      symbol=symbol, shares=shares_nuevas, stop=stop_price)
+            return True
+        except Exception as e:
+            log_event("WARN",
+                      f"Rebalanceo: fallo al actualizar stop in-place para {symbol}: {e} "
+                      f"— continuando con reemplazo normal",
+                      symbol=symbol)
+            # Si falla el in-place, continúa con la vía estándar
+
+    # ── Guard de idempotencia: no crear si ya existe stop idéntico ──
+    if _hay_stop_gtc_activo(ib, symbol, stop_price, shares_nuevas):
+        log_event("WARN",
+                  f"Prevención duplicado: stop GTC {stop_price:.2f} × {shares_nuevas} acc "
+                  f"ya existe para {symbol} — no se crea nuevo",
+                  symbol=symbol)
+        return True
+
+    # ── Vía estándar: crear nuevo GTC y cancelar el anterior (cantidad cambia) ──
     try:
         nuevo_stop = Order()
         nuevo_stop.action        = "SELL"
@@ -615,50 +662,56 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                 if df_sym is not None:
                     nuevo_stop, mult = calcular_trailing_stop(df_sym)
                     if nuevo_stop and nuevo_stop > 0:
-                        try:
-                            contrato_s = pos.contract
-                            contrato_s.exchange = "SMART"
-                            if ib.qualifyContracts(contrato_s):
-                                stop_nuevo = Order()
-                                stop_nuevo.action        = "SELL"
-                                stop_nuevo.orderType     = "STP"
-                                stop_nuevo.totalQuantity = int(abs(pos.position))
-                                stop_nuevo.auxPrice      = nuevo_stop
-                                stop_nuevo.tif           = "GTC"
-                                stop_nuevo.transmit      = True
-                                ib.placeOrder(contrato_s, stop_nuevo)
-                                ib.sleep(1)
-                                log_event("INFO",
-                                          f"Stop GTC creado automáticamente | {symbol} | "
-                                          f"stop={nuevo_stop:.2f} | mult={mult}",
-                                          symbol=symbol)
-                                ib.reqAllOpenOrders()
-                                ib.sleep(2)
-                                stops_gtc = _obtener_gtc_stops(ib)
-                                if symbol not in stops_gtc:
-                                    log_event("ERROR",
-                                              f"Stop GTC auto-creado NO confirmado en IBKR para {symbol} "
-                                              f"— posición desprotegida",
-                                              symbol=symbol)
-                                    try:
-                                        from telegram import send_telegram_critical
-                                        send_telegram_critical(
-                                            f"🔴 LIBERTAD_2045 — Stop GTC automático NO confirmado: "
-                                            f"{symbol}. Posición desprotegida. Revisar manualmente."
-                                        )
-                                    except Exception:
-                                        pass
-                                else:
-                                    try:
-                                        from telegram import send_telegram
-                                        send_telegram(f"⚠️ LIBERTAD_2045 — Stop GTC creado automáticamente: "
-                                                     f"{symbol} @ {nuevo_stop:.2f}")
-                                    except Exception:
-                                        pass
-                        except Exception as e:
-                            log_event("ERROR",
-                                      f"Error creando stop GTC para {symbol}: {e}",
+                        # Guard: no crear si ya existe stop activo (puede pasar tras reinicio)
+                        if _hay_stop_gtc_activo(ib, symbol, nuevo_stop, int(abs(pos.position))):
+                            log_event("WARN",
+                                      f"Auto-GTC omitido — ya existe stop GTC activo para {symbol}",
                                       symbol=symbol)
+                        else:
+                            try:
+                                contrato_s = pos.contract
+                                contrato_s.exchange = "SMART"
+                                if ib.qualifyContracts(contrato_s):
+                                    stop_nuevo = Order()
+                                    stop_nuevo.action        = "SELL"
+                                    stop_nuevo.orderType     = "STP"
+                                    stop_nuevo.totalQuantity = int(abs(pos.position))
+                                    stop_nuevo.auxPrice      = nuevo_stop
+                                    stop_nuevo.tif           = "GTC"
+                                    stop_nuevo.transmit      = True
+                                    ib.placeOrder(contrato_s, stop_nuevo)
+                                    ib.sleep(1)
+                                    log_event("INFO",
+                                              f"Stop GTC creado automáticamente | {symbol} | "
+                                              f"stop={nuevo_stop:.2f} | mult={mult}",
+                                              symbol=symbol)
+                                    ib.reqAllOpenOrders()
+                                    ib.sleep(2)
+                                    stops_gtc = _obtener_gtc_stops(ib)
+                                    if symbol not in stops_gtc:
+                                        log_event("ERROR",
+                                                  f"Stop GTC auto-creado NO confirmado en IBKR para {symbol} "
+                                                  f"— posición desprotegida",
+                                                  symbol=symbol)
+                                        try:
+                                            from telegram import send_telegram_critical
+                                            send_telegram_critical(
+                                                f"🔴 LIBERTAD_2045 — Stop GTC automático NO confirmado: "
+                                                f"{symbol}. Posición desprotegida. Revisar manualmente."
+                                            )
+                                        except Exception:
+                                            pass
+                                    else:
+                                        try:
+                                            from telegram import send_telegram
+                                            send_telegram(f"⚠️ LIBERTAD_2045 — Stop GTC creado automáticamente: "
+                                                         f"{symbol} @ {nuevo_stop:.2f}")
+                                        except Exception:
+                                            pass
+                            except Exception as e:
+                                log_event("ERROR",
+                                          f"Error creando stop GTC para {symbol}: {e}",
+                                          symbol=symbol)
 
             # Decisión (función pura)
             decision = evaluar_posicion(symbol, shares_actual, precio, capital, df)
