@@ -1,6 +1,6 @@
 ================================================================================
 LIBERTAD_2045 — CONTEXTO EJECUTIVO COMPLETO
-Actualizado: 2026-06-20  |  Versión del sistema: v2.5
+Actualizado: 2026-06-24  |  Versión del sistema: v2.7
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -28,18 +28,20 @@ Actualizado: 2026-06-20  |  Versión del sistema: v2.5
                            supervisión y evolución.
 
 --------------------------------------------------------------------------------
-1. ESTADO ACTUAL (18 JUNIO 2026)
+1. ESTADO ACTUAL (23 JUNIO 2026)
 --------------------------------------------------------------------------------
 
   FASE 2 — PAPER TRADING activa desde 14/04/2026
 
   Modo de operación  : PAPER
-  Versión del sistema: v2.5
-  Capital actual     : ~7.660,63 € (ciclo 20/06/2026)
+  Versión del sistema: v2.7
+  Capital actual     : ~7.660 € (estimado 23/06/2026)
 
   Máquina principal  : Torre (jabelo@192.168.1.139) — Zorin OS 18.1
-  VPS Hetzner CX23   : 46.225.106.85 — migración completada, listo para ser
-                       máquina principal. Corte pendiente de decidir.
+  VPS Hetzner CX23   : 46.225.106.85 — listo para cutover (ver CUTOVER_VPS.md)
+
+  Posiciones abiertas (23/06/2026) — cartera llena 10/10:
+    TRV, DTE, WAB, KEYS, HUBB, ABNB, WMB, AEP, KMI, XEL
 
   Ejecución automática:
       cron 22:10 L–V  →  run_bot.sh  →  libertad2045.py
@@ -72,13 +74,13 @@ Actualizado: 2026-06-20  |  Versión del sistema: v2.5
 
   SYSTEMD:
     Servicio          : ~/.config/systemd/user/ibgateway.service (enabled)
+                        Restart=always (fix 20/06/2026 — commit 83ac75c)
     Linger activado   : loginctl enable-linger root
     Comando verificar : systemctl --user status ibgateway.service
 
   PROYECTO:
     Directorio        : ~/PROYECTO_LIBERTAD_2045/
-    Crons activos     : 10 22 * * 1-5  →  bot de trading
-                        0 12 * * 1-5   →  watchdog
+    Crons             : preparados pero aún NO activos (cutover pendiente)
 
   DEPENDENCIAS EXTRA:
     tzdata añadida a requirements.txt (commit 23233ef)
@@ -88,14 +90,19 @@ Actualizado: 2026-06-20  |  Versión del sistema: v2.5
     Puerto 4002 abierto  ✓
     CONEXION_OK  ✓
 
+  DOCUMENTOS DE CUTOVER:
+    CUTOVER_VPS.md    : checklist completo Torre→VPS + Anexo A (OAuth) +
+                        Anexo B (PAPER→LIVE agosto 2026).
+                        Ubicación: ~/PROYECTO_LIBERTAD_2045/CUTOVER_VPS.md
+
 --------------------------------------------------------------------------------
 3. TRANSICIÓN A LIVE (AGOSTO 2026)
 --------------------------------------------------------------------------------
 
   Fecha objetivo     : 1 de agosto 2026
+  Acuerdo con        : Paloma
 
-  PASOS PARA EL CORTE (ejecutar desde el VPS o la torre según dónde esté el
-  bot en ese momento):
+  PASOS PARA EL CORTE (ejecutar desde el VPS — será la máquina principal):
 
     1. Resetear capital_peak al capital inicial real:
          venv/bin/python -c "from risk_guardian import resetear_capital_peak; \
@@ -113,14 +120,34 @@ Actualizado: 2026-06-20  |  Versión del sistema: v2.5
 
     5. Primer ciclo nocturno a las 22:10.
 
+  Ver CUTOVER_VPS.md (Anexo B) para el procedimiento completo con rollback.
+
 --------------------------------------------------------------------------------
-4. VERSIÓN ACTIVA: v2.5
+4. VERSIÓN ACTIVA: v2.7
 --------------------------------------------------------------------------------
 
-Auditoría v2.5 completada (18/06/2026) — 6 fixes + validación cuantitativa rebalanceo.
-Auditoría v2.4 completada en 4 rondas (17/06/2026) — 26 hallazgos cerrados.
+Historial de versiones:
+  v2.4_bloq : auditoría triple, SMA50>SMA200, fix C1/C2, cortos, fills reales,
+              dashboard — referencia de backtest
+  v2.5      : fix doble-SELL a mercado (bug cortos involuntarios por rebalanceo)
+  v2.6      : auditoría C-3 festivos NYSE, A-1/A-5 fixes LIVE, M-1/M-2/M-4/M-5
+              hardening, B-1/B-5 deuda técnica, fix over-allocation capital_restante
+  v2.7      : fix stop GTC duplicado — modify in-place (break-even),
+              guard _hay_stop_gtc_activo(), reconciliar_stops_gtc() al arranque
+              y watchdog, 18 tests en tests/test_gtc_dedup.py
+
 Commits principales en producción (más recientes primero):
 
+  [v2.7]   fix: stop GTC duplicado — reconciliar_stops_gtc, _hay_stop_gtc_activo,
+           modify in-place en break-even + 18 tests unitarios
+           (hash: verificar con git log en torre/VPS)
+  [v2.6]   fix: capital_restante en dimensionado — descuenta coste estimado
+           de cada posición antes de dimensionar la siguiente (over-allocation)
+  [v2.6]   fix: C-3 festivos NYSE 2026-2027 en libertad2045.py
+  [v2.6]   fix: watchdog detecta stops GTC sin posición (riesgo SHORT)
+  [v2.6]   fix: trade_executor verifica estado stop GTC tras placeOrder
+  [v2.6]   fix: A-3/A-4/A-5/M-1/M-2/M-4/M-5/B-1/B-2/B-3/B-4/B-5
+           (hashes: verificar con git log)
   83ac75c  docs: INFRAESTRUCTURA_IBG.md — Restart=always en ibgateway.service
   12f26f1  fix: git_backup añade pull --rebase antes del push (publisher race)
   9e9eaba  fix: renombrar variable de bucle 'signal' a 'senal' — UnboundLocalError
@@ -132,188 +159,186 @@ Commits principales en producción (más recientes primero):
   ca1990e  feat: watchdog verifica git_backup del ciclo nocturno anterior
   2e33402  fix: git_backup detecta cambios staged en lugar de working tree
   23233ef  fix: añadir tzdata a requirements.txt (ZoneInfo US/Eastern)
-  4df3359  Auditoría v2.4 ronda 4: A-1 reducir pendiente, M-2 timezone NY,
-           M-4 TTL pendientes, M-5 avgCost warn, B-1 lockfile atómico,
-           B-3 cap 10k, B-4 sleep fills
-  d049793  Auditoría v2.4 ronda 3: C-1 capital_peak stale, C-2 validación
-           LIVE/PORT, L-5 watchdog preserva modo, A-2 cruce stops,
-           A-4+B-2 timeout proceso
-  82a347a  Auditoría v2.4 ronda 2: H-1 reqAllOpenOrders, H-2 reqPositions,
-           H-6 C1 sin conexión, H-7 verificación stop auto, H-9 stop>=precio,
-           H-11 preservar break-even, H-4 pending_rebalance
-  54b6018  Auditoría v2.4: H-10 capital=0, H-8 stop GTC orden, H-5 BUY
-           huérfano, H-3 cierre cortos automático, FIX-1 reqAllOpenOrders
+  4df3359  Auditoría v2.4 ronda 4
+  d049793  Auditoría v2.4 ronda 3
+  82a347a  Auditoría v2.4 ronda 2
+  54b6018  Auditoría v2.4 ronda 1
   cf99d55  Fix cortos involuntarios: guard anti-doble-SELL en rebalance +
            protección MKT SELL en order_manager
   d26fad7  reset: nueva etapa LIVE-prep con 8.000€ — 10/06/2026
-  6ab9830  backup: dashboard y datos antes de reset a 8.000€ (09/06/2026)
-  f32885b  Fix crítico: evaluar_stops_por_cierre respeta SIM y bloquea SELL
-           sin posición larga
-  a8b5420  Fix: cancelOrder de GTC también respeta modo SIM
-  4f5f882  rebalance: crear stop GTC automáticamente para posiciones sin
-           protección
-  a0d5f1e  Fix fills parciales duplicados y stop no registrado en dashboard
-  29d04bd  Fix cierre por stop no verifica fill real (caso CBOE 02/06)
-  cc1d808  Auditoría v2.4 — 15 fixes aplicados
-  860268b  data_loader: default duration "1 Y" → "2 Y"
-  701c66b  Fix C1+C2: gestión cartera con IB caído y heartbeat en Risk Guardian
-  4095a80  Fix rutas hardcodeadas, PID stale en lockfile y TRAILING_FACTOR=0.75
-  dc55105  gitignore: añadir entradas faltantes
-  11bdbfd  Fill SELL: registrar precio real de salida en logs y dashboard
-  2c23726  github_publisher: __main__ publica dashboard principal
-  3532dc8  dashboard: Trades actuales vs ejecutados, eliminar historial sesiones
-  3d88ea3  dashboard: Trades actuales desde cartera IBKR, cerrados desde logs
-  29994bd  Fix bloqueantes LIVE: ConnectionError IB, posiciones cortas,
-           retención logs 10y
-  966242f  backtest_expandido: alinear señal tendencia con producción
-           (SMA50>SMA200)
-  —        reconstruir_salidas.py: 12 TRADE_SOLD escritos en logs históricos
-           (BMY, C, CAT, CHRW, CRL, DECK, FDX, INTC, LLY, OXY, R, TER)
-  9a18de6  dashboard: fix PnL oculto — dedup ORDER/FILLED, ventana 5 días.
-           PnL total cuadra: 23 trades, +176.855 € ≈ +18.17% KPI.
-  eab1499  risk_guardian: fail-safe cuando GrossPositionValue no disponible
-  acc258d  Refactoring C: cache datos cartera, calcular_trailing_stop() fuente
-           única, eliminar yfinance de portfolio_manager
-  8b195df  docs/config: requirements.txt, config.py centralizado, docstrings
-
-FIXES APLICADOS EN v2.5 (auditoría 18/06/2026):
-  Ver sección 5 (Auditoría v2.5) para el detalle completo.
-
-FIXES APLICADOS EN v2.4 (auditoría 17/06/2026 — 4 rondas, 26 hallazgos):
-  Ver sección 5 (Auditoría v2.4) para el detalle completo.
-
-FIXES ANTERIORES EN v2.4:
-  Principales: 15 fixes de auditoría triple (signal_engine, conexion_ib,
-  watchdog, data_loader, rebalance, portfolio_manager, dashboard, risk_guardian,
-  libertad2045, position_size, config, requirements).
 
 --------------------------------------------------------------------------------
 5. AUDITORÍAS
 --------------------------------------------------------------------------------
 
+  ── v2.7 (23/06/2026) ─────────────────────────────────────────────────────
+
+  Fix raíz: stop GTC duplicado detectado en producción (TRV — órdenes 13443
+  y 17743 activas simultáneamente con precios 305,63 y 306,18).
+
+  Causa raíz:
+    _reemplazar_stop_gtc() en rebalance.py creaba la orden nueva y luego
+    cancelaba la vieja. Si IBKR tardaba en procesar el cancel, la siguiente
+    llamada a _obtener_gtc_stops() veía ambas activas. En break-even esto
+    ocurría con frecuencia porque el modify se ejecuta en el mismo ciclo en
+    que el precio cruza el umbral.
+
+  FIXES APLICADOS:
+
+  Fix-1  Modify in-place cuando qty no cambia (break-even):
+         En lugar de cancelar+crear, se llama a modifyOrder() sobre la orden
+         existente cuando solo cambia el precio stop (qty idéntica). Elimina
+         la ventana de race condition por completo para el caso más frecuente.
+
+  Fix-2  Guard _hay_stop_gtc_activo() antes de auto-GTC:
+         Antes de colocar un stop GTC automático para una posición sin
+         protección, se verifica si ya existe uno activo. Evita duplicados
+         en el flujo de creación inicial.
+
+  Fix-3  reconciliar_stops_gtc() al arranque y en watchdog:
+         Nueva función que detecta múltiples stops GTC activos para el mismo
+         símbolo y cancela todos excepto el de precio mayor (mayor protección).
+         Se ejecuta al inicio de libertad2045.py y en cada ciclo del watchdog.
+
+  Tests  18 tests unitarios en tests/test_gtc_dedup.py cubriendo:
+         · duplicate detection · modify in-place · reconciliation logic
+         · guard idempotency · watchdog integration
+
+  ── v2.6 (22/06/2026) ─────────────────────────────────────────────────────
+
+  15 fixes aplicados — auditoría completa previa al cutover VPS.
+
+  FIXES APLICADOS:
+
+  C-3  Festivos NYSE integrados en libertad2045.py (lista 2026-2027):
+       El bot intentó correr el 19/06 (Juneteenth, festivo) sin saberlo.
+       Lista hardcodeada de festivos NYSE para 2026 y 2027 en el orquestador.
+       Pendiente: actualizar lista cada año (no bloqueante).
+
+  fix  capital_restante en dimensionado de posiciones (over-allocation):
+       Bug histórico que requería cuenta nueva + muchas señales simultáneas
+       para manifestarse. 7 señales el 10/06 con capital de 7.656 € → coste
+       total 8.715 € → IB usó margen → leverage 1,08x → Risk Guardian bloqueó.
+       Fix: variable capital_restante que descuenta el coste estimado de cada
+       posición antes de dimensionar la siguiente.
+
+  A-1  watchdog detecta stops GTC sin posición abierta (riesgo SHORT):
+       Si hay un stop GTC activo para un símbolo sin posición larga, se
+       registra alerta crítica en Telegram. Previene cortos involuntarios
+       silenciosos.
+
+  A-2  trade_executor verifica estado stop GTC tras placeOrder:
+       Después de colocar un stop GTC, se verifica su estado (sleep 1s).
+       Si el estado es Inactive/Cancelled/Rejected se cancela el BUY padre
+       (posición no queda huérfana sin protección).
+
+  A-3  watchdog guard — no relaunch LIVE si shutdown de mediodía inminente:
+       Si faltan menos de N minutos para las 12:00 y el bot está en LIVE,
+       el watchdog no lo relanza para evitar un ciclo parcial en horario
+       de cierre de mercado.
+
+  A-4  BUY MKT cierre cortos — outsideRth=False:
+       Las órdenes MKT de cierre de cortos involuntarios ahora tienen
+       outsideRth=False para evitar ejecución fuera de horario regular.
+
+  A-5  order_manager protege BUY DAY de AMPLIAR pendiente:
+       Si hay un AMPLIAR pendiente de ejecución, el order_manager no cancela
+       un BUY DAY coincidente de otro flujo. Evita race condition entre
+       rebalanceo y órdenes del ciclo anterior.
+
+  M-1  rebalanceo no baja stop por debajo del nivel GTC activo en IBKR:
+       Antes de modificar un stop, se compara con el precio del GTC activo
+       en el broker. Si el nuevo precio es inferior, se conserva el activo.
+       Protege ante divergencias entre estado local e IBKR.
+
+  M-2  order_manager usa contract.symbol en logs:
+       Sustituye getattr(order,"symbol","?") por contract.symbol en todos
+       los registros de log de order_manager.
+
+  M-4  evaluar_stops_por_cierre reutiliza datos_cartera para precio cierre:
+       En lugar de una llamada adicional a IBKR, usa el snapshot de cartera
+       ya disponible en el ciclo. Reduce latencia y llamadas API.
+
+  M-5  registrar_fills_recientes loguea ERROR explícito si fallo de escritura:
+       Antes fallaba silenciosamente. Ahora registra ERROR con traceback si
+       el CSV de fills no se puede escribir.
+
+  B-1  logger.py default LOG_RETENTION_DAYS=90:
+       Coherente con la política de retención documentada (10 años para logs
+       operativos críticos, 90 días para logs de debug).
+
+  B-2  ibc_autostart.sh verifica que Xvfb arrancó antes de lanzar Gateway:
+       Si Xvfb no está disponible en :99, el script espera hasta 10s antes
+       de intentar arrancar IB Gateway. Evita fallos en arranque frío del VPS.
+
+  B-3  git_backup reintenta push tras "rejected" (segunda descarga rebase):
+       Si el push falla por fast-forward rejection, hace un segundo
+       git pull --rebase y reintenta el push una vez más.
+
+  B-4  github_publisher no loguea cuerpo de respuesta de error GitHub:
+       Evita que tokens o contenido sensible aparezca en logs si la API
+       de GitHub devuelve un error con body.
+
+  B-5  clientIds documentados en config.py:
+       Bot=1, Dashboard=7, Rebalancer=5, Watchdog_old=6, Watchdog_new=8,
+       Manual=9 — centralizados y comentados.
+
   ── v2.5 (18/06/2026) ─────────────────────────────────────────────────────
 
-  6 fixes aplicados + análisis de rebalanceo en producción + validación backtest
+  6 fixes aplicados + validación cuantitativa del rebalanceo.
   Commits: 90ef0f8, b70c864, 89d9b0a, ca1990e, 2e33402
 
   FIXES APLICADOS:
 
-  C-1  chmod 600 .env en torre y VPS (aplicado manualmente en sesión)
-       Archivo .env contiene TELEGRAM_TOKEN y GITHUB_TOKEN — permisos
-       restrictivos son obligatorios antes de LIVE.
+  C-1  chmod 600 .env en torre y VPS (aplicado manualmente).
 
-  C-2  SIGTERM handler en libertad2045.py — apagado limpio tras timeout:
-       run_bot.sh usa `timeout 3600` que envía SIGTERM, lo que en CPython
-       bypassea los bloques `finally`. El handler captura SIGTERM y lanza
-       `SystemExit`, que sí propaga a través de `finally` → lockfile liberado
-       + conexión IB cerrada limpiamente.
+  C-2  SIGTERM handler en libertad2045.py — apagado limpio tras timeout.
+       run_bot.sh usa `timeout 3600` que envía SIGTERM, bypasseando `finally`
+       en CPython. El handler captura SIGTERM y lanza SystemExit → lockfile
+       liberado + conexión IB cerrada limpiamente.
 
-  C-4  Stop del rebalanceo usa calcular_trailing_stop() con TRAILING_FACTOR=0.75:
-       El bug anterior usaba calcular_posicion() que devuelve la distancia bruta
-       ATR×mult sin aplicar TRAILING_FACTOR=0.75. Cada reemplazo de stop por
-       rebalanceo dejaba el stop un ~25% más ancho que el modelo. Corregido
-       llamando directamente a calcular_trailing_stop(df) que aplica el factor.
+  C-4  Stop del rebalanceo usa calcular_trailing_stop() con TRAILING_FACTOR=0.75.
+       Bug anterior: calcular_posicion() devuelve distancia bruta ATR×mult sin
+       aplicar el factor. Cada reemplazo de stop dejaba el stop ~25% más ancho.
 
-  A-3  Validar frescura de datos (máx 5 días) en portfolio_manager y rebalance:
-       Si la última barra de precios tiene >5 días de antigüedad, el stop no se
-       evalúa ni actualiza (evita usar datos stale de festivos o gaps de datos).
+  A-3  Validar frescura de datos (máx 5 días) en portfolio_manager y rebalance.
 
-  A-4  Detectar stops GTC duplicados en portfolio_manager y rebalance:
-       Si IBKR tiene dos stops GTC activos para el mismo símbolo, se registra
-       CRITICAL en log + alerta Telegram crítica. Se conserva el stop con precio
-       más alto (mayor protección).
+  A-4  Detectar stops GTC duplicados — CRITICAL + alerta Telegram.
+       Conserva el de precio más alto. (Origen del incidente v2.7.)
 
-  A-5  Verificar estado del nuevo stop GTC antes de cancelar el anterior:
-       En _reemplazar_stop_gtc(), después de placeOrder() se verifica el estado
-       del nuevo stop (sleep 1s). Si el estado es Inactive/Cancelled/Rejected,
-       se aborta y se conserva el stop anterior. El sistema no queda sin
-       protección por un fallo en el reemplazo.
+  A-5  Verificar estado del nuevo stop GTC antes de cancelar el anterior.
 
-  fix  git_backup detecta cambios staged en lugar de working tree:
-       git status --porcelain detectaba dashboard.html (working tree) y el bot
-       intentaba commitear sin staged → git commit fallaba silenciosamente.
-       Corregido con git diff --cached --quiet + returncode == 0.
-
-  feat watchdog verifica git_backup del ciclo nocturno anterior:
-       A las 12:00, el watchdog lee el CSV del día hábil anterior y busca la
-       línea "Git backup falló". Reporta OK/FALLO/sin dato en el informe de
-       Telegram del mediodía. Función check_git_backup() en watchdog.py.
-
-  VALIDACIÓN DEL REBALANCEO:
+  VALIDACIÓN DEL REBALANCEO (18/06/2026):
 
   Análisis de logs de producción (14/04–18/06/2026):
-    · 630 evaluaciones de posición en ciclos de rebalanceo
-    · 24 ajustes ejecutados (tasa 3.8%)
-    · 0 stops activados tras AMPLIAR (ningún AMPLIAR precedió a un stop)
-    · Todas las posiciones rebalanceadas cerradas por señal (TRADE_SOLD)
+    · 630 evaluaciones de posición
+    · 24 ajustes ejecutados (tasa 3,8%)
+    · 0 stops activados tras AMPLIAR
 
-  Backtest comparativo CON vs SIN rebalanceo (2006-2025):
+  Backtest CON vs SIN rebalanceo (2006-2025):
     Métrica           CON rebalanceo   SIN rebalanceo   Delta
     Capital final      8.888.418 €      8.481.305 €   +407.113 €
     Win rate                54,1%            54,2%        -0,1%
     Profit factor          2,6071           2,6511       -0,044
-    Max drawdown           10,4%            10,5%        -0,0%
+    Max drawdown           10,4%            10,5%        -0,1%
     Trades                  2.402            2.404           -2
     Rebalanceos ej.           268              58*
-    *Los 58 sin rebalanceo son solo REDUCIR por MAX_POSITION_PCT (límite duro).
-
-    Frecuencia: 268 ajustes en ~5.000 días hábiles = 1 ajuste cada 19 días.
-    Veredicto: +4,8% de capital final sin coste en drawdown. ACTIVO PARA LIVE.
-    Script: comparar_rebalanceo.py (commit 90ef0f8)
-
-  PENDIENTES ANTES DE LIVE (muy recomendables — no bloqueantes):
-
-  ✓ M-1  outsideRth=False en MKT SELL de portfolio_manager
-         RESUELTO — implementado en portfolio_manager.py:244 y rebalance.py:826.
-         Verificado en auditoría v2.6 (22/06/2026).
-
-  ✓ M-3  sleep(1) tras cancelaciones en order_manager
-         RESUELTO — ib.sleep(1) presente en order_manager.py tras cada cancelOrder
-         (líneas 45 y 76). Verificado en auditoría v2.6 (22/06/2026).
-
-  ✓ M-5  watchdog.sh timeout 300
-         RESUELTO — timeout 300 presente en watchdog.sh:7.
-         Verificado en auditoría v2.6 (22/06/2026).
-
-  A-1  Documentar explícitamente si rebalanceo AMPLIAR respeta drawdown gate
-       En backtest y producción, AMPLIAR usa capital disponible sin verificar
-       explícitamente el drawdown gate. Decisión pendiente: bloquear AMPLIAR
-       si Risk Guardian está activo, o permitirlo (argumento: no abre posición
-       nueva, solo ajusta tamaño de una existente).
+    *Solo REDUCIR por MAX_POSITION_PCT sin rebalanceo activo.
+    Veredicto: +4,8% capital final sin coste en drawdown. ACTIVO PARA LIVE.
 
   ── v2.4 (17/06/2026) ─────────────────────────────────────────────────────
 
-  4 rondas de revisión — 26 hallazgos cerrados
+  4 rondas — 26 hallazgos cerrados.
   Commits: cf99d55, 54b6018, d049793, 82a347a, 4df3359, 23233ef, 2e33402
 
-  CRÍTICOS RESUELTOS:
-
-  Cortos involuntarios:
-    · Guard anti-doble-SELL en rebalance.py
-    · Protección MKT SELL en order_manager (no cancela si hay posición larga)
-    · Detección y cierre automático de cortos en orquestador (H-3)
-
-  H-10: capital=0 ya no cierra toda la cartera (era bug de falso trigger)
-  H-8:  stop GTC nunca se cancela antes de confirmar que el nuevo está activo
-  H-5:  entrada BUY se cancela si el stop GTC hijo falla (no queda huérfana)
-
-  PARA TRANSICIÓN LIVE:
-  C-1:  resetear_capital_peak() lista y documentada (ver sección 3)
-  C-2:  validación TRADING_MODE/IBKR_PORT al arranque — el sistema para si
-        la configuración es incoherente (LIVE+4002 o PAPER+4001)
-
-  OPERATIVOS:
-  L-5:  watchdog preserva el modo configurado en .env al relanzar el bot
-  A-2:  watchdog verifica cruzada posiciones vs stops GTC activos
-  A-4+B-2: timeout 3600s en run_bot.sh + detección de proceso colgado en
-            watchdog (kill si supera el timeout)
-  M-2:  timezone New York corregida (ZoneInfo US/Eastern — tzdata añadida)
-  B-1:  lockfile atómico (O_EXCL) — evita race condition en doble arranque
-  B-3:  capital máximo operativo limitado a 10.000 € en PAPER (anti-inflado)
-
-  MENOR:
-  fix git_backup: detecta cambios staged en lugar de working tree
-    (git diff --cached --quiet vs git status --porcelain)
+  CRÍTICOS: cortos involuntarios (guard doble-SELL, protección MKT SELL,
+  cierre automático H-3), capital=0 no cierra cartera (H-10), stop GTC
+  nunca cancelado antes de confirmar el nuevo (H-8), BUY cancela si stop
+  hijo falla (H-5).
+  LIVE: resetear_capital_peak() lista, validación TRADING_MODE/IBKR_PORT.
+  OPERATIVOS: watchdog preserva modo .env, cruce posiciones vs GTC,
+  timeout 3600s + detección proceso colgado, timezone NY, lockfile atómico,
+  cap 10.000 € en PAPER.
 
 --------------------------------------------------------------------------------
 6. PARÁMETROS OPERATIVOS
@@ -344,17 +369,7 @@ FIXES ANTERIORES EN v2.4:
     Win Rate         : 54,1%
     Max Drawdown     : 10,4%
     Trades           : 2.402
-    Rebalanceos      : 268 (incluido desde el inicio — confirmado 18/06/2026)
-    Veredicto        : supera baseline v2 en todas las métricas financieras
-                       relevantes
-
-  COMPARATIVA CON vs SIN REBALANCEO (18/06/2026):
-    CON rebalanceo   : 8.888.418 € — PF 2,6071 — DD 10,4%
-    SIN rebalanceo   : 8.481.305 € — PF 2,6511 — DD 10,5%
-    Delta            : +407.113 € (+4,8%) sin coste en drawdown
-    Mecanismo        : compounding — posiciones infradimensionadas al inicio
-                       se corrigen conforme crece el capital, amplificando
-                       las ganancias en tramos alcistas
+    Rebalanceos      : 268
     Script           : comparar_rebalanceo.py (commit 90ef0f8)
 
   BACKTEST v2.4_bloq (05/06/2026) — REFERENCIA ANTERIOR:
@@ -368,33 +383,137 @@ FIXES ANTERIORES EN v2.4:
     Montecarlo       : prob. ruina 0,00%, DD p95 7,6%
     Stress test      : 3/3 crisis (2008, 2020, 2022): ×0,75 supera a ×1,00
 
-  Nota: backtest_expandido.py aplica TRAILING_FACTOR=0.75 (commit 4095a80)
-  y señal SMA50>SMA200 (commit 966242f) — completamente alineado con producción.
-  La simulación de rebalanceo (umbral 25%, mín. 5 acc.) estaba ya incluida en v3.
+  Nota: backtest_expandido.py aplica TRAILING_FACTOR=0.75 y señal SMA50>SMA200
+  — completamente alineado con producción.
+
+  ── EXPERIMENTOS DE UNIVERSO ──────────────────────────────────────────────────
+
+  EXP43 — Momentum ROC-60 desempate (23/06/2026) — DESCARTADO
+    Capital final       : 7.317.419 €   (-18% vs v3: 8.888.418 €)
+    Profit Factor       : 2,351
+    Max Drawdown        : 11,1%
+    Win Rate            : 54,1%
+    Veredicto           : DESCARTADO
+    Motivo              : ROC-60 selecciona activos ya estirados tras rally
+                          fuerte — el pullback-recovery es peor en expectativa.
+                          El score compuesto actual (close-SMA50)/ATR +
+                          slope_SMA200 sigue siendo mejor criterio de desempate
+                          cuando señales > slots.
+
+  EXP44 — S&P500 + Diferencial Russell 2000 (24/06/2026) — MEJORA SIGNIFICATIVA
+    Universo            : 820 tickers (501 S&P500 + 319 diferencial RUT validado)
+    Período             : 2006–2025
+    Capital final       : 15.155.278 €   (+70,5% vs v3: 8.888.418 €)
+    Win Rate            : 53,4%          (-0,7pp vs v3)
+    Profit Factor       : 2,5651         (-0,042 vs v3)
+    Max Drawdown        : 9,8%           (-0,6pp vs v3 — MEJORA)
+    Trades              : 2.687          (+285 vs v3)
+    Rebalanceos         : 415
+    Días Risk Guardian  : 0 bloqueados
+    Veredicto           : MEJORA — universo a INCORPORAR
+    Script              : backtest_exp44.py + exp44_universo.py
+    Archivo universo    : exp44_universo_combinado.py (820 tickers)
+
+    Contexto: el diferencial Russell 2000 validado añade 319 small-caps con
+    historia pre-2006 ≥200 barras. A diferencia de Exp42 (Nasdaq100, solo 6
+    tickers extra, neutro), los tickers RUT aportan diversificación real:
+    drawdown mejora y el capital casi se dobla con mínima degradación de WR/PF.
+    Bug corregido en backtest_exp44.py: los tickers RUT deben bypass el filtro
+    de composición histórica S&P500 (fja05680) — implementado via
+    _russell2000_extra set + excepción en el escáner de señales.
+
+  EXP44 — PENDIENTES ANTES DE INCORPORAR A PRODUCCIÓN:
+  □ Investigar si existe dataset histórico de composición Russell 2000
+    (equivalente a sp500_composicion.csv). El +70,5% actual puede tener
+    survivorship bias significativo: los 319 tickers aprobados son los
+    que tienen historia pre-2006 Y siguen cotizando hoy; los que
+    quebraron entre 2006-2026 no aparecen en el backtest pero habrían
+    entrado en producción real en su momento. Sin corrección, el número
+    es sospechosamente bueno.
+  □ Filtro de liquidez sobre los 319 tickers RUT (e.g. volumen diario
+    medio >500k acc/día o >$5M/día) antes de meterlos al universo de
+    producción. Re-correr backtest con subset filtrado. En LIVE los
+    fills sobre small-caps ilíquidos tienen slippage que el backtest
+    no modela.
+    Cronología: igual que EXP45 — NO entra en el cutover ni en la
+    transición LIVE de agosto. Evaluación en otoño, tras los 2 puntos
+    anteriores.
+
+  EXP45 — Matriz piramidación 3×2 (23/06/2026) — A2 GANADORA, NO A PRODUCCIÓN
+    Variantes           : K ∈ {2.5, 3.0, 4.0} × timing ∈ {cierre, buy-stop día siguiente}
+    Universo            : S&P500 histórico ~674 activos. Período 2006–2025.
+
+    Ganadora A2 (K=2.5×ATR, buy-stop día siguiente High+0.05):
+      Capital final     : 11.406.847 €   (+28% vs v3: 8.888.418 €)
+      CAGR              : 48,9%          (+1,9pp vs v3: 47,0%)
+      Win Rate          : 50,0%
+      Profit Factor     : 1,462          (-1,145 vs v3: 2,607)
+      Max Drawdown      : 9,6%           (-0,8pp vs v3: 10,4% — MEJORA)
+      Sharpe            : 1,64           (+0,14 vs v3: 1,50)
+      Calmar            : 5,06           (+0,55 vs v3: 4,51)
+      Piramidaciones    : 781            (31,9% de los trades)
+      PnL pos2          : 1.224.291 €
+
+    Única variante que mejora CAGR + DD + Sharpe + Calmar simultáneamente.
+    Patrón: timing buy-stop siempre gana al cierre del día (filtro de
+    confirmación de momentum). K=2.5 es óptimo (con K≥3 la activación
+    llega tarde, stop_dist_2 mayor, shares_2 menor).
+
+    PREOCUPACIÓN ESTRUCTURAL:
+      El PF cae de 2,607 a 1,462 en todas las variantes. No es bug — es
+      estructural (piramidar compra a precio más alto con menos margen al
+      stop). Pero cambia el carácter del sistema: con PF 2,6, cinco trades
+      perdidos seguidos no asustan; con PF 1,46 sí pueden romper el
+      Artículo I psicológicamente.
+      El PF 2,6 ha sido estable en 3 ventanas independientes (2005-25,
+      2006-25, 1996-19) — es propiedad estructural del sistema, no
+      artefacto de una época.
+
+    CRONOLOGÍA ACORDADA (Artículo III — evolución controlada):
+      1. Cutover torre→VPS con baseline v3 SIN piramidación
+      2. 4 semanas validación PAPER en VPS
+      3. Transición LIVE agosto 2026 con baseline v3 (lo que Paloma firmó)
+      4. Walk-forward A2 out-of-sample en paralelo agosto-sept:
+           · Entrenar 2006-2018, validar 2019-2025
+           · También 2006-2015 vs 2016-2025
+      5. Si A2 pasa walk-forward: verificar si PF 1,46 es estable en
+         todas las ventanas o oscila (estable=aceptable, oscilante=frágil)
+      6. Modelar comisiones reales IBKR (~80 USD/año por ~39 órdenes extra)
+      7. Si todo OK, activación piramidación oct/nov 2026 como evolución
+         controlada
+
+    REGLA: no meter dos cambios grandes a la vez (cutover + LIVE +
+    piramidación). Un cambio por fase.
+    Script              : backtest_exp45.py (commit 57fc81d)
+
+  EXP42 — S&P500 + Diferencial Nasdaq100 (23/06/2026) — DESCARTADO
+    Universo            : 507 tickers (501 S&P500 + 6 diferencial NDX)
+    Resultado           : solapamiento casi total, mejora despreciable
+    Veredicto           : NEUTRO → descartado
 
 --------------------------------------------------------------------------------
 8. INFRAESTRUCTURA
 --------------------------------------------------------------------------------
 
-  ARQUITECTURA ACTUAL (en transición — corte pendiente):
+  ARQUITECTURA ACTUAL (en transición — cutover pendiente):
     Torre MSI        → PRODUCCIÓN ACTUAL (bot corriendo, crons activos)
-    VPS Hetzner      → PRODUCCIÓN LISTA (migración completada, corte pendiente)
+    VPS Hetzner      → PRODUCCIÓN LISTA (cutover pendiente — ver CUTOVER_VPS.md)
     ProBook          → DESARROLLO (Claude Code, commits, pruebas)
 
-  TORRE MSI MS-7D48 (máquina principal actual):
+  TORRE MSI MS-7D48:
     IP               : jabelo@192.168.1.139
     SO               : Zorin OS 18.1
     Proyecto         : ~/PROYECTO_LIBERTAD_2045
     Crons            : 22:10 bot, 12:00 watchdog
 
-  VPS HETZNER (listo para producción):
-    Ver sección 2 para el detalle completo de configuración.
+  VPS HETZNER:
+    Ver sección 2 para el detalle completo.
 
   PROBOOK (desarrollo):
     Proyecto         : ~/PROYECTO_LIBERTAD_2045
     Uso              : Claude Code, commits, pruebas locales
 
-  IB Gateway         : puerto 4002 (PAPER) / 4001 (LIVE — para agosto 2026)
+  IB Gateway         : puerto 4002 (PAPER) / 4001 (LIVE — agosto 2026)
   IBC                : 3.19.0, Xvfb :99
   GitHub Pages       : jabelo82.github.io/libertad2045
   GitHub repo        : jabelo82/libertad2045
@@ -414,156 +533,127 @@ FIXES ANTERIORES EN v2.4:
     ✓ Paso 5: configurar crons y automatización
     ✓ Paso 6: copiar logs e historial
     ✓ Paso 7: verificación final — Gateway operativo, CONEXION_OK (18/06/2026)
-    □ Paso 8: corte definitivo (fecha por decidir)
+    □ Paso 8: corte definitivo — ver CUTOVER_VPS.md
 
 --------------------------------------------------------------------------------
-9. SESIÓN 18/06/2026 — CICLO NOCHE
+9. INCIDENTE — STOP GTC DUPLICADO TRV (23/06/2026) — RESUELTO v2.7
 --------------------------------------------------------------------------------
 
-  Capital final      : 7.661,28 €
-  Drawdown           : 4,23%
-  Apalancamiento     : 0,68x
+  Síntoma:  Dos stops GTC activos en IBKR para TRV simultáneamente:
+            orden 13443 a 305,63 y orden 17743 a 306,18.
 
-  POSICIONES (8 existentes dentro del umbral de rebalanceo):
-    HUBB : fill confirmado a 521,50 — trailing stop subido a 498,41
-    MRNA : trailing stop subido 55,69 → 60,93
-    WAB  : trailing stop actualizado
-    KEYS : trailing stop actualizado
+  Causa:    _reemplazar_stop_gtc() en rebalance.py creaba la orden nueva y
+            luego cancelaba la vieja. Si IBKR tardaba en procesar el cancel,
+            la siguiente llamada a _obtener_gtc_stops() veía ambas activas.
+            En el caso de break-even esto ocurría con frecuencia porque el
+            modify se ejecuta en el mismo ciclo en que el precio cruza el
+            umbral.
 
-  NUEVA ENTRADA:
-    VRT  : BUY STOP 337,84 | stop 293,39 | 1 acción | PAPER
-
-  DESCARTADAS:
-    GEV  : descartada — shares=0 (riesgo/capital insuficiente)
-
-  RESULTADO GIT BACKUP (ciclo anterior 18/06, 22:14:38):
-    WARN: Git backup falló: git commit falló: (stderr vacío)
-    → Bug corregido en sesión 18/06 (commit 2e33402). Verificación pendiente
-      en el próximo ciclo (viernes 19/06/2026 a las 22:10).
+  Fix:      Ver sección 5 auditoría v2.7.
+  Tests:    18 tests unitarios en tests/test_gtc_dedup.py.
 
 --------------------------------------------------------------------------------
-10. INCIDENTE Y FIXES — 20/06/2026
+10. INCIDENTE — OVER-ALLOCATION (10/06/2026) — RESUELTO v2.6
 --------------------------------------------------------------------------------
 
-  BUG CRÍTICO — BOT NO CORRIÓ LA NOCHE DEL 19/06 (FESTIVO JUNETEENTH):
+  Síntoma:  Primera sesión con cuenta nueva de 8.000 €. 7 señales simultáneas
+            → coste total estimado 8.715 € sobre capital disponible de 7.656 €
+            → IB usó margen → leverage 1,08x → Risk Guardian bloqueó.
 
-    Causa:   Regresión del commit b70c864 (fix C-2, SIGTERM handler).
-             La variable de bucle `for signal in signals:` en libertad2045.py
-             sombreaba el módulo `signal` importado. Python trata `signal` como
-             variable local de toda la función main(), causando UnboundLocalError
-             al ejecutar signal.signal(signal.SIGTERM, ...) en la línea 236.
-    Fix:     Variable de bucle renombrada a `senal` (líneas 528-531).
-             Commit 9e9eaba
-    Nota:    El sistema no tiene lógica de calendario de festivos USA (solo
-             filtra L-V). El bot intentó correr el 19/06 (viernes) sin saber
-             que era festivo — pendiente a considerar.
+  Causa:    El dimensionado de posiciones no descontaba el coste de las
+            posiciones ya encoladas en el mismo ciclo. Bug histórico que
+            requería cuenta nueva + muchas señales + capital pequeño.
+            Antes de agosto con dinero real habría sido crítico.
 
-  INCIDENTE — IB GATEWAY DE LA TORRE CAÍDO POR SESIÓN DUPLICADA:
-
-    Causa:   Apertura de la app móvil de IBKR con las mismas credenciales
-             disparó el escenario 6 de IBC ("Existing session detected"),
-             cerrando el Gateway con exit code 0.
-             Como Restart=on-failure solo reacciona a exit code ≠0, el servicio
-             no se relanzó automáticamente.
-    Fix:     Restart=on-failure → Restart=always en ibgateway.service,
-             aplicado en torre y VPS. Commit 83ac75c (docs actualizados).
-    Lección: Evitar abrir la app/web de IBKR con las mismas credenciales
-             mientras el bot opera en torre o VPS.
-
-  BUG — git_backup FALLABA POR CONFLICTO CON PUBLISHER DE GITHUB PAGES:
-
-    Causa:   publicar_dashboard() sube index.html vía API de GitHub creando
-             un commit directo en origin/main. Cuando git_backup() intentaba
-             el push justo después, el remote estaba 1 commit por delante →
-             reject de fast-forward.
-    Fix:     Añadido `git pull --rebase origin main` entre el commit y el push
-             en git_backup(). Commit 12f26f1
-
-  VERIFICACIÓN END-TO-END (forzado manualmente, sábado sin mercado):
-
-    Bypass temporal de ventana horaria: RISK_HOUR_START=0 RISK_HOUR_END=23
-    (solo para la prueba puntual — no persistido en ningún archivo).
-    Resultado: 501 activos escaneados | 4 señales | 2 tras filtro |
-               1 trade ejecutado (VRT BUY STOP 337,84) | dashboard publicado OK
-    Confirma que el fix del signal shadowing funciona en el flujo completo.
-
-  COMMITS DE LA SESIÓN:
-    9e9eaba  fix: renombrar variable de bucle 'signal' a 'senal'
-    12f26f1  fix: git_backup añade pull --rebase antes del push
-    83ac75c  docs: INFRAESTRUCTURA_IBG.md — Restart=always
+  Fix:      Variable capital_restante en el orquestador que descuenta el
+            coste estimado de cada posición antes de dimensionar la siguiente.
 
 --------------------------------------------------------------------------------
-11. BUGS CERRADOS EN SESIÓN 17/06/2026
+11. INCIDENTE — BOT NO CORRIÓ 19/06/2026 (JUNETEENTH)
 --------------------------------------------------------------------------------
 
-  CORTOS INVOLUNTARIOS JNJ Y KO:
-    JNJ (-6 acc.) y KO (-18 acc.) detectados y cerrados manualmente.
-
-    Causa raíz:
-      1. rebalance.py enviaba doble SELL (falta de guard anti-duplicado)
-      2. order_manager cancelaba MKT SELL de cierre si ya había GTC activo,
-         dejando la posición expuesta a un segundo SELL del siguiente ciclo
-
-    Corrección:
-      · Guard anti-doble-SELL en rebalance.py (verifica SELL previo enviado)
-      · Protección en order_manager: no cancela MKT SELL si la posición es
-        larga (solo cancela DAY stops redundantes)
-      · Cierre automático de cortos involuntarios en el orquestador (H-3)
-
-    Commits: cf99d55, 54b6018
-
-  CAPITAL=0 CERRANDO CARTERA (H-10):
-    Si capital=0 (fallo de lectura), el bot ya no interpreta esto como
-    señal de cierre masivo. Fix en ronda 1 de la auditoría.
-
-  GIT BACKUP CON STDERR VACÍO:
-    git status --porcelain detectaba dashboard.html (working tree) y el bot
-    intentaba commitear sin nada en staged → git commit fallaba silenciosamente.
-    Corregido con git diff --cached --quiet (commit 2e33402).
+  Causa:    Regresión del commit b70c864 (SIGTERM handler). La variable de
+            bucle `for signal in signals:` sombreaba el módulo `signal`
+            importado → UnboundLocalError en línea 236.
+  Fix:      Variable renombrada a `senal`. Commit 9e9eaba.
+  Nota:     El sistema no tenía calendario de festivos USA — resuelto en v2.6
+            (fix C-3).
 
 --------------------------------------------------------------------------------
-12. PENDIENTES
+12. INCIDENTE — IB GATEWAY CAÍDO POR SESIÓN DUPLICADA (19/06/2026)
 --------------------------------------------------------------------------------
 
-  ANTES DE LIVE — MUY RECOMENDABLES:
-  ✓ M-1: outsideRth=False en MKT SELL — RESUELTO (auditoría v2.6, 22/06/2026)
-  ✓ M-3: sleep(1) tras cancelaciones — RESUELTO (auditoría v2.6, 22/06/2026)
-  ✓ M-5: watchdog.sh timeout 300 — RESUELTO (auditoría v2.6, 22/06/2026)
-  ✓ A-1: AMPLIAR en rebalanceo permite drawdown — documentado en rebalance.py (DECISIÓN A-1, 18/06/2026)
+  Causa:    App móvil IBKR con mismas credenciales → escenario 6 IBC
+            ("Existing session detected") → Gateway cerrado con exit code 0
+            → Restart=on-failure no reacciona.
+  Fix:      Restart=always en ibgateway.service. Commit 83ac75c.
+  Lección:  No abrir app/web IBKR con las mismas credenciales mientras el
+            bot opera en torre o VPS.
 
-  AUDITORÍA v2.6 (22/06/2026) — fixes aplicados:
-  ✓ C-3: festivos NYSE integrados en libertad2045.py (lista 2026-2027)
-  ✓ A-1: watchdog detecta stops GTC sin posición (riesgo SHORT)
-  ✓ A-2: trade_executor verifica estado stop GTC tras placeOrder
-  ✓ A-3: watchdog guard — no relaunch LIVE si shutdown mediodía inminente
-  ✓ A-4: BUY MKT cierre cortos — outsideRth=False
-  ✓ A-5: order_manager protege BUY DAY de AMPLIAR pendiente
-  ✓ M-1: rebalanceo no baja stop por debajo del nivel GTC activo en IBKR
-  ✓ M-2: order_manager usa contract.symbol en logs (no getattr(order,"symbol"))
-  ✓ M-4: evaluar_stops_por_cierre reutiliza datos_cartera para precio cierre
-  ✓ M-5: registrar_fills_recientes loguea ERROR explícito si fallo de escritura
-  ✓ B-1: logger.py default LOG_RETENTION_DAYS=90 (coherente con política)
-  ✓ B-2: ibc_autostart.sh verifica que Xvfb arrancó antes de lanzar Gateway
-  ✓ B-3: git_backup reintenta push tras "rejected" (segunda descarga rebase)
-  ✓ B-4: github_publisher no loguea cuerpo de respuesta de error GitHub
-  ✓ B-5: clientIds documentados en config.py
+--------------------------------------------------------------------------------
+13. INCIDENTE — git_backup CONFLICTO CON GITHUB PAGES (20/06/2026)
+--------------------------------------------------------------------------------
 
-  PENDIENTES CRÍTICOS ANTES DE LIVE (requieren acción manual):
-  □ C-1: resetear capital_peak.txt a 4000 antes del primer ciclo LIVE
-         Comando: venv/bin/python -c "from risk_guardian import resetear_capital_peak; resetear_capital_peak(4000)"
+  Causa:    publicar_dashboard() creaba commit directo en origin/main vía API
+            GitHub. Cuando git_backup() intentaba el push, el remote estaba
+            1 commit por delante → reject fast-forward.
+  Fix:      git pull --rebase entre commit y push. Commit 12f26f1.
+            Reforzado en v2.6 (B-3): reintento automático si persiste el reject.
+
+--------------------------------------------------------------------------------
+14. INCIDENTE — CAPITAL INFLADO IBKR (JUNIO 2026)
+--------------------------------------------------------------------------------
+
+  IBKR añadió 250.000 € por error. El bot operó brevemente con capital inflado
+  (~1.416.000 €). Corregido por soporte IBKR. Todas las posiciones cerradas
+  manualmente el 10/06/2026 (10 SELL DAY en apertura de mercado).
+  NAV al 10/06/2026: ~7.656 € (344 € de diferencia son devengos USD acumulados
+  — no son pérdidas operativas).
+
+--------------------------------------------------------------------------------
+15. INCIDENTE — CORTOS INVOLUNTARIOS CBOE, INTC, AKAM, JNJ, KO (mayo-jun 2026)
+--------------------------------------------------------------------------------
+
+  CBOE (02–05/06):
+    Stop activado → MKT SELL devolvió Cancelled → bot marcó CBOE como cerrada
+    → posición seguía en IBKR → ciclo posterior abrió corto (-407 acc.).
+    Fix: portfolio_manager recoloca stop GTC si MKT es rechazada y NO marca
+    como cerrada. Commit 29d04bd.
+
+  JNJ (-6 acc.) y KO (-18 acc.) — 17/06:
+    Causa: doble SELL por rebalanceo (falta guard) + order_manager cancelaba
+    MKT SELL si había GTC activo → exposición al siguiente ciclo.
+    Fix: guard anti-doble-SELL en rebalance.py + protección MKT SELL en
+    order_manager + cierre automático de cortos en orquestador (H-3).
+    Commits: cf99d55, 54b6018.
+
+  INTC (-438 acc.) y AKAM (-500 acc.) — cerrados manualmente 09/06/2026.
+
+--------------------------------------------------------------------------------
+16. PENDIENTES
+--------------------------------------------------------------------------------
+
+  BLOQUEANTES ANTES DE LIVE (acción manual requerida):
+  □ C-1: resetear capital_peak.txt a 4.000 € antes del primer ciclo LIVE
+         Comando: venv/bin/python -c "from risk_guardian import
+         resetear_capital_peak; resetear_capital_peak(4000)"
   □ C-2: ibc/config.ini → TradingMode=live + restart ibgateway.service
-  □ C-3 (festivos): actualizar lista NYSE_HOLIDAYS en libertad2045.py cada año
+  □ Cutover Torre→VPS: completar checklist CUTOVER_VPS.md (Fase 0-4)
+  □ OAuth IBKR: prueba ciega (confirmar token apunta a DUP301657, ~7.607 €)
+         Si falla → ejecutar Anexo A de CUTOVER_VPS.md antes del cutover
 
-  OTROS PENDIENTES:
+  PENDIENTES NO BLOQUEANTES:
+  □ C-3: actualizar lista NYSE_HOLIDAYS en libertad2045.py cada año
   □ Completar DNI de Juan Ayelo Valiente en el contrato participativo
-  □ Resolver OAuth IBKR (acuerdos pendientes fantasma en portal IBKR)
   □ Conciliación mensual con Resumen Realizado de IBKR (primer lunes de mes)
-  □ Actualizar dashboard con precios reales del CSV de IBKR
   □ Deduplicar fills históricos en tabla trades del dashboard (DE, JCI)
-  □ Precio de salida real para posiciones cerradas
+  □ Precio de salida real para posiciones cerradas (actualmente aprox. yfinance)
   □ SAI para cortes de luz (Torre — si sigue como máquina principal)
   □ market_filter.py integrar en orquestador (Fase 3)
-  □ Decidir fecha de corte a VPS como máquina principal
+  □ EXP44 Russell 2000: investigar dataset composición histórica
+    + filtro de liquidez (ver sección 7). Pendiente para otoño 2026.
+  □ EXP45 piramidación A2: walk-forward out-of-sample + comisiones IBKR
+    + verificar estabilidad PF 1,46 (ver sección 7). Pendiente oct/nov 2026.
 
   COMPLETADOS:
   ✓ Posiciones PAPER cerradas manualmente (10/06/2026)
@@ -571,16 +661,17 @@ FIXES ANTERIORES EN v2.4:
   ✓ Migración VPS completada (18/06/2026)
   ✓ Auditoría v2.4 — 26 hallazgos cerrados (17/06/2026)
   ✓ Auditoría v2.5 — 6 fixes + validación rebalanceo (18/06/2026)
-  ✓ Fix cortos involuntarios JNJ/KO (17/06/2026)
-  ✓ Actualizar BIOS a versión AN — descartado (Torre en retirada)
-  ✓ Validación cuantitativa del rebalanceo — +4,8% sobre 20 años (18/06/2026)
-  ✓ Fix signal shadowing (UnboundLocalError regresión C-2) — 20/06/2026
-  ✓ Fix git_backup: pull --rebase antes del push — 20/06/2026
-  ✓ ibgateway.service: Restart=always en torre y VPS — 20/06/2026
-  ✓ Verificar git_backup en ciclo nocturno (commit 2e33402 + 12f26f1) — 20/06/2026
+  ✓ Fix signal shadowing UnboundLocalError (20/06/2026)
+  ✓ Fix git_backup pull --rebase (20/06/2026)
+  ✓ ibgateway.service Restart=always en torre y VPS (20/06/2026)
+  ✓ Auditoría v2.6 — 15 fixes + over-allocation + festivos NYSE (22/06/2026)
+  ✓ Fix stop GTC duplicado v2.7 + 18 tests (23/06/2026)
+  ✓ Actualizar BIOS torre — descartado (torre en retirada hacia VPS)
+  ✓ CUTOVER_VPS.md redactado (23/06/2026)
+  ✓ Exp44 — primera vuelta backtest Russell 2000: 319 tickers, +70,5% vs v3 (24/06/2026)
 
 --------------------------------------------------------------------------------
-13. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
+17. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
 --------------------------------------------------------------------------------
 
   Inversión          : 50.000 € mediante préstamo participativo
@@ -590,37 +681,16 @@ FIXES ANTERIORES EN v2.4:
   Estado             : contrato redactado — pendiente añadir DNI de Juanjo
 
 --------------------------------------------------------------------------------
-14. INCIDENTE IBKR — CAPITAL INFLADO (JUNIO 2026)
+18. PARÁMETROS VIVOS (PARA VERIFICACIÓN)
 --------------------------------------------------------------------------------
 
-  IBKR añadió 250.000 € por error en la cuenta en lugar de resetear a 8.000 €.
-  El bot operó brevemente con capital inflado (~1.416.000 €) y abrió posiciones.
-  Corregido mediante soporte IBKR: capital restablecido a 8.000 € efectivo.
-  Todas las posiciones abiertas durante el periodo inflado fueron cerradas
-  manualmente el 10/06/2026 (10 SELL DAY ejecutadas en apertura de mercado).
-
-  NAV al 10/06/2026: ~7.656 € (los 344 € de diferencia son devengos USD
-  acumulados de la etapa anterior — no son comisiones ni pérdidas operativas).
-
---------------------------------------------------------------------------------
-15. INCIDENTE CBOE (02–05 junio 2026)
---------------------------------------------------------------------------------
-
-  02/06: Stop activado por cierre (274.33 ≤ 290.12). Orden MKT SELL devolvió
-         estado=Cancelled. El sistema marcó CBOE como cerrada pero la posición
-         siguió abierta en IBKR.
-  03/06: Bot detecta CBOE sin stop GTC — alerta crítica. Ciclos posteriores
-         igual.
-  05/06: Relanzado bot manualmente → abrió corto involuntario (-407 acc.).
-         BUY GTC 407 encolada para cerrar el corto en apertura.
-  Fix:   portfolio_manager.py ahora recoloca stop GTC si MKT es rechazada
-         y NO marca la posición como cerrada (commit 29d04bd).
-
-  Cortos involuntarios documentados en logs históricos:
-    INTC (-438 acc.) — cerrado manualmente 09/06/2026
-    AKAM (-500 acc.) — cerrado manualmente 09/06/2026
-    CBOE (-407 acc.) — situación: posición larga en realidad (logs corregidos)
+  Antes de cualquier sesión de trabajo con Claude, verificar:
+    · git log --oneline -5   (commits más recientes en torre y VPS)
+    · systemctl --user status ibgateway.service   (estado Gateway)
+    · crontab -l   (crons activos/comentados)
+    · cat capital_peak.txt   (referencia Risk Guardian)
+    · cat .env | grep -E 'TRADING_MODE|IBKR_PORT'   (modo activo)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.5 — 2026-06-20
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.7 — 2026-06-24
 ================================================================================
