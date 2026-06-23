@@ -1098,3 +1098,110 @@ def resumen_texto(decisiones: List[DecisionRebalanceo]) -> str:
         f"{d.symbol} {d.accion} {d.shares_delta:+d}" for d in ajustes
     )
     return f"Rebalanceo          : {len(ajustes)} ajustes ({detalle})"
+
+
+# --------------------------------------------------
+# Reconciliación de stops GTC duplicados
+# --------------------------------------------------
+
+def reconciliar_stops_gtc(ib, mode: str = "PAPER") -> int:
+    """
+    Detecta y elimina stops GTC duplicados para cualquier posición.
+
+    Para cada símbolo con más de un stop GTC activo simultáneo:
+        · Conserva el stop de precio mayor (más favorable para la posición larga:
+          requiere una bajada mayor para activarse, preservando más beneficio).
+        · Cancela todos los demás, con log completo de cada cancelación.
+
+    Criterio «precio mayor»: consistente con la lógica ya aplicada en
+    _obtener_gtc_stops() y evaluar_stops_por_cierre() cuando detectan duplicados.
+
+    Se debe llamar:
+        1. Al arranque del bot, antes de evaluar_stops_por_cierre().
+        2. Desde el watchdog como parte de check_ordenes_gtc().
+
+    Retorna el número de stops cancelados (0 = sin duplicados).
+    """
+    try:
+        ib.reqAllOpenOrders()
+        ib.sleep(2)
+    except Exception as e:
+        log_event("ERROR", f"reconciliar_stops_gtc: error al solicitar órdenes: {e}")
+        return 0
+
+    # Agrupar todos los stops GTC activos por símbolo
+    stops_por_simbolo: dict[str, list] = {}
+    for trade in ib.trades():
+        if (trade.order.orderType in ("STP", "TRAIL") and
+                trade.order.action == "SELL" and
+                trade.order.tif == "GTC" and
+                trade.orderStatus.status in ("PreSubmitted", "Submitted")):
+            sym = trade.contract.symbol
+            stops_por_simbolo.setdefault(sym, []).append(trade)
+
+    duplicados = {sym: trades for sym, trades in stops_por_simbolo.items()
+                  if len(trades) > 1}
+
+    if not duplicados:
+        log_event("INFO", "Reconciliación GTC: sin duplicados detectados")
+        return 0
+
+    cancelados_total = 0
+
+    for sym, trades in duplicados.items():
+        # Ordenar de mayor a menor precio: el primero se conserva
+        trades_ord = sorted(
+            trades,
+            key=lambda t: getattr(t.order, "auxPrice", 0) or 0,
+            reverse=True,
+        )
+        conservar      = trades_ord[0]
+        a_cancelar     = trades_ord[1:]
+        precio_conserv = getattr(conservar.order, "auxPrice", 0) or 0
+
+        log_event("CRITICAL",
+                  f"Reconciliación GTC: {len(trades)} stops GTC para {sym} — "
+                  f"conservando orderId={conservar.order.orderId} "
+                  f"(precio={precio_conserv:.2f}), cancelando {len(a_cancelar)}",
+                  symbol=sym)
+
+        try:
+            from telegram import send_telegram_critical
+            send_telegram_critical(
+                f"🔴 LIBERTAD_2045 — Reconciliación GTC: {sym} tenía "
+                f"{len(trades)} stops activos. Conservando orderId="
+                f"{conservar.order.orderId} @ {precio_conserv:.2f}. "
+                f"Cancelando {len(a_cancelar)} duplicado(s)."
+            )
+        except Exception:
+            pass
+
+        for t in a_cancelar:
+            precio_t = getattr(t.order, "auxPrice", 0) or 0
+            log_event("INFO",
+                      f"Reconciliación GTC: cancelando orderId={t.order.orderId} "
+                      f"(precio={precio_t:.2f}, qty={int(t.order.totalQuantity)})",
+                      symbol=sym)
+            if mode in ("PAPER", "LIVE"):
+                try:
+                    ib.cancelOrder(t.order)
+                    ib.sleep(1)
+                    log_event("INFO",
+                              f"Reconciliación GTC: orderId={t.order.orderId} cancelado OK",
+                              symbol=sym)
+                    cancelados_total += 1
+                except Exception as e:
+                    log_event("ERROR",
+                              f"Reconciliación GTC: error cancelando orderId="
+                              f"{t.order.orderId} para {sym}: {e}",
+                              symbol=sym)
+            else:
+                log_event("SIM",
+                          f"Reconciliación GTC [SIM]: orderId={t.order.orderId} "
+                          f"no cancelado (modo simulación)",
+                          symbol=sym)
+                cancelados_total += 1
+
+    log_event("INFO",
+              f"Reconciliación GTC: {cancelados_total} stop(s) duplicado(s) cancelado(s)")
+    return cancelados_total

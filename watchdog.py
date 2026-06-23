@@ -152,6 +152,42 @@ def check_ordenes_gtc(ib):
                     gtc_canceladas.append(info)
                 elif t.orderStatus.status in ("PreSubmitted", "Submitted"):
                     gtc_activas.append(info)
+
+        # Reconciliación de stops GTC duplicados
+        stops_por_simbolo: dict = {}
+        for info in gtc_activas:
+            sym = info["symbol"]
+            stops_por_simbolo.setdefault(sym, []).append(info)
+        duplicados = {sym: lst for sym, lst in stops_por_simbolo.items() if len(lst) > 1}
+        if duplicados:
+            try:
+                from rebalance import reconciliar_stops_gtc
+                modo_wb = os.getenv("TRADING_MODE", "PAPER")
+                n_cancel = reconciliar_stops_gtc(ib, mode=modo_wb)
+                from logger import log_event
+                log_event("INFO",
+                          f"Watchdog reconciliación GTC: {n_cancel} duplicado(s) cancelado(s) "
+                          f"en símbolos {list(duplicados.keys())}")
+                # Refrescar lista tras reconciliación
+                ib.reqAllOpenOrders()
+                ib.sleep(2)
+                gtc_activas = [
+                    {
+                        "symbol": t.contract.symbol,
+                        "accion": t.order.action,
+                        "qty":    t.order.totalQuantity,
+                        "precio": getattr(t.order, "auxPrice",
+                                          getattr(t.order, "lmtPrice", "?")),
+                        "estado": t.orderStatus.status,
+                    }
+                    for t in ib.trades()
+                    if t.order.tif == "GTC"
+                    and t.orderStatus.status in ("PreSubmitted", "Submitted")
+                ]
+            except Exception as e_rec:
+                _send(f"🔴 LIBERTAD_2045 — Error en reconciliación GTC watchdog: {e_rec}",
+                      critico=True)
+
         detalle = {"gtc_activas": len(gtc_activas), "gtc_canceladas": len(gtc_canceladas), "canceladas": gtc_canceladas}
 
         # Verificación cruzada: posiciones largas sin stop GTC activo

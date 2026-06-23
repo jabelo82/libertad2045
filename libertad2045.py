@@ -19,7 +19,7 @@ from telegram import send_telegram, send_telegram_critical
 from universe_sp500 import SP500
 from risk_guardian import risk_check
 from process_guard import acquire_lock, release_lock
-from rebalance import rebalancear, resumen_texto as rebalance_resumen
+from rebalance import rebalancear, resumen_texto as rebalance_resumen, reconciliar_stops_gtc
 import dashboard as _dashboard
 from github_publisher import publicar_dashboard
 
@@ -360,6 +360,21 @@ def main():
         # --------------------------------------------------
 
         cancelar_ordenes_pendientes(ib)
+
+
+        # --------------------------------------------------
+        # Reconciliación de stops GTC duplicados
+        # Debe correr antes de evaluar_stops_por_cierre() para que este
+        # trabaje siempre con exactamente un stop por posición.
+        # --------------------------------------------------
+
+        try:
+            n_cancelados = reconciliar_stops_gtc(ib, mode=MODE)
+            if n_cancelados:
+                log_event("INFO",
+                          f"Reconciliación GTC al arranque: {n_cancelados} duplicado(s) eliminado(s)")
+        except Exception as e:
+            log_event("ERROR", f"Error en reconciliación GTC al arranque: {e}")
 
 
         # --------------------------------------------------
