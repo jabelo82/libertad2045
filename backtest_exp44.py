@@ -118,6 +118,14 @@ for t in SP500:
         _unique.append(t)
 SP500 = _unique
 
+# Tickers del diferencial Russell 2000 (no están en el dataset histórico S&P500
+# de fja05680 → deben bypass el filtro de composición para ser escaneados).
+# Se calcula después de cargar la composición histórica en main(); aquí se
+# inicializa vacío y se rellena en tiempo de ejecución.
+from universe_sp500 import SP500 as _SP500_ACTUAL
+_sp500_actual_set = set(_SP500_ACTUAL)
+_russell2000_extra: set = set()  # poblado en main() tras cargar comp_df
+
 CRYPTO          = ["BTC-USD","ETH-USD","BNB-USD","SOL-USD","XRP-USD","ADA-USD","AVAX-USD","DOGE-USD","DOT-USD","MATIC-USD"]
 MATERIAS_PRIMAS = ["GLD","SLV","USO","UNG","CPER","CORN","WEAT","SOYB","DBA","GSG"]
 ETFS            = ["XLK","XLV","XLF","XLE","XLI","XLY","XLP","XLB","XLU","XLRE","XLC","QQQ","IWM","EEM","EFA","VNQ","TAN","ICLN","ARKK","SMH"]
@@ -158,9 +166,14 @@ def cargar_composicion_sp500() -> pd.DataFrame:
 def universo_historico_sp500(comp_df: pd.DataFrame) -> list:
     """
     Extrae el conjunto de todos los tickers que alguna vez estuvieron en el
-    S&P500 según el dataset histórico. Retorna lista deduplicada y ordenada.
+    S&P500 según el dataset histórico, más el diferencial Russell 2000 del
+    experimento 44 (que no tiene dataset de composición histórica equivalente).
+
+    Retorna lista deduplicada y ordenada.
     Si comp_df está vacío devuelve el universo estático SP500.
     """
+    global _russell2000_extra
+
     if comp_df.empty:
         return list(SP500)
 
@@ -180,6 +193,16 @@ def universo_historico_sp500(comp_df: pd.DataFrame) -> list:
             # Keep only pure uppercase-letter tickers, max 5 chars
             if _valid_ticker.match(ticker):
                 todos.add(ticker)
+
+    # Diferencial Russell 2000: tickers en SP500 (combinado Exp44) que no
+    # aparecen en el dataset histórico fja05680 ni en el S&P500 actual.
+    # Estos se escanean siempre sin filtro de composición (ver docstring clase).
+    _russell2000_extra = set(SP500) - todos
+    if _russell2000_extra:
+        print(f"  Diferencial Russell 2000 : {len(_russell2000_extra)} tickers "
+              f"(bypass filtro composición histórica)")
+        todos |= _russell2000_extra
+
     return sorted(todos)
 
 
@@ -648,8 +671,11 @@ def ejecutar_backtest(datos, composicion_df=None):
             # Solo se evalúan empresas que realmente estaban en el S&P500
             # en esta fecha. Si sp500_hoy es None (fallback estático) se
             # escanean todos los activos del universo.
+            # Excepción: tickers del diferencial Russell 2000 no tienen
+            # dataset de composición histórica equivalente → bypass.
             if sp500_hoy is not None and symbol not in sp500_hoy:
-                continue
+                if symbol not in _russell2000_extra:
+                    continue
 
             df = datos[symbol]
 

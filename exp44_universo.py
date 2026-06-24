@@ -18,6 +18,7 @@ Uso:
 
 import sys
 import io
+import json
 import time
 import warnings
 from datetime import datetime
@@ -143,9 +144,11 @@ RUSSELL2000_FALLBACK = [
     "ZGNX", "ZION", "ZLAB", "ZNTL", "ZUO",
 ]
 
-DOWNLOAD_PAUSE = 3  # segundos entre descargas yfinance
+DOWNLOAD_PAUSE = 5      # segundos entre descargas yfinance
 CUTOFF = "2006-01-01"
 MIN_BARS = 200
+CHECKPOINT_FILE = PROJECT_DIR / "exp44_checkpoint.json"
+MAX_RETRIES = 3         # reintentos por ticker con backoff exponencial
 
 
 def descargar_russell2000_ishares() -> list:
@@ -184,6 +187,56 @@ def descargar_russell2000_ishares() -> list:
     except Exception as e:
         print(f"  iShares IWM: fallo — {e}")
         return []
+
+
+def cargar_checkpoint() -> dict:
+    """Carga checkpoint de una ejecución anterior (si existe)."""
+    if CHECKPOINT_FILE.exists():
+        try:
+            data = json.loads(CHECKPOINT_FILE.read_text())
+            aprobados = data.get("aprobados", [])
+            descartados = data.get("descartados", [])
+            procesados = set(data.get("procesados", []))
+            print(f"  Checkpoint cargado: {len(procesados)} tickers ya procesados "
+                  f"({len(aprobados)} aprobados, {len(descartados)} descartados)")
+            return {"aprobados": aprobados, "descartados": descartados, "procesados": procesados}
+        except Exception as e:
+            print(f"  Checkpoint corrupto ({e}), empezando desde cero")
+    return {"aprobados": [], "descartados": [], "procesados": set()}
+
+
+def guardar_checkpoint(aprobados: list, descartados: list, procesados: set):
+    """Guarda progreso en disco para poder reanudar si hay error."""
+    CHECKPOINT_FILE.write_text(json.dumps({
+        "aprobados": aprobados,
+        "descartados": descartados,
+        "procesados": list(procesados),
+    }))
+
+
+def yf_download_con_retry(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Descarga datos de yfinance con reintentos y backoff exponencial."""
+    for intento in range(1, MAX_RETRIES + 1):
+        try:
+            df = yf.download(ticker, start=start, end=end,
+                             progress=False, auto_adjust=True)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.droplevel(1)
+            return df
+        except Exception as e:
+            msg = str(e).lower()
+            # Rate limit: esperar más
+            if any(x in msg for x in ("rate", "429", "too many", "throttl")):
+                wait = DOWNLOAD_PAUSE * (2 ** intento)
+                print(f"      Rate limit — esperando {wait}s (intento {intento}/{MAX_RETRIES})")
+                time.sleep(wait)
+            elif intento < MAX_RETRIES:
+                wait = DOWNLOAD_PAUSE * intento
+                print(f"      Error temporal ({e}) — reintento {intento}/{MAX_RETRIES} en {wait}s")
+                time.sleep(wait)
+            else:
+                raise
+    return pd.DataFrame()
 
 
 def descargar_russell2000_github() -> list:
@@ -225,11 +278,18 @@ DATA_DIR = PROJECT_DIR / "data"
 
 print(f"\nValidando histórico pre-{CUTOFF} (mín. {MIN_BARS} barras)...")
 
-aprobados = []
-descartados = []
+# ── Reanudar desde checkpoint si existe ──────────────────────────────────────
+chk = cargar_checkpoint()
+aprobados   = chk["aprobados"]
+descartados = chk["descartados"]
+procesados  = chk["procesados"]
+
+pendientes = [t for t in diferencial if t not in procesados]
+print(f"  Pendientes: {len(pendientes)} de {len(diferencial)} tickers")
 
 yf_count = 0
-for i, ticker in enumerate(diferencial, 1):
+for i_rel, ticker in enumerate(pendientes, 1):
+    i_total = diferencial.index(ticker) + 1
 
     # Intento 1: caché local
     cache_files = sorted(DATA_DIR.glob(f"{ticker}_*.csv"))
@@ -246,34 +306,42 @@ for i, ticker in enumerate(diferencial, 1):
                 pass
         if best_n >= MIN_BARS:
             aprobados.append(ticker)
-            print(f"  [{i:4d}/{len(diferencial)}] {ticker:12s} → ✓  {best_n} barras pre-{CUTOFF} (caché)")
+            print(f"  [{i_total:4d}/{len(diferencial)}] {ticker:12s} → ✓  {best_n} barras pre-{CUTOFF} (caché)")
         else:
             motivo = f"solo {best_n} barras pre-{CUTOFF} en caché"
             descartados.append((ticker, motivo))
-            print(f"  [{i:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
+            print(f"  [{i_total:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
+        procesados.add(ticker)
+        if i_rel % 50 == 0:
+            guardar_checkpoint(aprobados, descartados, procesados)
         continue
 
-    # Intento 2: yfinance (solo para tickers sin caché local)
+    # Intento 2: yfinance con reintentos
     if yf_count > 0:
         time.sleep(DOWNLOAD_PAUSE)
     yf_count += 1
     try:
-        df = yf.download(ticker, start="2000-01-01", end=CUTOFF,
-                         progress=False, auto_adjust=True)
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
+        df = yf_download_con_retry(ticker, start="2000-01-01", end=CUTOFF)
         n = len(df)
         if n >= MIN_BARS:
             aprobados.append(ticker)
-            print(f"  [{i:4d}/{len(diferencial)}] {ticker:12s} → ✓  {n} barras pre-{CUTOFF} (yfinance)")
+            print(f"  [{i_total:4d}/{len(diferencial)}] {ticker:12s} → ✓  {n} barras pre-{CUTOFF} (yfinance)")
         else:
             motivo = f"solo {n} barras pre-{CUTOFF}"
             descartados.append((ticker, motivo))
-            print(f"  [{i:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
+            print(f"  [{i_total:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
     except Exception as e:
         motivo = f"error yfinance: {e}"
         descartados.append((ticker, motivo))
-        print(f"  [{i:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
+        print(f"  [{i_total:4d}/{len(diferencial)}] {ticker:12s} → ✗  {motivo}")
+
+    procesados.add(ticker)
+    # Guardar checkpoint cada 25 tickers descargados via yfinance
+    if yf_count % 25 == 0:
+        guardar_checkpoint(aprobados, descartados, procesados)
+
+# Checkpoint final y limpieza
+guardar_checkpoint(aprobados, descartados, procesados)
 
 # ── Resumen ────────────────────────────────────────────────────────────────────
 
@@ -321,3 +389,8 @@ lineas.append("")
 salida.write_text("\n".join(lineas))
 print(f"\n  Guardado: {salida.name}")
 print(f"  Listo para backtest_exp44.py cuando se indique.")
+
+# Eliminar checkpoint — la validación se completó con éxito
+if CHECKPOINT_FILE.exists():
+    CHECKPOINT_FILE.unlink()
+    print(f"  Checkpoint eliminado.")
