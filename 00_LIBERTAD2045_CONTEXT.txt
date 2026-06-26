@@ -630,7 +630,48 @@ Commits principales en producción (más recientes primero):
   INTC (-438 acc.) y AKAM (-500 acc.) — cerrados manualmente 09/06/2026.
 
 --------------------------------------------------------------------------------
-16. PENDIENTES
+16. HALLAZGO — BLOQUEOS RISK GUARDIAN POR APALANCAMIENTO (26/06/2026) — CERRADO
+--------------------------------------------------------------------------------
+
+  Síntoma:  4 bloqueos de nuevas entradas desde el arranque LIVE (10/06/2026),
+            siempre con cartera a capacidad máxima (8-10 posiciones),
+            leverage 1.04x-1.13x contra límite MAX_LEVERAGE=1.00x.
+            Drawdown siempre dentro de límites en todos los episodios.
+
+  Episodios registrados:
+    · 10/06/2026: 1.08x (exposición €8.368 | capital €7.739) — 8 posiciones
+    · 11/06/2026: 1.08x (exposición €8.336 | capital €7.738) — 8 posiciones
+    · 25/06/2026: 1.13x (exposición €8.719 | capital €7.686) — 8+2 entradas
+    · 26/06/2026: 1.04x (exposición €8.068 | capital €7.762) — 8 posiciones
+
+  Diagnóstico: NO es un bug. Comportamiento correcto por diseño. El sizing por
+    riesgo (0,85%/trade) genera posiciones de ~14-17% del capital cada una;
+    con cartera llena (8 posiciones), la exposición estructuralmente roza o
+    supera el 100% del capital (IBKR financia el exceso con crédito USD).
+    El Risk Guardian bloquea correctamente (Artículo II). Entre episodios de
+    bloqueo, con 3-5 posiciones, leverage 0.61-0.96x sin problema.
+
+  Hipótesis descartada: desajuste EUR/USD. Verificado con números exactos que
+    GrossPositionValue se reporta en EUR (moneda base) — los bloqueos son
+    genuinos, no artefacto de conversión de divisa. El saldo "EUR +8K, USD -6K"
+    del portal IBKR refleja el crédito USD real que financia las posiciones;
+    NetLiquidation descuenta esa deuda, GrossPositionValue no.
+
+  Decisión: mantener MAX_LEVERAGE=1.00x sin cambios de sizing ni de límite.
+    Coherente con el backtest v3 validado (mismo límite aplicado).
+
+  Fix de robustez aplicado (commit 4d90eca — 27/06/2026):
+    risk_guardian.py no filtraba accountSummary() por currency — riesgo latente
+    de cálculo no determinista si IBKR devolviera el mismo tag en múltiples
+    divisas. Ahora filtra explícitamente por currency in {"BASE", "EUR"}.
+    7 tests nuevos en test_risk_guardian_leverage.py, 25/25 tests totales pasan,
+    comportamiento histórico reproducido sin cambios.
+
+  Pendiente: mejora del dashboard para mostrar sesión bloqueada por Risk
+    Guardian como estado distinto, con causa exacta y números (ver sección 16).
+
+--------------------------------------------------------------------------------
+17. PENDIENTES
 --------------------------------------------------------------------------------
 
   BLOQUEANTES ANTES DE LIVE (acción manual requerida):
@@ -669,9 +710,12 @@ Commits principales en producción (más recientes primero):
   ✓ Actualizar BIOS torre — descartado (torre en retirada hacia VPS)
   ✓ CUTOVER_VPS.md redactado (23/06/2026)
   ✓ Exp44 — primera vuelta backtest Russell 2000: 319 tickers, +70,5% vs v3 (24/06/2026)
+  ✓ Diagnóstico bloqueos Risk Guardian por apalancamiento — hallazgo cerrado (27/06/2026)
+  ✓ Fix risk_guardian filtro currency BASE/EUR + 7 tests (commit 4d90eca, 27/06/2026)
+  ✓ Dashboard: sección Risk Guardian bloqueado con causa y números (27/06/2026)
 
 --------------------------------------------------------------------------------
-17. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
+18. CONTRATO PARTICIPATIVO — JUAN AYELO VALIENTE (JUANJO)
 --------------------------------------------------------------------------------
 
   Inversión          : 50.000 € mediante préstamo participativo
@@ -681,7 +725,7 @@ Commits principales en producción (más recientes primero):
   Estado             : contrato redactado — pendiente añadir DNI de Juanjo
 
 --------------------------------------------------------------------------------
-18. PARÁMETROS VIVOS (PARA VERIFICACIÓN)
+19. PARÁMETROS VIVOS (PARA VERIFICACIÓN)
 --------------------------------------------------------------------------------
 
   Antes de cualquier sesión de trabajo con Claude, verificar:
@@ -692,5 +736,5 @@ Commits principales en producción (más recientes primero):
     · cat .env | grep -E 'TRADING_MODE|IBKR_PORT'   (modo activo)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.7 — 2026-06-24
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.8 — 2026-06-27
 ================================================================================
