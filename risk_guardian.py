@@ -104,10 +104,17 @@ def risk_check(ib):
         net_liq   = None
         gross_pos = None
  
+        # Filtramos por moneda base para evitar comparar divisas distintas.
+        # IBKR puede devolver el mismo tag en varias monedas (p.ej. USD para el
+        # componente en USD y EUR/BASE para el total en moneda base de la cuenta).
+        # Aceptamos "BASE" (valor documentado en el API TWS) y "EUR" (código real
+        # devuelto en cuentas con base EUR según la implementación observada).
+        _BASE_CURRENCIES = {"BASE", "EUR"}
+
         for item in account:
-            if item.tag == "NetLiquidation":
+            if item.tag == "NetLiquidation" and item.currency in _BASE_CURRENCIES:
                 net_liq = float(item.value)
-            elif item.tag == "GrossPositionValue":
+            elif item.tag == "GrossPositionValue" and item.currency in _BASE_CURRENCIES:
                 gross_pos = float(item.value)
  
     except Exception as e:
@@ -115,7 +122,8 @@ def risk_check(ib):
         return False
  
     if net_liq is None:
-        log_event("WARN", "Risk Guardian: NetLiquidation no disponible")
+        log_event("ERROR", "Risk Guardian: NetLiquidation[BASE/EUR] no encontrado en "
+                           "accountSummary — bloqueando por precaución (fail-safe)")
         return False
  
     if net_liq < MIN_CAPITAL:
@@ -178,8 +186,8 @@ def risk_check(ib):
             return False
  
     else:
-        log_event("WARN", "Risk Guardian: GrossPositionValue no disponible — "
-                           "bloqueando nuevas entradas por precaución (fail-safe)")
+        log_event("ERROR", "Risk Guardian: GrossPositionValue[BASE/EUR] no encontrado en "
+                            "accountSummary — bloqueando nuevas entradas por precaución (fail-safe)")
         try:
             from telegram import send_telegram_critical
             send_telegram_critical(
