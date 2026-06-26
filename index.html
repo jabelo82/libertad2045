@@ -217,6 +217,13 @@
   }
 
   /* RISK GUARDIAN BLOQUEADO */
+  .rg-resumen {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    padding: 4px 0 16px;
+  }
   .rg-banner {
     background: rgba(255,170,0,.07);
     border: 1px solid rgba(255,170,0,.35);
@@ -328,7 +335,7 @@
     <div class="logo">⚙ LIBERTAD_2045</div>
     <div class="mode-badge">PAPER</div>
   </div>
-  <div class="last-update">Actualizado: 27/06/2026 00:40</div>
+  <div class="last-update">Actualizado: 27/06/2026 00:49</div>
 </header>
 
 <main class="main">
@@ -366,9 +373,10 @@
   <div class="section">
     <div class="section-header" onclick="toggle('rg-bloqueado')">
       <div class="section-title" style="color:var(--warn)">⚠ Risk Guardian — 5 sesiónes bloqueadas</div>
-      <button class="toggle-btn" id="btn-rg-bloqueado" style="border-color:rgba(255,170,0,.4);color:var(--warn)">▼ ocultar</button>
+      <button class="toggle-btn" id="btn-rg-bloqueado" style="border-color:rgba(255,170,0,.4);color:var(--warn)">▶ mostrar</button>
     </div>
-    <div class="collapsible" id="rg-bloqueado" style="max-height:9999px">
+    <div class="collapsible collapsed" id="rg-bloqueado" style="max-height:9999px">
+      <div class="rg-resumen">Apalancamiento: 4 · Fuera de ventana: 1</div>
       <div class="rg-banner">
         <div class="rg-banner-title">2026-06-26</div>
         <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val danger">Apalancamiento</span></span><span class="rg-kv"><span class="rg-key">Leverage</span><span class="rg-val danger">1.04x</span></span><span class="rg-kv"><span class="rg-key">Límite</span><span class="rg-val">1.00x</span></span><span class="rg-kv"><span class="rg-key">Exposición</span><span class="rg-val">8,068.10 €</span></span><span class="rg-kv"><span class="rg-key">Capital</span><span class="rg-val">7,761.88 €</span></span></div>
@@ -379,7 +387,7 @@
       </div>
       <div class="rg-banner">
         <div class="rg-banner-title">2026-06-20</div>
-        <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val">Fuera de ventana</span></span><span class="rg-kv"><span class="rg-key">Hora ejecución</span><span class="rg-val">12h</span></span><span class="rg-kv"><span class="rg-key">Ventana permitida</span><span class="rg-val">—</span></span></div>
+        <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val">Fuera de ventana</span></span><span class="rg-kv"><span class="rg-key">Hora ejecución</span><span class="rg-val">12h</span></span><span class="rg-kv"><span class="rg-key">Ventana permitida</span><span class="rg-val">21h-23h</span></span></div>
       </div>
       <div class="rg-banner">
         <div class="rg-banner-title">2026-06-11</div>
