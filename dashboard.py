@@ -32,6 +32,23 @@ def obtener_precio_yfinance(symbol):
     return None
 
 
+def _obtener_tipo_cambio_mercado():
+    """
+    Descarga el tipo de cambio EURUSD de yfinance (USD por 1 EUR).
+    Retorna 0.0 si no está disponible; el llamador decide el fallback.
+    """
+    try:
+        import yfinance as yf
+        data = yf.download("EURUSD=X", period="2d", auto_adjust=True, progress=False)
+        if not data.empty:
+            val = float(data["Close"].squeeze().iloc[-1])
+            if val > 0:
+                return val
+    except Exception:
+        pass
+    return 0.0
+
+
 def _tipo_cambio(cartera):
     """
     Devuelve el tipo de cambio USD→EUR (USD por 1 EUR).
@@ -43,16 +60,8 @@ def _tipo_cambio(cartera):
     rate = cartera.get("usd_per_eur")
     if rate and rate > 0:
         return rate
-    try:
-        import yfinance as yf
-        data = yf.download("EURUSD=X", period="2d", auto_adjust=True, progress=False)
-        if not data.empty:
-            val = float(data["Close"].squeeze().iloc[-1])
-            if val > 0:
-                return val
-    except Exception:
-        pass
-    return 1.0
+    val = _obtener_tipo_cambio_mercado()
+    return val if val > 0 else 1.0
 
 LOG_DIR           = os.path.join(os.path.dirname(__file__), "logs")
 OUTPUT            = os.path.join(os.path.dirname(__file__), "dashboard.html")
@@ -466,10 +475,20 @@ def obtener_cartera_ib(extra_symbols=None):
             return None
 
         # ── Account summary ──────────────────────────────────────────────────
+        # IBKR devuelve cada tag en varias divisas (BASE, EUR, USD…).
+        # Para NetLiquidation, BASE y EUR son equivalentes (total en moneda base).
+        # Para TotalCashValue, BASE = neto total (puede ser negativo por deuda USD);
+        # EUR = solo el componente en EUR — valor diferente y engañoso si se usa solo.
+        # Estrategia: para TotalCashValue preferir BASE explícitamente; aceptar EUR
+        # solo como fallback si BASE no aparece en la respuesta.
+        _BASE_CURRENCIES = {"BASE", "EUR"}
         resumen = {}
         for item in ib.accountSummary():
-            if item.tag in ("NetLiquidation", "TotalCashValue"):
-                resumen[item.tag] = float(item.value)
+            if item.tag == "NetLiquidation" and item.currency in _BASE_CURRENCIES:
+                resumen["NetLiquidation"] = float(item.value)
+            elif item.tag == "TotalCashValue" and item.currency in _BASE_CURRENCIES:
+                if item.currency == "BASE" or "TotalCashValue" not in resumen:
+                    resumen["TotalCashValue"] = float(item.value)
 
         total_eur = resumen.get("NetLiquidation", 0.0)
         cash_eur  = resumen.get("TotalCashValue",  0.0)
@@ -551,19 +570,24 @@ def obtener_cartera_ib(extra_symbols=None):
                 labels.append(symbol)
                 values_usd.append(shares * precio)
 
-        # ── Conversión USD → EUR mediante tipo implícito de cuenta ────────────
+        # ── Conversión USD → EUR: tipo de mercado real (yfinance) ───────────
+        # total_stocks_eur = GrossPositionValue cuando cash_eur es el neto BASE
         total_stocks_usd = sum(values_usd)
         total_stocks_eur = total_eur - cash_eur
 
-        if total_stocks_usd > 0 and total_stocks_eur > 0:
-            usd_per_eur = total_stocks_usd / total_stocks_eur
-            values_eur  = [round(v / usd_per_eur) for v in values_usd]
-        else:
-            usd_per_eur = 1.0
-            values_eur  = [round(v) for v in values_usd]
-            cash_eur    = max(0.0, total_eur - sum(values_eur))
+        usd_per_eur = _obtener_tipo_cambio_mercado()
+        if usd_per_eur <= 0:
+            # Fallback: tipo derivado de los totales de cuenta (menos preciso)
+            if total_stocks_usd > 0 and total_stocks_eur > 0:
+                usd_per_eur = total_stocks_usd / total_stocks_eur
+                print(f"[dashboard] WARN: yfinance no disponible — tipo derivado: {usd_per_eur:.4f}")
+            else:
+                usd_per_eur = 1.0
+                print("[dashboard] WARN: tipo de cambio no disponible — usando 1.0 como fallback")
 
-        # Añadir cash como último sector
+        values_eur = [round(v / usd_per_eur) for v in values_usd]
+
+        # cash_eur puede ser negativo cuando hay deuda en USD: se preserva sin forzar a cero
         labels.append("CASH")
         values_eur.append(round(cash_eur))
 
@@ -778,9 +802,10 @@ def _portfolio_js(cartera):
     # Asignar colores cíclicamente si hay más sectores que colores
     n      = len(cartera["labels"])
     colors = (PORTFOLIO_COLORS * ((n // len(PORTFOLIO_COLORS)) + 1))[:n]
-    # El último sector es siempre CASH → usar el color gris azulado
+    # El último sector es siempre CASH → gris azulado si positivo, rojo si negativo
     if cartera["labels"] and cartera["labels"][-1] == "CASH":
-        colors[-1] = "#3a5068"
+        cash_val = cartera["values_eur"][-1] if cartera["values_eur"] else 0
+        colors[-1] = "#e05c5c" if cash_val < 0 else "#3a5068"
     colors_js = json.dumps(colors)
 
     # ── Construir el JS sin f-string (evita conflictos con {{ }} del padre) ──
@@ -793,6 +818,9 @@ def _portfolio_js(cartera):
         "  colors: " + colors_js,
         "};",
         "",
+        "// pieData: valores >= 0 para Chart.js (no soporta segmentos negativos)",
+        "// pieTotal: suma real incluyendo cash negativo = NetLiquidation",
+        "const pieData  = portfolio.values.map(v => Math.max(0, v));",
         "const pieTotal = portfolio.values.reduce((a, b) => a + b, 0);",
         "const fmt = v => v.toLocaleString('es-ES') + ' \u20ac';",
         "",
@@ -804,7 +832,7 @@ def _portfolio_js(cartera):
         "  data: {",
         "    labels: portfolio.labels,",
         "    datasets: [{",
-        "      data: portfolio.values,",
+        "      data: pieData,",
         "      backgroundColor: portfolio.colors,",
         "      borderColor: '#080c10',",
         "      borderWidth: 2,",
@@ -856,14 +884,17 @@ def _portfolio_js(cartera):
         "// Leyenda personalizada",
         "const legendEl = document.getElementById('portfolioLegend');",
         "portfolio.labels.forEach((label, i) => {",
-        "  const pct = (portfolio.values[i] / pieTotal * 100).toFixed(2);",
+        "  const isDebt = portfolio.values[i] < 0;",
+        "  const pct = (portfolio.values[i] / Math.abs(pieTotal) * 100).toFixed(2);",
         "  const item = document.createElement('div');",
         "  item.className = 'legend-item';",
+        "  const valStyle = isDebt ? ' style=\"color:#e05c5c\"' : '';",
+        "  const pctStyle = isDebt ? ' style=\"color:#e05c5c\"' : '';",
         "  item.innerHTML =",
         r'    `<div class="legend-dot" style="background:${portfolio.colors[i]}"></div>` +',
         r'    `<span class="legend-ticker">${label}</span>` +',
-        r'    `<span class="legend-value">${fmt(portfolio.values[i])}</span>` +',
-        r'    `<span class="legend-pct">${pct}%</span>`;',
+        r'    `<span class="legend-value"${valStyle}>${fmt(portfolio.values[i])}</span>` +',
+        r'    `<span class="legend-pct"${pctStyle}>${pct}%</span>`;',
         "  item.addEventListener('mouseenter', () => {",
         "    pieValue.textContent = fmt(portfolio.values[i]);",
         "    pieLabel.textContent = label + ' \u00b7 ' + pct + '%';",
