@@ -173,9 +173,12 @@ def leer_logs():
         posiciones = 0
         modo       = "PAPER"
         rg_status  = "OK"
+        rg_bloqueo = None   # dict con causa y números exactos del bloqueo
         empresas   = None
         ts_start   = None   # timestamp SYSTEM_START para calcular runtime
         ts_end     = None   # timestamp SYSTEM_END
+        _lev_tmp   = None   # buffer para línea "Apalancamiento actual" (pre-bloqueo)
+        _dd_tmp    = None   # buffer para línea "Drawdown actual" (pre-bloqueo)
 
         try:
             with open(archivo, encoding="utf-8") as f:
@@ -272,7 +275,79 @@ def leer_logs():
                     if event.strip() == "SYSTEM_END" and ts_end is None:
                         ts_end = ts
 
-                    if "Risk Guardian" in event and "bloqueado" in event.lower():
+                    # ── Risk Guardian: buffers y detección de causa ──────────
+                    m = re.search(
+                        r"Apalancamiento actual:\s*([0-9.]+)x\s*"
+                        r"\(exposición:\s*([0-9.]+)\s*\|\s*capital:\s*([0-9.]+)\)",
+                        event,
+                    )
+                    if m:
+                        _lev_tmp = {
+                            "leverage":  float(m.group(1)),
+                            "exposicion": float(m.group(2)),
+                            "capital":   float(m.group(3)),
+                        }
+
+                    m = re.search(
+                        r"Drawdown actual:\s*([0-9.]+)%\s*"
+                        r"\(pico:\s*([0-9.]+)\s*\|\s*actual:\s*([0-9.]+)\)",
+                        event,
+                    )
+                    if m:
+                        _dd_tmp = {
+                            "drawdown": float(m.group(1)),
+                            "pico":     float(m.group(2)),
+                            "actual":   float(m.group(3)),
+                        }
+
+                    m = re.search(
+                        r"apalancamiento no permitido\s*\(([0-9.]+)x\s*>\s*límite\s*([0-9.]+)x\)",
+                        event,
+                    )
+                    if m:
+                        rg_bloqueo = {
+                            "causa":           "apalancamiento",
+                            "leverage":        float(m.group(1)),
+                            "leverage_limite": float(m.group(2)),
+                            "exposicion":      (_lev_tmp or {}).get("exposicion"),
+                            "capital":         (_lev_tmp or {}).get("capital"),
+                        }
+
+                    m = re.search(
+                        r"drawdown máximo superado\s*\(([0-9.]+)%\s*>\s*límite\s*([0-9.]+)%\)",
+                        event,
+                    )
+                    if m:
+                        rg_bloqueo = {
+                            "causa":            "drawdown",
+                            "drawdown":         float(m.group(1)),
+                            "drawdown_limite":  float(m.group(2)),
+                            "pico":             (_dd_tmp or {}).get("pico"),
+                            "actual":           (_dd_tmp or {}).get("actual"),
+                        }
+
+                    m = re.search(
+                        r"capital insuficiente\s*\(([0-9.]+)\s*<\s*mínimo\s*([0-9.]+)\)",
+                        event,
+                    )
+                    if m:
+                        rg_bloqueo = {
+                            "causa":        "capital",
+                            "capital_real": float(m.group(1)),
+                            "capital_min":  float(m.group(2)),
+                        }
+
+                    if re.search(r"fuera de ventana horaria", event) and rg_bloqueo is None:
+                        m_h = re.search(r"hora actual:\s*(\d+)h", event)
+                        m_r = re.search(r"permitido:\s*(\d+)-(\d+)h", event)
+                        rg_bloqueo = {
+                            "causa":       "ventana_horaria",
+                            "hora":        int(m_h.group(1)) if m_h else None,
+                            "hora_inicio": int(m_r.group(1)) if m_r else None,
+                            "hora_fin":    int(m_r.group(2)) if m_r else None,
+                        }
+
+                    if "Risk Guardian" in event and re.search(r"bloque[oó]", event):
                         rg_status = "BLOQUEADO"
 
         except Exception:
@@ -292,8 +367,8 @@ def leer_logs():
             sesiones.append({
                 "fecha": fecha_str, "capital": capital, "drawdown": drawdown,
                 "trades": trades, "señales": señales, "posiciones": posiciones,
-                "modo": modo, "rg_status": rg_status, "tiempo": tiempo,
-                "empresas": empresas,
+                "modo": modo, "rg_status": rg_status, "rg_bloqueo": rg_bloqueo,
+                "tiempo": tiempo, "empresas": empresas,
             })
 
     return sesiones
@@ -806,6 +881,161 @@ def _portfolio_js(cartera):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# SECCIÓN RISK GUARDIAN BLOQUEADO
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _rg_bloqueo_css():
+    return """
+  /* RISK GUARDIAN BLOQUEADO */
+  .rg-banner {
+    background: rgba(255,170,0,.07);
+    border: 1px solid rgba(255,170,0,.35);
+    border-left: 3px solid var(--warn);
+    border-radius: 4px;
+    padding: 14px 20px;
+    margin-bottom: 8px;
+  }
+  .rg-banner-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--warn);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .rg-detail {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+  }
+  .rg-kv { display: flex; gap: 6px; align-items: baseline; }
+  .rg-key { color: var(--muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+  .rg-val { color: var(--warn); font-weight: 700; }
+  .rg-val.danger { color: var(--danger); }"""
+
+
+def _rg_detalle_html(b):
+    """Genera el bloque de detalles para un bloqueo según su causa."""
+    causa = b.get("causa", "desconocida")
+
+    if causa == "apalancamiento":
+        lev      = b.get("leverage")
+        lim      = b.get("leverage_limite")
+        exp      = b.get("exposicion")
+        cap      = b.get("capital")
+        lev_str  = f"{lev:.2f}x" if lev is not None else "—"
+        lim_str  = f"{lim:.2f}x" if lim is not None else "—"
+        exp_str  = f"{exp:,.2f} €" if exp is not None else "—"
+        cap_str  = f"{cap:,.2f} €" if cap is not None else "—"
+        return (
+            f'<span class="rg-kv"><span class="rg-key">Causa</span>'
+            f'<span class="rg-val danger">Apalancamiento</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Leverage</span>'
+            f'<span class="rg-val danger">{lev_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Límite</span>'
+            f'<span class="rg-val">{lim_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Exposición</span>'
+            f'<span class="rg-val">{exp_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Capital</span>'
+            f'<span class="rg-val">{cap_str}</span></span>'
+        )
+
+    if causa == "drawdown":
+        dd   = b.get("drawdown")
+        lim  = b.get("drawdown_limite")
+        pico = b.get("pico")
+        act  = b.get("actual")
+        dd_str  = f"{dd:.2f}%" if dd is not None else "—"
+        lim_str = f"{lim:.2f}%" if lim is not None else "—"
+        pico_str = f"{pico:,.2f} €" if pico is not None else "—"
+        act_str  = f"{act:,.2f} €" if act is not None else "—"
+        return (
+            f'<span class="rg-kv"><span class="rg-key">Causa</span>'
+            f'<span class="rg-val danger">Drawdown máximo</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Drawdown</span>'
+            f'<span class="rg-val danger">{dd_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Límite</span>'
+            f'<span class="rg-val">{lim_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Capital pico</span>'
+            f'<span class="rg-val">{pico_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Capital actual</span>'
+            f'<span class="rg-val">{act_str}</span></span>'
+        )
+
+    if causa == "capital":
+        cap_r = b.get("capital_real")
+        cap_m = b.get("capital_min")
+        cap_r_str = f"{cap_r:,.2f} €" if cap_r is not None else "—"
+        cap_m_str = f"{cap_m:,.2f} €" if cap_m is not None else "—"
+        return (
+            f'<span class="rg-kv"><span class="rg-key">Causa</span>'
+            f'<span class="rg-val danger">Capital mínimo</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Capital actual</span>'
+            f'<span class="rg-val danger">{cap_r_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Mínimo requerido</span>'
+            f'<span class="rg-val">{cap_m_str}</span></span>'
+        )
+
+    if causa == "ventana_horaria":
+        hora      = b.get("hora")
+        h_ini     = b.get("hora_inicio")
+        h_fin     = b.get("hora_fin")
+        hora_str  = f"{hora}h" if hora is not None else "—"
+        rango_str = f"{h_ini}h-{h_fin}h" if h_ini is not None else "—"
+        return (
+            f'<span class="rg-kv"><span class="rg-key">Causa</span>'
+            f'<span class="rg-val">Fuera de ventana</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Hora ejecución</span>'
+            f'<span class="rg-val">{hora_str}</span></span>'
+            f'<span class="rg-kv"><span class="rg-key">Ventana permitida</span>'
+            f'<span class="rg-val">{rango_str}</span></span>'
+        )
+
+    return f'<span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val">{causa}</span></span>'
+
+
+def _rg_seccion_html(sesiones):
+    """Genera la sección completa de sesiones bloqueadas por Risk Guardian."""
+    bloqueadas = [s for s in sesiones if s.get("rg_status") == "BLOQUEADO"]
+    if not bloqueadas:
+        return ""
+
+    n = len(bloqueadas)
+    titulo = f"⚠ Risk Guardian — {n} sesión{'es' if n > 1 else ''} bloqueada{'s' if n > 1 else ''}"
+
+    filas = ""
+    for s in reversed(bloqueadas):
+        b = s.get("rg_bloqueo") or {}
+        detalle = _rg_detalle_html(b) if b else (
+            '<span class="rg-kv"><span class="rg-key">Causa</span>'
+            '<span class="rg-val">—</span></span>'
+        )
+        filas += (
+            f'      <div class="rg-banner">\n'
+            f'        <div class="rg-banner-title">{s["fecha"]}</div>\n'
+            f'        <div class="rg-detail">{detalle}</div>\n'
+            f'      </div>\n'
+        )
+
+    return (
+        "\n  <!-- RISK GUARDIAN BLOQUEADO -->\n"
+        "  <div class=\"section\">\n"
+        f"    <div class=\"section-header\" onclick=\"toggle('rg-bloqueado')\">\n"
+        f"      <div class=\"section-title\" style=\"color:var(--warn)\">{titulo}</div>\n"
+        f"      <button class=\"toggle-btn\" id=\"btn-rg-bloqueado\" "
+        f"style=\"border-color:rgba(255,170,0,.4);color:var(--warn)\">▼ ocultar</button>\n"
+        "    </div>\n"
+        "    <div class=\"collapsible\" id=\"rg-bloqueado\" style=\"max-height:9999px\">\n"
+        f"{filas}"
+        "    </div>\n"
+        "  </div>"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GENERADOR HTML
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1000,6 +1230,10 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
     portfolio_html = _portfolio_html(cartera)
     portfolio_js   = _portfolio_js(cartera)
 
+    # Sección Risk Guardian bloqueado
+    rg_css     = _rg_bloqueo_css()
+    rg_seccion = _rg_seccion_html(sesiones)
+
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1173,6 +1407,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
   }}
   .chart-wrap {{ position: relative; height: 220px; }}
 {portfolio_css}
+{rg_css}
 
   /* FILTER BUTTONS */
   .filter-bar {{
@@ -1289,6 +1524,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
       <div class="kpi-sub">Señales detectadas: {stats.get('total_señales',0)}</div>
     </div>
   </div>
+{rg_seccion}
 
   <!-- GRÁFICAS -->
   <div class="section">
