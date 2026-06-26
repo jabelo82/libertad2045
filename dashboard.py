@@ -339,7 +339,9 @@ def leer_logs():
 
                     if re.search(r"fuera de ventana horaria", event) and rg_bloqueo is None:
                         m_h = re.search(r"hora actual:\s*(\d+)h", event)
-                        m_r = re.search(r"permitido:\s*(\d+)-(\d+)h", event)
+                        # "permitido:" puede quedar en otra columna si el campo CSV lleva comillas
+                        # con coma interna — buscamos en la línea completa para capturarlo siempre.
+                        m_r = re.search(r"permitido:\s*(\d+)-(\d+)h", linea)
                         rg_bloqueo = {
                             "causa":       "ventana_horaria",
                             "hora":        int(m_h.group(1)) if m_h else None,
@@ -884,9 +886,19 @@ def _portfolio_js(cartera):
 # SECCIÓN RISK GUARDIAN BLOQUEADO
 # ─────────────────────────────────────────────────────────────────────────────
 
+_RG_MAX_VISIBLE = 5   # episodios recientes visibles al expandir sin "ver todos"
+
+
 def _rg_bloqueo_css():
     return """
   /* RISK GUARDIAN BLOQUEADO */
+  .rg-resumen {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    padding: 4px 0 16px;
+  }
   .rg-banner {
     background: rgba(255,170,0,.07);
     border: 1px solid rgba(255,170,0,.35);
@@ -997,8 +1009,24 @@ def _rg_detalle_html(b):
     return f'<span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val">{causa}</span></span>'
 
 
+def _rg_banner(s):
+    """Genera el HTML de un banner individual de bloqueo."""
+    b = s.get("rg_bloqueo") or {}
+    detalle = _rg_detalle_html(b) if b else (
+        '<span class="rg-kv"><span class="rg-key">Causa</span>'
+        '<span class="rg-val">—</span></span>'
+    )
+    return (
+        f'      <div class="rg-banner">\n'
+        f'        <div class="rg-banner-title">{s["fecha"]}</div>\n'
+        f'        <div class="rg-detail">{detalle}</div>\n'
+        f'      </div>\n'
+    )
+
+
 def _rg_seccion_html(sesiones):
-    """Genera la sección completa de sesiones bloqueadas por Risk Guardian."""
+    """Genera la sección Risk Guardian: colapsada por defecto, resumen agregado arriba,
+    N episodios recientes visibles al expandir y el resto bajo un segundo toggle."""
     bloqueadas = [s for s in sesiones if s.get("rg_status") == "BLOQUEADO"]
     if not bloqueadas:
         return ""
@@ -1006,19 +1034,52 @@ def _rg_seccion_html(sesiones):
     n = len(bloqueadas)
     titulo = f"⚠ Risk Guardian — {n} sesión{'es' if n > 1 else ''} bloqueada{'s' if n > 1 else ''}"
 
-    filas = ""
-    for s in reversed(bloqueadas):
-        b = s.get("rg_bloqueo") or {}
-        detalle = _rg_detalle_html(b) if b else (
-            '<span class="rg-kv"><span class="rg-key">Causa</span>'
-            '<span class="rg-val">—</span></span>'
-        )
-        filas += (
-            f'      <div class="rg-banner">\n'
-            f'        <div class="rg-banner-title">{s["fecha"]}</div>\n'
-            f'        <div class="rg-detail">{detalle}</div>\n'
+    # ── Resumen por causa ────────────────────────────────────────────────────
+    conteo = {"apalancamiento": 0, "drawdown": 0, "capital": 0,
+               "ventana_horaria": 0, "otro": 0}
+    for s in bloqueadas:
+        causa = (s.get("rg_bloqueo") or {}).get("causa", "otro")
+        conteo[causa] = conteo.get(causa, 0) + 1
+
+    etiquetas = [
+        ("apalancamiento",  "Apalancamiento"),
+        ("drawdown",        "Drawdown"),
+        ("capital",         "Capital mínimo"),
+        ("ventana_horaria", "Fuera de ventana"),
+        ("otro",            "Otro"),
+    ]
+    partes = [f"{label}: {conteo[k]}" for k, label in etiquetas if conteo.get(k)]
+    resumen_html = (
+        f'      <div class="rg-resumen">{" · ".join(partes)}</div>\n'
+        if partes else ""
+    )
+
+    # ── Episodios más reciente primero ───────────────────────────────────────
+    desc = list(reversed(bloqueadas))
+    recientes  = desc[:_RG_MAX_VISIBLE]
+    historicos = desc[_RG_MAX_VISIBLE:]
+
+    filas_recientes = "".join(_rg_banner(s) for s in recientes)
+
+    # Bloque "ver históricos" solo si hay más de N
+    if historicos:
+        n_hist = len(historicos)
+        filas_hist = "".join(_rg_banner(s) for s in historicos)
+        ver_todos = (
+            f'      <div style="padding:4px 0 12px">\n'
+            f'        <button class="toggle-btn" id="btn-rg-historicos" '
+            f'onclick="toggle(\'rg-historicos\')" '
+            f'style="font-size:10px;color:var(--muted)">'
+            f'▶ ver {n_hist} episodio{"s" if n_hist > 1 else ""} anterior{"es" if n_hist > 1 else ""}'
+            f'</button>\n'
+            f'      </div>\n'
+            f'      <div class="collapsible collapsed" id="rg-historicos" '
+            f'style="max-height:9999px">\n'
+            f'{filas_hist}'
             f'      </div>\n'
         )
+    else:
+        ver_todos = ""
 
     return (
         "\n  <!-- RISK GUARDIAN BLOQUEADO -->\n"
@@ -1026,10 +1087,12 @@ def _rg_seccion_html(sesiones):
         f"    <div class=\"section-header\" onclick=\"toggle('rg-bloqueado')\">\n"
         f"      <div class=\"section-title\" style=\"color:var(--warn)\">{titulo}</div>\n"
         f"      <button class=\"toggle-btn\" id=\"btn-rg-bloqueado\" "
-        f"style=\"border-color:rgba(255,170,0,.4);color:var(--warn)\">▼ ocultar</button>\n"
+        f"style=\"border-color:rgba(255,170,0,.4);color:var(--warn)\">▶ mostrar</button>\n"
         "    </div>\n"
-        "    <div class=\"collapsible\" id=\"rg-bloqueado\" style=\"max-height:9999px\">\n"
-        f"{filas}"
+        "    <div class=\"collapsible collapsed\" id=\"rg-bloqueado\" style=\"max-height:9999px\">\n"
+        f"{resumen_html}"
+        f"{filas_recientes}"
+        f"{ver_todos}"
         "    </div>\n"
         "  </div>"
     )
