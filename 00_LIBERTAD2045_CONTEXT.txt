@@ -690,6 +690,11 @@ Commits principales en producción (más recientes primero):
   □ Deduplicar fills históricos en tabla trades del dashboard (DE, JCI)
   □ Precio de salida real para posiciones cerradas (actualmente aprox. yfinance)
   □ SAI para cortes de luz (Torre — si sigue como máquina principal)
+  □ Dashboard: bloqueo "fuera de ventana horaria" muestra hora de ejecución pero
+         no el rango permitido (21-23h) — el CSV usa comillas alrededor del campo y
+         la coma interna trunca el split. Cosmético: no afecta a los 4 episodios de
+         apalancamiento. Fix: parsear el campo anterior (rango está en el log de la
+         línea inmediatamente anterior al bloqueo, o usar csv.reader en leer_logs()).
   □ market_filter.py integrar en orquestador (Fase 3)
   □ EXP44 Russell 2000: investigar dataset composición histórica
     + filtro de liquidez (ver sección 7). Pendiente para otoño 2026.
