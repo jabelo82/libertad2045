@@ -27,8 +27,8 @@ elif [ "$CICLO" = "noche" ]; then
 else
     # auto
     if [ "${DOW}" -gt 5 ]; then
-        WAKE=$(TZ=$TZ_LOC date -d "next Monday 22:00:00" +%s)
-        DESC="auto: lunes 22:00 (fin de semana)"
+        WAKE=$(TZ=$TZ_LOC date -d "next Monday 11:50:00" +%s)
+        DESC="auto: lunes 11:50 (watchdog)"
     elif [ "${MINS}" -lt $(( 11 * 60 + 50 )) ]; then
         WAKE=$(TZ=$TZ_LOC date -d "today 11:50:00" +%s)
         DESC="auto: hoy 11:50 (watchdog)"

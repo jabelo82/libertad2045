@@ -15,8 +15,8 @@ MINS=$(( 10#${HOUR} * 60 + 10#${MIN} ))
 
 if [ "${DOW}" -gt 5 ]; then
     # Sábado o domingo → lunes 22:00
-    WAKE=$(TZ=$TZ_LOC date -d "next Monday 22:00:00" +%s)
-    DESC="lunes 22:00 (fin de semana)"
+    WAKE=$(TZ=$TZ_LOC date -d "next Monday 11:50:00" +%s)
+    DESC="lunes 11:50 (watchdog)"
 elif [ "${MINS}" -lt $(( 11 * 60 + 50 )) ]; then
     # Antes de 11:50 → watchdog de hoy 11:50
     WAKE=$(TZ=$TZ_LOC date -d "today 11:50:00" +%s)
