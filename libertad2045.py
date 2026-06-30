@@ -45,6 +45,19 @@ def _escribir_last_run():
         log_event("WARN", f"No se pudo escribir last_run.txt: {e}")
 
 
+def _generar_dashboard():
+    try:
+        _dashboard.main()
+        log_event("INFO", "Dashboard regenerado")
+        ok_gh, msg_gh = publicar_dashboard()
+        if ok_gh:
+            log_event("INFO", f"GitHub Pages actualizado: {msg_gh}")
+        else:
+            log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
+    except Exception as e_dash:
+        log_event("WARN", f"Dashboard no regenerado: {e_dash}")
+
+
 def _cargar_datos_posiciones(ib, symbols: list) -> dict:
     """
     Descarga DataFrames de IBKR para los símbolos con posición abierta.
@@ -455,20 +468,7 @@ def main():
             _escribir_last_run()
             log_event("INFO", "last_run.txt actualizado — RG bloqueó entradas pero ciclo completado")
 
-            # Dashboard — paso terminal desacoplado del escaneo de señales.
-            # Se genera aunque RG haya bloqueado nuevas entradas para reflejar
-            # el estado actualizado de la cartera (stops, rebalanceo ejecutados).
-            try:
-                _dashboard.main()
-                log_event("INFO", "Dashboard regenerado")
-                ok_gh, msg_gh = publicar_dashboard()
-                if ok_gh:
-                    log_event("INFO", f"GitHub Pages actualizado: {msg_gh}")
-                else:
-                    log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
-            except Exception as e_dash:
-                log_event("WARN", f"Dashboard no regenerado: {e_dash}")
-
+            _generar_dashboard()
             return
 
 
@@ -684,21 +684,9 @@ def main():
         # Regenerar dashboard HTML
         # Se ejecuta con IB aún conectado para que leer_cartera()
         # pueda obtener posiciones en vivo (clientId=7).
-        # El try aísla errores del dashboard del ciclo principal.
         # --------------------------------------------------
 
-        try:
-            _dashboard.main()
-            log_event("INFO", "Dashboard regenerado")
-
-            # Publicar en GitHub Pages
-            ok_gh, msg_gh = publicar_dashboard()
-            if ok_gh:
-                log_event("INFO", f"GitHub Pages actualizado: {msg_gh}")
-            else:
-                log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
-        except Exception as e_dash:
-            log_event("WARN", f"Dashboard no regenerado: {e_dash}")
+        _generar_dashboard()
 
         try:
             ok_git, msg_git = git_backup(capital)
