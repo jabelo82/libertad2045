@@ -454,6 +454,21 @@ def main():
             send_telegram_critical("⚠️ LIBERTAD_2045 — Risk Guardian: nuevas entradas bloqueadas. Stops y rebalanceo activos.")
             _escribir_last_run()
             log_event("INFO", "last_run.txt actualizado — RG bloqueó entradas pero ciclo completado")
+
+            # Dashboard — paso terminal desacoplado del escaneo de señales.
+            # Se genera aunque RG haya bloqueado nuevas entradas para reflejar
+            # el estado actualizado de la cartera (stops, rebalanceo ejecutados).
+            try:
+                _dashboard.main()
+                log_event("INFO", "Dashboard regenerado")
+                ok_gh, msg_gh = publicar_dashboard()
+                if ok_gh:
+                    log_event("INFO", f"GitHub Pages actualizado: {msg_gh}")
+                else:
+                    log_event("WARN", f"GitHub Pages no actualizado: {msg_gh}")
+            except Exception as e_dash:
+                log_event("WARN", f"Dashboard no regenerado: {e_dash}")
+
             return
 
 
