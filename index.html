@@ -335,7 +335,7 @@
     <div class="logo">⚙ LIBERTAD_2045</div>
     <div class="mode-badge">PAPER</div>
   </div>
-  <div class="last-update">Actualizado: 29/06/2026 22:14</div>
+  <div class="last-update">Actualizado: 01/07/2026 22:14</div>
 </header>
 
 <main class="main">
@@ -344,39 +344,43 @@
   <div class="kpi-grid">
     <div class="kpi">
       <div class="kpi-label">Capital actual</div>
-      <div class="kpi-value" style="color:var(--accent)">7,711 €</div>
+      <div class="kpi-value" style="color:var(--accent)">7,602 €</div>
       <div class="kpi-sub">Pico: 7,762 €</div>
     </div>
     <div class="kpi danger">
       <div class="kpi-label">Rentabilidad</div>
-      <div class="kpi-value" style="color:#ff4444">-0.37%</div>
+      <div class="kpi-value" style="color:#ff4444">-1.77%</div>
       <div class="kpi-sub">Desde inicio PAPER</div>
     </div>
     <div class="kpi warn">
       <div class="kpi-label">Drawdown actual</div>
-      <div class="kpi-value" style="color:#ffaa00">-0.66%</div>
+      <div class="kpi-value" style="color:#ffaa00">-2.06%</div>
       <div class="kpi-sub">Límite: -10.00%</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Sesiones</div>
-      <div class="kpi-value">14</div>
-      <div class="kpi-sub">Última: 2026-06-29</div>
+      <div class="kpi-value">16</div>
+      <div class="kpi-sub">Última: 2026-07-01</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Trades ejecutados</div>
-      <div class="kpi-value">52</div>
-      <div class="kpi-sub">Señales detectadas: 86</div>
+      <div class="kpi-value">58</div>
+      <div class="kpi-sub">Señales detectadas: 89</div>
     </div>
   </div>
 
   <!-- RISK GUARDIAN BLOQUEADO -->
   <div class="section">
     <div class="section-header" onclick="toggle('rg-bloqueado')">
-      <div class="section-title" style="color:var(--warn)">⚠ Risk Guardian — 5 sesiónes bloqueadas</div>
+      <div class="section-title" style="color:var(--warn)">⚠ Risk Guardian — 6 sesiónes bloqueadas</div>
       <button class="toggle-btn" id="btn-rg-bloqueado" style="border-color:rgba(255,170,0,.4);color:var(--warn)">▶ mostrar</button>
     </div>
     <div class="collapsible collapsed" id="rg-bloqueado" style="max-height:9999px">
-      <div class="rg-resumen">Apalancamiento: 4 · Fuera de ventana: 1</div>
+      <div class="rg-resumen">Apalancamiento: 5 · Fuera de ventana: 1</div>
+      <div class="rg-banner">
+        <div class="rg-banner-title">2026-06-30</div>
+        <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val danger">Apalancamiento</span></span><span class="rg-kv"><span class="rg-key">Leverage</span><span class="rg-val danger">1.08x</span></span><span class="rg-kv"><span class="rg-key">Límite</span><span class="rg-val">1.00x</span></span><span class="rg-kv"><span class="rg-key">Exposición</span><span class="rg-val">8,235.41 €</span></span><span class="rg-kv"><span class="rg-key">Capital</span><span class="rg-val">7,623.67 €</span></span></div>
+      </div>
       <div class="rg-banner">
         <div class="rg-banner-title">2026-06-26</div>
         <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val danger">Apalancamiento</span></span><span class="rg-kv"><span class="rg-key">Leverage</span><span class="rg-val danger">1.04x</span></span><span class="rg-kv"><span class="rg-key">Límite</span><span class="rg-val">1.00x</span></span><span class="rg-kv"><span class="rg-key">Exposición</span><span class="rg-val">8,068.10 €</span></span><span class="rg-kv"><span class="rg-key">Capital</span><span class="rg-val">7,761.88 €</span></span></div>
@@ -393,9 +397,14 @@
         <div class="rg-banner-title">2026-06-11</div>
         <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val danger">Apalancamiento</span></span><span class="rg-kv"><span class="rg-key">Leverage</span><span class="rg-val danger">1.08x</span></span><span class="rg-kv"><span class="rg-key">Límite</span><span class="rg-val">1.00x</span></span><span class="rg-kv"><span class="rg-key">Exposición</span><span class="rg-val">8,336.48 €</span></span><span class="rg-kv"><span class="rg-key">Capital</span><span class="rg-val">7,738.49 €</span></span></div>
       </div>
+      <div style="padding:4px 0 12px">
+        <button class="toggle-btn" id="btn-rg-historicos" onclick="toggle('rg-historicos')" style="font-size:10px;color:var(--muted)">▶ ver 1 episodio anterior</button>
+      </div>
+      <div class="collapsible collapsed" id="rg-historicos" style="max-height:9999px">
       <div class="rg-banner">
         <div class="rg-banner-title">2026-06-10</div>
         <div class="rg-detail"><span class="rg-kv"><span class="rg-key">Causa</span><span class="rg-val danger">Apalancamiento</span></span><span class="rg-kv"><span class="rg-key">Leverage</span><span class="rg-val danger">1.08x</span></span><span class="rg-kv"><span class="rg-key">Límite</span><span class="rg-val">1.00x</span></span><span class="rg-kv"><span class="rg-key">Exposición</span><span class="rg-val">8,368.10 €</span></span><span class="rg-kv"><span class="rg-key">Capital</span><span class="rg-val">7,739.46 €</span></span></div>
+      </div>
       </div>
     </div>
   </div>
@@ -446,12 +455,12 @@
     </div>
     <div class="collapsible" id="cartera" style="max-height:700px">
       <div class="chart-box">
-        <div class="chart-title">Distribución del capital — 7,711 €</div>
+        <div class="chart-title">Distribución del capital — 7,925 €</div>
         <div class="portfolio-layout">
           <div class="pie-wrap">
             <canvas id="chartCartera"></canvas>
             <div class="pie-center">
-              <div class="pie-center-value" id="pieHoverValue">7,711 €</div>
+              <div class="pie-center-value" id="pieHoverValue">7,925 €</div>
               <div class="pie-center-label" id="pieHoverLabel">capital total</div>
             </div>
           </div>
@@ -485,29 +494,29 @@
             </tr>
           </thead>
           <tbody id="trades-abiertos-tbody">
+            <tr data-date="2026-06-30">
+                <td>2026-06-30</td>
+                <td><strong>YUM</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">7</td>
+                <td class="num">158.8</td>
+                <td class="num">161.59</td>
+                <td class="num">149.33</td>
+                <td class="num"><span style="color:inherit">154.66</span></td>
+                <td class="num"><span style="color:#00c896">+17 €</span></td>
+                <td class="num"><span style="color:#00c896">+1.76%</span></td>
+            </tr>
             <tr data-date="2026-06-10">
                 <td>2026-06-10</td>
                 <td><strong>TRV</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">4</td>
                 <td class="num">302.5</td>
-                <td class="num">331.88</td>
+                <td class="num">334.62</td>
                 <td class="num">286.4</td>
-                <td class="num"><span style="color:#00c896">320.44</span></td>
-                <td class="num"><span style="color:#00c896">+98 €</span></td>
-                <td class="num"><span style="color:#00c896">+9.71%</span></td>
-            </tr>
-            <tr data-date="2026-06-24">
-                <td>2026-06-24</td>
-                <td><strong>AEP</strong></td>
-                <td><span style="color:#00c896">▲ Compra</span></td>
-                <td class="num">10</td>
-                <td class="num">134.64</td>
-                <td class="num">137.97</td>
-                <td class="num">127.78</td>
-                <td class="num"><span style="color:#00c896">135.97</span></td>
-                <td class="num"><span style="color:#00c896">+28 €</span></td>
-                <td class="num"><span style="color:#00c896">+2.47%</span></td>
+                <td class="num"><span style="color:#00c896">325.87</span></td>
+                <td class="num"><span style="color:#00c896">+113 €</span></td>
+                <td class="num"><span style="color:#00c896">+10.62%</span></td>
             </tr>
             <tr data-date="2026-06-25">
                 <td>2026-06-25</td>
@@ -515,11 +524,23 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">11</td>
                 <td class="num">99.66</td>
-                <td class="num">97.90</td>
+                <td class="num">97.21</td>
                 <td class="num">93.87</td>
                 <td class="num"><span style="color:inherit">95.79</span></td>
-                <td class="num"><span style="color:#ff4455">-16 €</span></td>
-                <td class="num"><span style="color:#ff4455">-1.77%</span></td>
+                <td class="num"><span style="color:#ff4455">-24 €</span></td>
+                <td class="num"><span style="color:#ff4455">-2.46%</span></td>
+            </tr>
+            <tr data-date="2026-06-30">
+                <td>2026-06-30</td>
+                <td><strong>BMY</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">14</td>
+                <td class="num">58.68</td>
+                <td class="num">56.44</td>
+                <td class="num">55.02</td>
+                <td class="num"><span style="color:inherit">56.20</span></td>
+                <td class="num"><span style="color:#ff4455">-28 €</span></td>
+                <td class="num"><span style="color:#ff4455">-3.82%</span></td>
             </tr>
             <tr data-date="2026-06-17">
                 <td>2026-06-17</td>
@@ -527,23 +548,23 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">5</td>
                 <td class="num">141.72</td>
-                <td class="num">147.17</td>
+                <td class="num">147.31</td>
                 <td class="num">130.07</td>
                 <td class="num"><span style="color:inherit">141.51</span></td>
-                <td class="num"><span style="color:#00c896">+23 €</span></td>
-                <td class="num"><span style="color:#00c896">+3.85%</span></td>
+                <td class="num"><span style="color:#00c896">+25 €</span></td>
+                <td class="num"><span style="color:#00c896">+3.94%</span></td>
             </tr>
-            <tr data-date="2026-06-25">
-                <td>2026-06-25</td>
-                <td><strong>XEL</strong></td>
+            <tr data-date="2026-06-30">
+                <td>2026-06-30</td>
+                <td><strong>TPL</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
-                <td class="num">5</td>
-                <td class="num">81.95</td>
-                <td class="num">81.98</td>
-                <td class="num">78.53</td>
-                <td class="num"><span style="color:inherit">79.72</span></td>
-                <td class="num"><span style="color:#00c896">+0 €</span></td>
-                <td class="num"><span style="color:#00c896">+0.04%</span></td>
+                <td class="num">1</td>
+                <td class="num">423.65</td>
+                <td class="num">415.02</td>
+                <td class="num">374.65</td>
+                <td class="num"><span style="color:inherit">407.82</span></td>
+                <td class="num"><span style="color:#ff4455">-8 €</span></td>
+                <td class="num"><span style="color:#ff4455">-2.04%</span></td>
             </tr>
             <tr data-date="2026-06-10">
                 <td>2026-06-10</td>
@@ -551,23 +572,11 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">9</td>
                 <td class="num">147.22</td>
-                <td class="num">154.02</td>
+                <td class="num">150.57</td>
                 <td class="num">139.55</td>
                 <td class="num"><span style="color:#00c896">149.95</span></td>
-                <td class="num"><span style="color:#00c896">+51 €</span></td>
-                <td class="num"><span style="color:#00c896">+4.62%</span></td>
-            </tr>
-            <tr data-date="2026-06-24">
-                <td>2026-06-24</td>
-                <td><strong>KMI</strong></td>
-                <td><span style="color:#00c896">▲ Compra</span></td>
-                <td class="num">29</td>
-                <td class="num">32.63</td>
-                <td class="num">32.27</td>
-                <td class="num">30.8</td>
-                <td class="num"><span style="color:inherit">31.99</span></td>
-                <td class="num"><span style="color:#ff4455">-9 €</span></td>
-                <td class="num"><span style="color:#ff4455">-1.10%</span></td>
+                <td class="num"><span style="color:#00c896">+26 €</span></td>
+                <td class="num"><span style="color:#00c896">+2.28%</span></td>
             </tr></tbody>
         </table>
       </div>
@@ -605,13 +614,61 @@
             </tr>
           </thead>
           <tbody id="trades-tbody">
+            <tr data-date="2026-06-25">
+                <td>2026-06-25</td>
+                <td><strong>XEL</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">5</td>
+                <td class="num">81.95</td>
+                <td class="num">79.70</td>
+                <td class="num">78.53</td>
+                <td class="num"><span style="color:#ff4455">79.71</span></td>
+                <td class="num"><span style="color:#ff4455">-10 €</span></td>
+                <td class="num"><span style="color:#ff4455">-2.73%</span></td>
+            </tr>
+            <tr data-date="2026-06-24">
+                <td>2026-06-24</td>
+                <td><strong>AEP</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">10</td>
+                <td class="num">134.64</td>
+                <td class="num">135.05</td>
+                <td class="num">127.78</td>
+                <td class="num"><span style="color:#00c896">135.85</span></td>
+                <td class="num"><span style="color:#00c896">+11 €</span></td>
+                <td class="num"><span style="color:#00c896">+0.90%</span></td>
+            </tr>
+            <tr data-date="2026-06-24">
+                <td>2026-06-24</td>
+                <td><strong>XEL</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">10</td>
+                <td class="num">81.18</td>
+                <td class="num">79.70</td>
+                <td class="num">76.48</td>
+                <td class="num"><span style="color:#ff4455">79.71</span></td>
+                <td class="num"><span style="color:#ff4455">-13 €</span></td>
+                <td class="num"><span style="color:#ff4455">-1.81%</span></td>
+            </tr>
+            <tr data-date="2026-06-24">
+                <td>2026-06-24</td>
+                <td><strong>KMI</strong></td>
+                <td><span style="color:#00c896">▲ Compra</span></td>
+                <td class="num">29</td>
+                <td class="num">32.63</td>
+                <td class="num">31.72</td>
+                <td class="num">30.8</td>
+                <td class="num"><span style="color:#ff4455">31.99</span></td>
+                <td class="num"><span style="color:#ff4455">-16 €</span></td>
+                <td class="num"><span style="color:#ff4455">-1.96%</span></td>
+            </tr>
             <tr data-date="2026-06-23">
                 <td>2026-06-23</td>
                 <td><strong>WMB</strong></td>
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">14</td>
                 <td class="num">75.84</td>
-                <td class="num">75.06</td>
+                <td class="num">72.77</td>
                 <td class="num">71.39</td>
                 <td class="num"><span style="color:#ff4455">75.65</span></td>
                 <td class="num"><span style="color:#ff4455">-2 €</span></td>
@@ -623,7 +680,7 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">1</td>
                 <td class="num">341.77</td>
-                <td class="num">306.97</td>
+                <td class="num">311.42</td>
                 <td class="num">293.39</td>
                 <td class="num"><span style="color:#ff4455">323.23</span></td>
                 <td class="num"><span style="color:#ff4455">-16 €</span></td>
@@ -635,10 +692,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">1</td>
                 <td class="num">521.5</td>
-                <td class="num">514.71</td>
+                <td class="num">490.12</td>
                 <td class="num">478.47</td>
                 <td class="num"><span style="color:#ff4455">503.55</span></td>
-                <td class="num"><span style="color:#ff4455">-15 €</span></td>
+                <td class="num"><span style="color:#ff4455">-16 €</span></td>
                 <td class="num"><span style="color:#ff4455">-3.44%</span></td>
             </tr>
             <tr data-date="2026-06-16">
@@ -647,10 +704,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">6</td>
                 <td class="num">121.87</td>
-                <td class="num">119.60</td>
+                <td class="num">121.24</td>
                 <td class="num">114.02</td>
                 <td class="num"><span style="color:#ff4455">116.61</span></td>
-                <td class="num"><span style="color:#ff4455">-26 €</span></td>
+                <td class="num"><span style="color:#ff4455">-28 €</span></td>
                 <td class="num"><span style="color:#ff4455">-4.32%</span></td>
             </tr>
             <tr data-date="2026-06-16">
@@ -659,10 +716,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">7</td>
                 <td class="num">52.46</td>
-                <td class="num">69.70</td>
+                <td class="num">72.50</td>
                 <td class="num">44.62</td>
                 <td class="num"><span style="color:#00c896">60.70</span></td>
-                <td class="num"><span style="color:#00c896">+48 €</span></td>
+                <td class="num"><span style="color:#00c896">+51 €</span></td>
                 <td class="num"><span style="color:#00c896">+15.71%</span></td>
             </tr>
             <tr data-date="2026-06-16">
@@ -671,10 +728,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">3</td>
                 <td class="num">274.89</td>
-                <td class="num">268.30</td>
+                <td class="num">264.00</td>
                 <td class="num">256.33</td>
                 <td class="num"><span style="color:#ff4455">271.53</span></td>
-                <td class="num"><span style="color:#ff4455">-8 €</span></td>
+                <td class="num"><span style="color:#ff4455">-9 €</span></td>
                 <td class="num"><span style="color:#ff4455">-1.22%</span></td>
             </tr>
             <tr data-date="2026-06-15">
@@ -683,10 +740,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">1</td>
                 <td class="num">359.81</td>
-                <td class="num">340.13</td>
+                <td class="num">335.60</td>
                 <td class="num">319.42</td>
                 <td class="num"><span style="color:#ff4455">348.47</span></td>
-                <td class="num"><span style="color:#ff4455">-9 €</span></td>
+                <td class="num"><span style="color:#ff4455">-10 €</span></td>
                 <td class="num"><span style="color:#ff4455">-3.15%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -695,10 +752,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">6</td>
                 <td class="num">238.8</td>
-                <td class="num">258.51</td>
+                <td class="num">253.98</td>
                 <td class="num">229.69</td>
                 <td class="num"><span style="color:#ff4455">232.98</span></td>
-                <td class="num"><span style="color:#ff4455">-29 €</span></td>
+                <td class="num"><span style="color:#ff4455">-31 €</span></td>
                 <td class="num"><span style="color:#ff4455">-2.44%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -707,10 +764,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">18</td>
                 <td class="num">79.83</td>
-                <td class="num">81.30</td>
+                <td class="num">79.37</td>
                 <td class="num">76.28</td>
                 <td class="num"><span style="color:#ff4455">78.69</span></td>
-                <td class="num"><span style="color:#ff4455">-17 €</span></td>
+                <td class="num"><span style="color:#ff4455">-18 €</span></td>
                 <td class="num"><span style="color:#ff4455">-1.43%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -719,10 +776,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">18</td>
                 <td class="num">82.23</td>
-                <td class="num">82.65</td>
+                <td class="num">81.29</td>
                 <td class="num">78.34</td>
                 <td class="num"><span style="color:#ff4455">80.90</span></td>
-                <td class="num"><span style="color:#ff4455">-20 €</span></td>
+                <td class="num"><span style="color:#ff4455">-21 €</span></td>
                 <td class="num"><span style="color:#ff4455">-1.62%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -731,10 +788,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">4</td>
                 <td class="num">328.87</td>
-                <td class="num">343.29</td>
+                <td class="num">351.73</td>
                 <td class="num">313.54</td>
                 <td class="num"><span style="color:#ff4455">321.50</span></td>
-                <td class="num"><span style="color:#ff4455">-25 €</span></td>
+                <td class="num"><span style="color:#ff4455">-26 €</span></td>
                 <td class="num"><span style="color:#ff4455">-2.24%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -743,10 +800,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">1</td>
                 <td class="num">876.0</td>
-                <td class="num">780.24</td>
+                <td class="num">784.28</td>
                 <td class="num">752.62</td>
                 <td class="num"><span style="color:#ff4455">861.56</span></td>
-                <td class="num"><span style="color:#ff4455">-12 €</span></td>
+                <td class="num"><span style="color:#ff4455">-13 €</span></td>
                 <td class="num"><span style="color:#ff4455">-1.65%</span></td>
             </tr>
             <tr data-date="2026-06-10">
@@ -755,10 +812,10 @@
                 <td><span style="color:#00c896">▲ Compra</span></td>
                 <td class="num">3</td>
                 <td class="num">178.06</td>
-                <td class="num">173.43</td>
+                <td class="num">181.49</td>
                 <td class="num">161.29</td>
                 <td class="num"><span style="color:#ff4455">170.80</span></td>
-                <td class="num"><span style="color:#ff4455">-18 €</span></td>
+                <td class="num"><span style="color:#ff4455">-19 €</span></td>
                 <td class="num"><span style="color:#ff4455">-4.08%</span></td>
             </tr></tbody>
         </table>
@@ -773,10 +830,10 @@
 </footer>
 
 <script>
-const fechas = ["2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-20", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29"];
-const capitales = [7739.48, 7738.49, 7713.0, 7646.86, 7628.94, 7595.93, 7661.28, 7660.63, 7652.03, 7585.77, 7638.51, 7685.81, 7761.88, 7710.51];
-const senales = [3, 0, 12, 15, 9, 3, 4, 4, 6, 11, 14, 0, 0, 5];
-const posiciones = [8, 8, 7, 6, 7, 7, 8, 8, 8, 7, 8, 9, 8, 7];
+const fechas = ["2026-06-10", "2026-06-11", "2026-06-12", "2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-20", "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-29", "2026-06-30", "2026-07-01"];
+const capitales = [7739.48, 7738.49, 7713.0, 7646.86, 7628.94, 7595.93, 7661.28, 7660.63, 7652.03, 7585.77, 7638.51, 7685.81, 7761.88, 7710.51, 7623.67, 7602.37];
+const senales = [3, 0, 12, 15, 9, 3, 4, 4, 6, 11, 14, 0, 0, 5, 0, 3];
+const posiciones = [8, 8, 7, 6, 7, 7, 8, 8, 8, 7, 8, 9, 8, 7, 9, 7];
 
 // Drawdown desde pico
 const dds = capitales.map((c, i) => {
@@ -894,8 +951,8 @@ function filtrarTrades(dias, btn) {
 
 // ── PORTFOLIO PIE CHART ────────────────────────────────────────────
 const portfolio = {
-  labels: ["TRV", "AEP", "CHD", "ABNB", "XEL", "DTE", "KMI", "CASH"],
-  values: [1109, 1154, 900, 616, 1028, 1160, 783, 961],
+  labels: ["YUM", "TRV", "CHD", "BMY", "ABNB", "TPL", "DTE", "CASH"],
+  values: [993, 1177, 940, 695, 648, 365, 1192, 1915],
   colors: ["#00c896", "#0088ff", "#ff6b35", "#c678dd", "#e06c75", "#56b6c2", "#d19a66", "#3a5068"]
 };
 
