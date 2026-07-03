@@ -118,7 +118,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_OK,    "EUR"),   # 7000 → ratio 0.90x → OK
         )
         self.assertTrue(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe pasar: GrossPositionValue[EUR]=7000 < NetLiq=7762",
         )
 
@@ -133,7 +133,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_OK,    "BASE"),
         )
         self.assertTrue(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe pasar: GrossPositionValue[BASE]=7000 < NetLiq=7762",
         )
 
@@ -149,7 +149,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_BASE,  "EUR"),   # correcto: 8068/7762=1.04x → bloquea
         )
         self.assertFalse(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe bloquear: GrossPositionValue[EUR]=8068.10 > NetLiq=7762 (1.04x > 1.00x)",
         )
 
@@ -164,7 +164,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_OK,   "EUR"),
         )
         self.assertTrue(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe usar NetLiquidation[EUR]=7762, no el de USD=99999",
         )
 
@@ -178,7 +178,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_USD,   "USD"),   # solo USD, sin BASE ni EUR
         )
         self.assertFalse(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe bloquear: GrossPositionValue[BASE/EUR] no disponible",
         )
 
@@ -192,7 +192,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_OK, "EUR"),
         )
         self.assertFalse(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Debe bloquear: NetLiquidation[BASE/EUR] no disponible",
         )
 
@@ -206,7 +206,7 @@ class TestAccountSummaryBaseCurrencyFilter(RiskGuardianTestCase):
             _av("GrossPositionValue", _GROSS_OK,   "EUR"),
         )
         self.assertTrue(
-            risk_guardian.risk_check(ib),
+            risk_guardian.risk_check(ib)[0],
             "Caso normal sin duplicados: debe pasar",
         )
 

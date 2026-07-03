@@ -158,9 +158,9 @@ class TestDashboardConRGBloqueado(unittest.TestCase):
                                              return_value=[]))
             stack.enter_context(patch.object(libertad2045, "rebalance_resumen",
                                              return_value=""))
-            # risk_check devuelve False → simula apalancamiento 1,08× > 1,00×
+            # risk_check devuelve (False, motivo) → simula apalancamiento 1,08× > 1,00×
             stack.enter_context(patch.object(libertad2045, "risk_check",
-                                             return_value=False))
+                                             return_value=(False, "apalancamiento 1.08x > limite 1.00x")))
             stack.enter_context(patch.object(libertad2045, "_escribir_last_run"))
             mock_dash = stack.enter_context(
                 patch.object(libertad2045, "_dashboard")

@@ -76,7 +76,7 @@ def risk_check(ib):
  
     if not ib.isConnected():
         log_event("WARN", "Risk Guardian: IBKR no conectado")
-        return False
+        return False, "IBKR no conectado"
  
  
     # --------------------------------------------------
@@ -89,7 +89,7 @@ def risk_check(ib):
     if not force_bypass and not (HOUR_START <= hour <= HOUR_END):
         log_event("WARN", f"Risk Guardian: fuera de ventana horaria "
                            f"(hora actual: {hour}h, permitido: {HOUR_START}-{HOUR_END}h)")
-        return False
+        return False, f"fuera de ventana horaria ({hour}h, permitido {HOUR_START}-{HOUR_END}h)"
  
     if force_bypass:
         log_event("INFO", f"Risk Guardian: bypass horario activado (hora actual: {hour}h)")
@@ -119,17 +119,17 @@ def risk_check(ib):
  
     except Exception as e:
         log_event("ERROR", f"Risk Guardian: error leyendo cuenta IBKR: {e}")
-        return False
+        return False, f"error leyendo cuenta IBKR: {e}"
  
     if net_liq is None:
         log_event("ERROR", "Risk Guardian: NetLiquidation[BASE/EUR] no encontrado en "
                            "accountSummary — bloqueando por precaución (fail-safe)")
-        return False
+        return False, "NetLiquidation no disponible (fail-safe)"
  
     if net_liq < MIN_CAPITAL:
         log_event("WARN", f"Risk Guardian: capital insuficiente "
                            f"({net_liq:.2f} < mínimo {MIN_CAPITAL:.2f})")
-        return False
+        return False, f"capital insuficiente ({net_liq:.2f}€ < mínimo {MIN_CAPITAL:.2f}€)"
  
  
     # --------------------------------------------------
@@ -159,7 +159,7 @@ def risk_check(ib):
             log_event("WARN", f"Risk Guardian: drawdown máximo superado "
                                f"({drawdown:.2%} > límite {MAX_DRAWDOWN_PCT:.2%}). "
                                f"Entradas bloqueadas.")
-            return False
+            return False, f"drawdown {drawdown:.2%} > límite {MAX_DRAWDOWN_PCT:.2%} (pico {capital_pico:.2f}€ | actual {net_liq:.2f}€)"
  
  
     # --------------------------------------------------
@@ -183,7 +183,7 @@ def risk_check(ib):
                                f"({leverage:.2f}x > límite {MAX_LEVERAGE:.2f}x). "
                                f"LIBERTAD_2045 opera exclusivamente con capital propio. "
                                f"Entradas bloqueadas.")
-            return False
+            return False, f"apalancamiento {leverage:.2f}x > límite {MAX_LEVERAGE:.2f}x (exposición {gross_pos:.2f}€ | capital {net_liq:.2f}€)"
  
     else:
         log_event("ERROR", "Risk Guardian: GrossPositionValue[BASE/EUR] no encontrado en "
@@ -196,7 +196,7 @@ def risk_check(ib):
             )
         except Exception:
             pass
-        return False
+        return False, "GrossPositionValue no disponible (fail-safe)"
  
  
     # --------------------------------------------------
@@ -207,7 +207,7 @@ def risk_check(ib):
                        f"hora {hour}h | drawdown dentro de límites | "
                        f"sin apalancamiento")
 
-    return True
+    return True, "OK"
 
 
 def resetear_capital_peak(capital_inicial: float) -> None:

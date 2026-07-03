@@ -463,9 +463,10 @@ def main():
         # Stops y rebalanceo ya ejecutados. Si falla: heartbeat + return.
         # --------------------------------------------------
 
-        if not risk_check(ib):
-            log_event("WARN", "Risk Guardian bloqueó nuevas entradas — gestión de posiciones completada")
-            send_telegram_critical("⚠️ LIBERTAD_2045 — Risk Guardian: nuevas entradas bloqueadas. Stops y rebalanceo activos.")
+        rg_ok, rg_motivo = risk_check(ib)
+        if not rg_ok:
+            log_event("WARN", f"Risk Guardian bloqueó nuevas entradas ({rg_motivo}) — gestión de posiciones completada")
+            send_telegram_critical(f"⚠️ LIBERTAD_2045 — Risk Guardian: nuevas entradas bloqueadas — {rg_motivo}. Stops y rebalanceo activos.")
             _escribir_last_run()
             log_event("INFO", "last_run.txt actualizado — RG bloqueó entradas pero ciclo completado")
 
