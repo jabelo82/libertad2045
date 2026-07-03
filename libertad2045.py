@@ -1,6 +1,7 @@
 import os
 import signal
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -322,7 +323,7 @@ def main():
             log_event("INFO", f"Festivo NYSE ({hoy}) — ciclo omitido")
             send_telegram(f"LIBERTAD_2045: festivo NYSE ({hoy}) — sin operación")
             _escribir_last_run()
-            return
+            sys.exit(3)
 
         # --------------------------------------------------
         # Conexión con Interactive Brokers

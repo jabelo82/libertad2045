@@ -224,6 +224,8 @@ def check_ordenes_gtc(ib):
 
 
 def check_rtc():
+    if os.getenv("MAQUINA") == "VPS":
+        return True, "RTC no aplica (VPS, siempre encendido)"
     try:
         wakealarm = RTC_WAKEALARM.read_text().strip()
         if not wakealarm or wakealarm == "0":
@@ -327,7 +329,11 @@ def relanzar_bot():
                 stdout=log_file, stderr=log_file,
             )
         time.sleep(RELAUNCH_WAIT)
-        if proc.poll() is not None:
+        exit_code = proc.poll()
+        if exit_code == 3:
+            _send("ℹ️ LIBERTAD_2045 — Watchdog: bot no relanzado — festivo NYSE, sin operación.")
+            return True, "Bot no operativo — festivo NYSE"
+        if exit_code is not None:
             _send(
                 f"🔴 LIBERTAD_2045 — Watchdog: bot relanzado pero terminó en "
                 f"{RELAUNCH_WAIT}s (crash temprano). Revisar log: {log_path.name}",

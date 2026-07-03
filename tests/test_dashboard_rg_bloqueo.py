@@ -129,6 +129,14 @@ class TestDashboardConRGBloqueado(unittest.TestCase):
         ib_mock = _make_ib_mock()
 
         with ExitStack() as stack:
+            # Fecha fija: lunes 15/06/2026, laborable, no festivo NYSE.
+            # Sin esto el test es fragil frente al calendario real.
+            import datetime as _dt_real
+            class _FakeDatetime(_dt_real.datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return _dt_real.datetime(2026, 6, 15, 22, 10)
+            stack.enter_context(patch.object(libertad2045, "datetime", _FakeDatetime))
             stack.enter_context(patch.object(libertad2045, "acquire_lock"))
             stack.enter_context(patch.object(libertad2045, "release_lock"))
             stack.enter_context(patch.object(libertad2045, "limpiar_logs_antiguos"))
