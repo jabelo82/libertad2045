@@ -497,6 +497,28 @@ Commits principales en producción (más recientes primero):
   Fix:      risk_guardian.py filtra explícitamente por currency in {"BASE","EUR"}.
             7 tests en test_risk_guardian_leverage.py. Commit 4d90eca.
 
+  INCIDENTE — DASHBOARD VPS SIN DATOS DE POSICIONES (06/07/2026) — CERRADO
+  Sintoma:  Tras el cutover, el dashboard del VPS mostraba las 9 posiciones
+            en el donut de composicion (capital correcto, vino de
+            portfolio_cache.json) pero la tabla "Trades actuales" con todo
+            en guiones (fecha, entrada, stop, PnL) y "Sesiones: 1".
+  Causa:    leer_logs() en dashboard.py lee logs/LIBERTAD_*.csv desde
+            RESET_DATE (2026-06-10). La Fase 0 transfirio la cache de
+            precios (1,4 GB) pero NO estos CSV de eventos — el VPS solo
+            tenia el CSV suelto del 17/06 (corto, de prueba) y los propios
+            del 03/07 y 06/07 generados ya en produccion VPS.
+  Fix:      Copiados 17 CSV de la torre (10/06 a 02/07, los >= RESET_DATE)
+            via Torre -> ProBook (scp) -> VPS (scp). Dashboard regenerado
+            (venv/bin/python dashboard.py) y publicado a mano.
+  Aprendizaje: github_publisher.py usa os.getenv("GITHUB_TOKEN") SIN
+            load_dotenv() — publicar_dashboard() ejecutado suelto devuelve
+            "GITHUB_TOKEN no configurado" si el .env no esta cargado en el
+            entorno. Para publicar el dashboard manualmente fuera del ciclo
+            del bot, cargar el entorno primero:
+              set -a && source .env && set +a && venv/bin/python -c \
+                "from github_publisher import publicar_dashboard; \
+                 print(publicar_dashboard())"
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
