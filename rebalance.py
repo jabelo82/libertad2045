@@ -190,9 +190,10 @@ def _obtener_gtc_stops(ib) -> dict:
                 try:
                     from telegram import send_telegram_critical
                     send_telegram_critical(
-                        f"🔴 LIBERTAD_2045 — Stop GTC duplicado: {symbol} | "
+                        f"⚠️ LIBERTAD_2045 — Stop GTC duplicado detectado: {symbol} | "
                         f"Órdenes {stops[symbol].order.orderId} y {trade.order.orderId}. "
-                        f"Revisar manualmente."
+                        f"Ventana normal de reemplazo (cantidad cambio) — "
+                        f"se autorresuelve en la próxima reconciliación."
                     )
                 except Exception:
                     pass
