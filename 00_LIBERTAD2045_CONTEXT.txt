@@ -340,6 +340,64 @@ Commits principales en producción (más recientes primero):
       y DD simultáneamente aunque sea modestamente, tras filtro de liquidez y con los
       datos disponibles. El número exacto está inflado por survivorship bias.
 
+      ESTIMACION DE SENSIBILIDAD SIN DATASET DE PAGO (07/07/2026, gratuita):
+      Objetivo: acotar cuanto infla el survivorship bias el +70,5% sin comprar
+      Norgate ni esperar acceso WRDS/pyndex. Cuatro fuentes gratuitas cruzadas:
+        1. Estudio NIFTY Smallcap 250 (arxiv 2603.19380, India, 2016-2025):
+           retorno acumulado sobre-estimado 60,4% relativo en universo survivor-
+           only vs completo; drawdown tambien sub-estimado (-42,3% vs -48,7%
+           real). De las empresas excluidas del indice, solo 19,6% quiebran de
+           verdad -- 80,4% salen por ascenso de capitalizacion o absorcion
+           (frecuentemente GANANCIA con prima, no perdida).
+        2. Price Action Lab (blog especializado, no peer-reviewed): sesgo de
+           supervivencia en Russell 2000 especificamente puede alcanzar
+           1000+ pb/anio en rentabilidad anualizada (vs ~200pb en Dow 30, pocos
+           componentes).
+        3. LSEG/FTSE Russell (proveedor oficial del indice, dato publico):
+           rotacion anual del Russell 2000 ~12% desde 2008 (~235 tickers
+           entran/salen cada anio) -- no separa quiebra de ascenso/absorcion.
+        4. Analisis propio sobre expandido_trades_20260624_004619.csv (backtest
+           real ya ejecutado): separando los 1.036 trades de los 319 tickers
+           Russell frente a los 1.651 del S&P500 puro -- WR Russell 51,16% vs
+           S&P500 54,51% (mas bajo, no sospechosamente alto), PF Russell 2,636
+           vs S&P500 2,544 (comparable). Sin señales de trades artificialmente
+           buenos -- el sesgo viene de lo que FALTA (empresas quebradas nunca
+           registradas), no de que lo que SI aparece sea de calidad dudosa.
+
+      CALCULO DE SENSIBILIDAD (haircut aplicado solo sobre el extra de capital
+      que aportan los 319 tickers, 6.266.860€ de diferencia vs baseline v3,
+      no sobre el resultado total):
+        Haircut  0%  (sin corregir)       -> capital 15.155.278€  (+70,5%)
+        Haircut 23%  (NIFTY, minimo)      -> capital 13.713.900€  (+54,3%)
+        Haircut 40%                       -> capital 12.648.534€  (+42,3%)
+        Haircut 60%                       -> capital 11.395.162€  (+28,2%)
+        Haircut 75%                       -> capital 10.454.633€  (+17,6%)
+        Haircut 100% (todo perdida, suelo)-> capital  8.888.418€  (0%)
+
+      RANGO ESTIMADO MAS PROBABLE: +28% a +42% sobre baseline v3 (haircut
+      40-60%). El suelo del 100% se descarta como excesivamente pesimista:
+      la mayoria de exclusiones de indice no son quiebras (fuente 1), asi que
+      tratar TODO el extra como perdida sobre-corrige. Coincide razonablemente
+      con estimacion intuitiva independiente (+15-30%) hecha antes del calculo.
+
+      LIMITACION EXPLICITA: aproximacion por analogia con otros mercados/
+      periodos + un analisis interno, NO es medicion directa del Russell 2000
+      con datos point-in-time reales. No sustituye Norgate/WRDS si en algun
+      momento se consigue acceso barato. Sirve para decidir con datos en vez
+      de a ciegas, no para reemplazar la correccion definitiva.
+
+      CASO LIMITE VERIFICADO (07/07/2026): que pasa si una posicion abierta
+      en un ticker Russell 2000 es absorbida por una empresa del Russell 1000
+      (fuera del universo de escaneo)? Verificado en codigo: NO hay agujero.
+      obtener_posiciones_abiertas() (portfolio_manager.py) lee directo de
+      ib.positions() sin filtrar por universo -- veria la posicion igual.
+      obtener_datos() (data_loader.py) pide a IBKR el historico de CUALQUIER
+      simbolo sin restriccion de universo -- podria calcular ATR/stop para el
+      ticker nuevo igual. Si fallara la descarga de datos, ya existe fail-safe
+      (retorna None, el orquestador descarta ese activo ESE ciclo sin romper
+      nada). El "universo" de 820 tickers solo filtra que se ESCANEA en busca
+      de señales nuevas -- no limita que se GESTIONA una vez la posicion existe.
+
     Exp.45 piramidación A2 (23/06/2026):
       K=2,5×ATR, buy-stop día siguiente High+0,05
       Capital: 11.406.847€ (+28%) | CAGR: 48,9% | DD: 9,6% | Sharpe: 1,64 | Calmar: 5,06
