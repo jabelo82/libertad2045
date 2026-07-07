@@ -497,6 +497,26 @@ Commits principales en producción (más recientes primero):
   Fix:      risk_guardian.py filtra explícitamente por currency in {"BASE","EUR"}.
             7 tests en test_risk_guardian_leverage.py. Commit 4d90eca.
 
+  INCIDENTE — TORRE SE ENCENDIO SOLA TRAS HARDENING RTC (07/07/2026) — CERRADO
+  Sintoma:  Torre encendida sin explicacion, arranque registrado 07/07 11:50
+            (hora caracteristica del watchdog del ciclo antiguo), pese a que
+            ibgateway.service y los 3 timers/servicio RTC seguian disabled
+            desde el hardening del 03/07.
+  Causa:    /usr/local/bin/apagar_torre.sh (script MANUAL usado para apagar
+            la torre desde el ProBook) programa el RTC de la BIOS el mismo
+            usando rtcwake -m no -t <epoch> ANTES de poweroff, calculando la
+            proxima hora de watchdog/bot automaticamente. Es independiente
+            de los timers de systemd que se desactivaron el 03/07 — esos
+            solo controlaban la REPROGRAMACION automatica del ciclo, no este
+            script de apagado manual. Al usarlo para apagar la torre, se
+            reprogramo una alarma RTC nueva sin querer.
+  Fix:      Dejar de usar apagar_torre.sh para apagar la torre ahora que
+            esta retirada de produccion. Usar simplemente: sudo poweroff
+            (sin programar RTC). El script no esta roto, solo obsoleto para
+            el nuevo rol de la torre (inerte, rollback manual).
+  No bloqueante: no afecta a produccion (VPS), la torre no tiene Gateway
+            activo aunque encienda.
+
   INCIDENTE — DASHBOARD VPS SIN DATOS DE POSICIONES (06/07/2026) — CERRADO
   Sintoma:  Tras el cutover, el dashboard del VPS mostraba las 9 posiciones
             en el donut de composicion (capital correcto, vino de
