@@ -704,18 +704,22 @@ def main():
         # Garantiza que el wakeup automático esté configurado
         # incluso si el usuario apaga manualmente antes del
         # timer systemd (trading-night-shutdown.timer, 22:20).
+        # No aplica en VPS: siempre encendido, sin ciclo de RTC físico.
         # --------------------------------------------------
-        try:
-            result = subprocess.run(
-                ["sudo", "/usr/local/bin/trading-boot-rtcwake.sh"],
-                capture_output=True, text=True, timeout=15
-            )
-            if result.returncode == 0:
-                log_event("INFO", "RTC reprogramado para próximo ciclo")
-            else:
-                log_event("WARN", f"RTC no reprogramado: {result.stderr.strip()}")
-        except Exception as e_rtc:
-            log_event("WARN", f"RTC reprogram error: {e_rtc}")
+        if os.getenv("MAQUINA") == "VPS":
+            log_event("INFO", "RTC no aplica (VPS, siempre encendido)")
+        else:
+            try:
+                result = subprocess.run(
+                    ["sudo", "/usr/local/bin/trading-boot-rtcwake.sh"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if result.returncode == 0:
+                    log_event("INFO", "RTC reprogramado para próximo ciclo")
+                else:
+                    log_event("WARN", f"RTC no reprogramado: {result.stderr.strip()}")
+            except Exception as e_rtc:
+                log_event("WARN", f"RTC reprogram error: {e_rtc}")
 
 
     except Exception as e:
