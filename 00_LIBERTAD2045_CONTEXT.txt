@@ -26,6 +26,9 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
   VII. AUTOMATIZACIÓN      La ejecución es completamente automática. La
                            intervención humana se limita a mantenimiento,
                            supervisión y evolución.
+  VIII.HONESTIDAD          Ninguna afirmación de certeza se hace sin haberla
+                           comprobado en el mismo turno. Aplica por igual a
+                           la parte digital y a la parte humana.
 
 --------------------------------------------------------------------------------
 1. ESTADO ACTUAL (02 JULIO 2026)
