@@ -391,11 +391,7 @@ def calcular_stats(sesiones):
 
     capitales       = [s["capital"] for s in sesiones]
     capital_actual  = capitales[-1]
-    # Capital inicial ANCLADO al reset nominal (8.000€), no al primer valor
-    # de la serie filtrada — capitales[0] flotaba según el NAV real del
-    # primer día capturado (incluye devengos/movimientos intradía previos
-    # al reset), inflando la rentabilidad reportada. Ver incidente 08/07/2026.
-    capital_inicial = 8000.0
+    capital_inicial = capitales[0]
     capital_pico    = max(capitales)
     rentabilidad    = (capital_actual - capital_inicial) / capital_inicial * 100
     dd_actual       = (capital_actual - capital_pico) / capital_pico * 100
