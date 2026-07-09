@@ -178,9 +178,10 @@ def registrar_fills_recientes(ib):
             except Exception as e_write:
                 log_event("ERROR",
                           f"registrar_fills_recientes: fallo persistiendo logged_exec_ids.txt: {e_write}")
-            log_event("INFO", f"Fills nuevos registrados: "
-                               f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
-                               f"({len(nuevos_ids)} ejecuciones parciales)")
+        log_event("INFO", f"Fills nuevos registrados: "
+                           f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
+                           f"({len(nuevos_ids)} ejecuciones parciales)")
+        return list(fills_sld.keys())
 
     except Exception as e:
         log_event("WARN", f"registrar_fills_recientes: {e}")
@@ -343,7 +344,7 @@ def main():
             _escribir_last_run()
             return
 
-        registrar_fills_recientes(ib)
+        cierres_gtc = registrar_fills_recientes(ib) or []
 
 
         # --------------------------------------------------
@@ -657,10 +658,16 @@ def main():
 
         runtime = int((datetime.now() - start_time).total_seconds())
 
-        stops_texto = (f"Stops por cierre    : {len(posiciones_cerradas)} "
-                       f"({', '.join(posiciones_cerradas) if posiciones_cerradas else 'ninguno'})\n"
-                       if posiciones_cerradas else
-                       f"Stops por cierre    : 0\n")
+        total_cierres = len(posiciones_cerradas) + len(cierres_gtc)
+        if total_cierres:
+            detalle = []
+            if cierres_gtc:
+                detalle.append(f"{len(cierres_gtc)} vía GTC ({', '.join(cierres_gtc)})")
+            if posiciones_cerradas:
+                detalle.append(f"{len(posiciones_cerradas)} vía cierre día ({', '.join(posiciones_cerradas)})")
+            stops_texto = f"Cierres detectados  : {total_cierres} — {' + '.join(detalle)}\n"
+        else:
+            stops_texto = "Cierres detectados  : 0\n"
 
         message = (
             f"⚙️ LIBERTAD_2045\n\n"
