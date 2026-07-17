@@ -600,6 +600,41 @@ Commits principales en producción (más recientes primero):
                 "from github_publisher import publicar_dashboard; \
                  print(publicar_dashboard())"
 
+  MECANISMO — STOP GTC DE EMERGENCIA TRAS RECHAZO DE ORDEN MKT (documentado
+  16/07/2026, existia ya en codigo — no se conocia como mecanismo formal)
+  Ubicacion: portfolio_manager.py, evaluar_stops_por_cierre(), lineas ~269-311.
+  Funcionamiento: cuando el cierre por evaluacion de precio de fin de sesion
+  decide vender una posicion, envia una orden MKT SELL. Si IBKR la rechaza
+  (estado Cancelled o Inactive) — tipicamente por choque con un stop GTC que
+  otro mecanismo (trailing) toco casi al mismo tiempo — el sistema:
+    1. Registra ERROR y avisa por Telegram inmediatamente (send_telegram_critical)
+    2. Recoloca un stop GTC nuevo al MISMO nivel que ya tenia (stop_level),
+       no uno recalculado — restaura la proteccion existente, no inventa una
+    3. NO marca la posicion como cerrada — sigue tratandola como abierta
+  Ventana real de exposicion: solo el intervalo entre el rechazo detectado
+  y el nuevo placeOrder() del stop de emergencia (~1 segundo en el caso
+  real de abajo) — Y durante esa ventana el stop GTC anterior en IBKR
+  seguia activo salvo que el propio conflicto lo hubiera afectado, asi que
+  el riesgo real es menor que "1 segundo desprotegido" sugiere.
+
+  INCIDENTE REAL — GOOG orden de cierre rechazada (16/07/2026) — CERRADO,
+  mecanismo funciono como diseñado
+  Secuencia (log LIBERTAD_2026-07-16.csv, timestamps al segundo):
+    22:10:18  Trailing actualiza stop GOOG a 354.38 — mismo instante el
+              cierre evaluado (353.81) ya esta por debajo → STOP ACTIVADO
+    22:10:21  Orden MKT SELL enviada → RECHAZADA (Cancelled)
+    22:10:21  ERROR detectado, Telegram critico enviado
+    22:10:22  Stop GTC de emergencia recolocado con exito a 354.38
+  Efecto secundario: el rebalanceo del mismo ciclo detecto tambien un
+  "STOP GTC DUPLICADO" en GOOG (ordenes 22498 y 22519, mismo precio
+  354.38) — mismo patron ya conocido de _obtener_gtc_stops(), autorresuelto
+  por reconciliar_stops_gtc() sin intervencion.
+  Resultado final: GOOG se cerro correctamente la noche siguiente (17/07)
+  via GTC normal, sin perdida adicional ni exposicion prolongada real.
+  Veredicto: no es un bug a corregir — es la tercera capa de seguridad
+  (junto a _hay_stop_gtc_activo y reconciliar_stops_gtc) funcionando en
+  produccion real por primera vez desde que se documenta el proyecto.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
