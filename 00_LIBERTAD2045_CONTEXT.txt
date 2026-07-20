@@ -260,15 +260,26 @@ Commits principales en producción (más recientes primero):
 6. INFRAESTRUCTURA DE DESARROLLO
 --------------------------------------------------------------------------------
 
-  MÁQUINAS:
-    Torre (producción) : jabelo@192.168.1.139, MSI MS-7D48, Zorin OS 18.1
+  MÁQUINAS (ACTUALIZADO 20/07/2026 — torre retirada definitivamente):
+    VPS (PRODUCCIÓN)   : root@46.225.106.85, Hetzner CX23, Ubuntu 24.04
+                         Proyecto: ~/PROYECTO_LIBERTAD_2045 — fuente de verdad operativa
+    ProBook (desarrollo Y respaldo): jabelopc, HP ProBook, Zorin OS/Ubuntu 24.04, Wayland
                          Proyecto: ~/PROYECTO_LIBERTAD_2045
-                         tmux instalado: SÍ (instalado 01/07/2026)
-                         xclip: NO (sistema Wayland — usa wl-clipboard)
-    ProBook (desarrollo): jabelopc, HP ProBook, Zorin OS/Ubuntu 24.04, Wayland
-                         Proyecto: ~/PROYECTO_LIBERTAD_2045 (copia rsync 02/07/2026)
-                         NOTA: ProBook es solo copia/desarrollo, torre es fuente de verdad
-    VPS (producción futuro): root@46.225.106.85, Hetzner CX23, Ubuntu 24.04
+                         Venv reconstruido localmente 13/07/2026 (el rsync original
+                         traia rutas absolutas de la torre, rotas en esta maquina)
+                         Rol desde 20/07/2026: unico respaldo del proyecto ademas
+                         del VPS. No es servidor de produccion, pero mantiene
+                         copia completa de codigo y git funcional.
+    Torre MSI MS-7D48 (RETIRADA 20/07/2026, sin rollback):
+                         jabelo@192.168.1.139, Zorin OS 18.1. Apagada desde 20/07,
+                         ibgateway.service y ciclo RTC deshabilitados desde el
+                         cutover del 03/07 (ver INFRAESTRUCTURA_IBG.md e incidente
+                         "torre encendida sola" en sección 12). Decision explicita
+                         de Javier: ya no se usa como rollback — VPS + ProBook son
+                         las dos unicas maquinas del proyecto de aqui en adelante.
+                         Puede quedar desactualizada en git indefinidamente; si se
+                         enciende algun dia por otro motivo, no es necesario
+                         sincronizarla salvo que se decida reactivarla formalmente.
 
   ACCESO SSH VPS desde ProBook:
     SSH_AUTH_SOCK="" ssh -i ~/.ssh/id_rsa root@46.225.106.85 "comando"
