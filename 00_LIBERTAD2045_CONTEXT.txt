@@ -371,6 +371,38 @@ Commits principales en producción (más recientes primero):
     Exp.38 market breadth       : DESCARTADO (ídem)
     Exp.39 ciclos tipos Fed     : CERRADO (robusto, stops ATR absorben shocks)
     Exp.40-ter TRAILING_FACTOR  : CONFIRMADO 0,75× óptimo vs 1,00×
+    "El Motor" (diseño libre, ~23/06/2026, RECUPERADO 30/07/2026 — nunca
+                                  documentado en el contexto pese a ser la
+                                  validacion mas contundente del proyecto):
+                                  Experimento de diseño LIBRE sin restricciones
+                                  de continuidad con LIBERTAD_2045. Se le pidio
+                                  a Claude Code disenar desde cero un sistema
+                                  alternativo con total libertad de enfoque:
+                                  resultado fue momentum/breakout puro (compra
+                                  fuerza relativa confirmada, sin esperar
+                                  pullback), en vez de la logica de pullback
+                                  de LIBERTAD_2045.
+                                  Resultado backtest comparativo (mismo periodo,
+                                  mismos datos, misma metodologia):
+                                    Capital final: 114.780€ (El Motor) vs
+                                      8.888.418€ (LIBERTAD v3) — ~77x de margen
+                                    Win Rate: 42,2% (El Motor) vs 54,1% (v3)
+                                    Max Drawdown: 16,9% (El Motor) vs 10,4% (v3)
+                                  LIBERTAD gana en TODAS las dimensiones, no
+                                  solo en capital final — descarta que sea una
+                                  comparacion injusta o casualidad.
+                                  Diagnostico: el pullback no es solo un filtro
+                                  de entrada, garantiza precio de entrada
+                                  favorable con el stop natural cerca — misma
+                                  esencia que el Exp.27 (close vs low).
+                                  Archivo: experimento_libre/el_motor.py (torre,
+                                  no comiteado al repo principal — es un
+                                  experimento aislado, no produccion)
+                                  Veredicto: validacion de diseño mas fuerte del
+                                  proyecto hasta la fecha. Sugerencia pendiente
+                                  de Claude Code: incorporar ranking de momentum
+                                  DENTRO de la logica de pullback existente,
+                                  como experimento futuro (nunca ejecutado).
     Exp.42 S&P500+Nasdaq100     : DESCARTADO (solapamiento casi total, 6 tickers netos)
     Exp.43 ROC-60 desempate     : DESCARTADO — Capital 7.317.419€ (−18% vs v3),
                                   PF 2,351, DD 11,1%, WR 54,1%. ROC-60 selecciona
