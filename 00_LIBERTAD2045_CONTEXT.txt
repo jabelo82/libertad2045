@@ -130,44 +130,80 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
     CUTOVER_VPS.md         : NO existe en el repo — fue referenciado pero no creado
 
 --------------------------------------------------------------------------------
-3. TRANSICIÓN A LIVE (AGOSTO 2026)
+3. TRANSICIÓN A LIVE — ACTUALIZADO 30/07/2026, LISTO PARA EL LUNES 03/08
 --------------------------------------------------------------------------------
 
-  Fecha objetivo     : 1 de agosto 2026
-  Acuerdo con        : Paloma (co-firmante del acuerdo de paso a live)
-  Prerequisito       : 4 semanas de PAPER en VPS antes del paso a LIVE
+  Fecha confirmada   : lunes 3 de agosto 2026 (4 semanas PAPER en VPS cumplidas
+                       desde 06/07, sin reinicio de contador — los fixes de
+                       observabilidad de julio no tocaron el motor de decision)
+  Acuerdo con        : Paloma (reconfirmado explicitamente 29/07/2026)
+  Cuenta LIVE        : U24595040 — 4.000€ confirmados via IBKR MCP 30/07/2026
+                       (100€ prueba inicial + 3.900€ transferidos 29/07,
+                       acreditados 30/07). Sin posiciones. Sin apalancamiento.
 
-  ROADMAP CONFIRMADO:
-    1. Cutover formal Torre→VPS (esta semana, julio 2026)
-    2. 4 semanas PAPER en VPS (julio 2026)
-    3. LIVE agosto con baseline v3 — lo que Paloma firmó
-    4. Walk-forward Exp.45 (A2) out-of-sample ago-sep en paralelo
-    5. Corrección survivorship bias Exp.44 Russell 2000 en paralelo
-    6. Activación controlada oct/nov 2026 si validados (Artículo III)
-    REGLA: no meter dos cambios grandes a la vez
+  PRE-REQUISITOS DEL ANEXO B — TODOS CERRADOS:
+    ✓ Cero incidentes criticos ni parches en el motor durante 4 semanas
+    ✓ Reconciliacion GTC probada con duplicado real (incidente GOOG 16/07/2026)
+    ✓ Fondos reales transferidos y confirmados: 4.000€ en U24595040
+    ✓ Paloma reconfirmada
 
-  PASOS PARA EL CORTE A LIVE (ejecutar desde el VPS):
+  COMPARATIVA MES 1 EN VPS vs S&P500 (29/06→29/07/2026, verificada 29/07):
+    LIBERTAD: 7.710,51€ → 7.587€ (-1,6%)
+    S&P500  : 7.499,36 → 7.321,63 (-2,4%, mes bajista real, no simulado)
+    LIBERTAD perdio menos que el indice en un mes adverso — dato real,
+    no backtest, usado para reforzar la confianza antes del corte.
 
-    1. Descomentar cron VPS y comentar cron torre SIMULTÁNEAMENTE
-       (nunca los dos activos a la vez)
+  PROCEDIMIENTO ANEXO B (documento historico CUTOVER_VPS.md, recuperado via
+  busqueda de conversaciones pasadas — el .md nunca se creo en el repo):
 
-    2. Resetear capital_peak al capital inicial real:
-         venv/bin/python -c "from risk_guardian import resetear_capital_peak; \
-                              resetear_capital_peak(4000)"
+    DIA -3 (30/07/2026 — HECHO):
+      Backup .env → .env.paper-backup en el VPS. Confirmado TRADING_MODE=PAPER,
+      IBKR_PORT=4002 antes de tocar nada.
 
-    3. Editar .env:
-         TRADING_MODE=LIVE
-         IBKR_PORT=4001
+    DIA -2 (30/07/2026 — HECHO):
+      El bot NO usa OAuth en el camino de ejecucion (verificado: grep sin
+      resultados en libertad2045.py, trade_executor.py, order_manager.py,
+      conexion_ib.py). Se conecta directo a IB Gateway por puerto — este punto
+      del Anexo B queda simplificado, sin accion adicional.
 
-    4. Editar ~/ibc/config.ini:
-         TradingMode=live
+    DIA -1 (viernes 31/07/2026 — PENDIENTE):
+      Ultimo ciclo en PAPER. Verificar Telegram y dashboard tras las 22:10.
+      Capturar foto del estado final: capital paper, posiciones, stops.
 
-    5. Reiniciar IB Gateway:
-         systemctl --user restart ibgateway.service
+    DIA DEL CORTE (lunes 03/08/2026, antes de las 22:10 — PENDIENTE):
+      1. Parar cron del VPS
+      2. Cerrar MANUALMENTE todas las posiciones paper (DUP301657) desde
+         el portal/app IBKR — decision explicita de Javier 30/07/2026,
+         para dejar el paper en estado limpio sin ambiguedad futura sobre
+         que posiciones son de que fase
+      3. Verificar cuenta paper en 0 posiciones
+      4. Resetear capital_peak: venv/bin/python -c "from risk_guardian import \
+         resetear_capital_peak; resetear_capital_peak(4000)"
+      5. Editar .env: TRADING_MODE=LIVE, IBKR_PORT=4001
+      6. Verificar con diff contra .env.paper-backup — solo esas 2 lineas
+         deben cambiar
+      7. Editar ~/ibc/config.ini: TradingMode=live
+      8. Reiniciar Gateway: systemctl --user restart ibgateway.service
+      9. Verificar que el bot ve la cuenta U24595040 con 4.000€ y 0 posiciones
+      10. Ciclo manual: bash run_bot.sh, observar el log completo
+      11. Confirmar Telegram dice "Modo: LIVE", no PAPER
+      12. Si OK, reactivar cron. Si falla, ver PLAN DE ROLLBACK abajo
 
-    6. Primer ciclo nocturno a las 22:10.
+    ESA NOCHE 22:10 (lunes 03/08/2026):
+      Primer ciclo automatico real en LIVE. Estar delante de la pantalla.
 
-  Ver fase0_cutover_30jun.md para procedimiento completo con rollback.
+  PLAN DE ROLLBACK (si algo falla en el ciclo manual o el primero automatico):
+    1. Desactivar cron inmediatamente
+    2. Restaurar .env.paper-backup como .env
+    3. Reiniciar ibgateway.service (vuelve a puerto paper)
+    4. Cualquier posicion abierta en LIVE durante el fallo QUEDA en LIVE —
+       no se cierra sola. Decision manual: portal IBKR o dejar que el stop
+       GTC ya colocado la gestione.
+    5. Anotar en el log: que fallo, que se hizo, que estado quedo en LIVE
+    6. NO reintentar en caliente. Diagnostico, fix, validacion, nueva fecha.
+    NOTA: una vez en LIVE operando normal, "volver a paper" no es rollback
+    tecnico, es decision estrategica — no se hace por miedo a una operacion
+    perdedora suelta (Articulo I + Articulo II).
 
 --------------------------------------------------------------------------------
 4. VERSIÓN ACTIVA: v2.8
