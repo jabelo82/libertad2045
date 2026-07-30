@@ -534,8 +534,34 @@ Commits principales en producción (más recientes primero):
     Live   : U24595040 — activada con transferencia de prueba (~100€)
     Usuario paper pendiente: jabelo1982paper (estado: Pendiente en portal IBKR)
 
-  PENDIENTE (no bloqueante para cutover):
-    Repuntar token OAuth de U24595040 a DUP301657 — contactar soporte IBKR
+  CERRADO SIN EJECUCION (actualizado 30/07/2026): el repunte del token
+  a DUP301657 NUNCA se ejecuto (quedo explicitamente "abierto, no resuelto"
+  segun conversacion del 02/07/2026 — no es que se hiciera y se olvidara
+  documentar). Con la transicion a LIVE del lunes 03/08/2026, este pendiente
+  queda CERRADO POR CIRCUNSTANCIAS, no por accion: el OAuth ya apunta a
+  U24595040, que pasa a ser la cuenta operativa real — deja de ser un
+  problema, es lo correcto de aqui en adelante. Confirmado con lectura
+  real via herramienta MCP IBKR 30/07/2026: net_liquidation 4.000,00€,
+  sin posiciones, cuenta LIVE.
+
+  ANEXO A (procedimiento historico, redactado 30/06/2026, NUNCA EJECUTADO,
+  conservado solo como referencia si algun dia hiciera falta repuntar un
+  token OAuth por otro motivo):
+    Cuando se ejecuta: solo si una prueba ciega devuelve una cifra que NO
+    coincide con la cuenta esperada.
+    Procedimiento resumido: (1) confirmar cifra exacta vs cuenta esperada,
+    (2) captura del estado "antes" en el portal IBKR, (3) cron desactivado
+    en ambas maquinas durante la operacion, (4) portal IBKR -> Settings/API
+    -> localizar token OAuth activo, anotar ID/fecha/cuenta, (5) revocar
+    token actual, (6) crear token nuevo seleccionando EXPLICITAMENTE la
+    cuenta correcta (punto critico: si el portal solo muestra una cuenta,
+    investigar con soporte IBKR antes de continuar), (7) actualizar .env
+    con permisos 600, (8) NO tocar el .env de la maquina secundaria hasta
+    confirmar que el token nuevo funciona.
+    Decision explicita de Javier en su momento (Articulo I, espiritu):
+    este repunte lo hace la persona, no Claude Code — es el humano quien
+    autoriza cambios de credenciales de broker, aunque Claude pueda
+    preparar los scripts de verificacion posterior.
 
 --------------------------------------------------------------------------------
 10. PAPER TRADING — RESULTADOS ACTUALES (01/07/2026)
