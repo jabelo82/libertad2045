@@ -524,7 +524,11 @@ Commits principales en producción (más recientes primero):
 --------------------------------------------------------------------------------
 
   Período            : 2006–2025
-  Capital inicial    : 8.000 €
+  Capital inicial    : 4.000 € (mas aportaciones anuales de 4.000€,
+                       CORREGIDO 01/08/2026 -- error de documentacion
+                       previo, el script backtest_expandido.py usa
+                       CAPITAL_INICIAL = 4000.0, no 8.000. Verificado
+                       en codigo, no en memoria)
   Capital final      : 8.888.418 €
   TIR                : 37,81%
   CAGR               : 47,0%
