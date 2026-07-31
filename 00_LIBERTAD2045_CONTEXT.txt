@@ -496,6 +496,65 @@ Commits principales en producción (más recientes primero):
       momento se consigue acceso barato. Sirve para decidir con datos en vez
       de a ciegas, no para reemplazar la correccion definitiva.
 
+      BACKTEST REAL COMPLETADO (01/08/2026) — universo 739 tickers (S&P500 +
+      Russell 2000 filtrado por liquidez, 238 de 319), YA CON survivorship
+      bias parcialmente corregido via filtro de liquidez del 07/07. VPN
+      necesaria para descargar los ~640 tickers historicos adicionales
+      (empresas quebradas 1996-2025) que ni ProBook ni VPS ni torre tenian
+      en cache — Yahoo Finance bloqueaba sin VPN, tres semanas de intentos.
+        Capital final    : 11.554.924€ (vs 8.888.418€ baseline v3) = +30,0%
+        Win Rate         : 52,9% (vs 54,1% v3)
+        Profit Factor    : 2,3675 (vs 2,607 v3)
+        Drawdown maximo  : 12,48% (vs 10,43% v3) -- SUPERA el limite operativo
+                           real de produccion (MAX_DRAWDOWN=10%)
+        Trades           : 2.649 (vs 2.402 v3)
+      El +30% cae dentro del rango estimado dos semanas antes (+28-42%) sin
+      tener el backtest real — buena señal de que la metodologia de
+      sensibilidad era razonable.
+
+      RECONSTRUCCION DEL DRAWDOWN MAXIMO (calculado 01/08/2026 sobre las
+      curvas de capital dia a dia de ambos backtests):
+        v3 baseline    : DD max 10,43% el 19/08/2008 (ANTES de que Lehman
+                         Brothers quebrara, 15/09/2008). 46 dias con
+                         DD>10%, del 30/07/2008 al 31/12/2008.
+        Exp.44 filtrado: DD max 12,48% el 20/11/2008 (DOS MESES DESPUES de
+                         Lehman, en pleno panico ya declarado). 60 dias con
+                         DD>10%, del 10/07/2008 al 31/12/2008 (empieza 20
+                         dias antes que v3).
+      Interpretacion: en agosto 2008 (antes del grueso de la crisis) ambos
+      backtests iban practicamente empatados en capital (~14.500€ de pico).
+      La divergencia se genera DESPUES — las small-caps del diferencial
+      Russell sufren mas y mas tarde en la fase de panico posterior a
+      Lehman (menor liquidez, gaps mas violentos en caidas), no en el
+      shock inicial. LEHMQ en si NO es un problema exclusivo del Exp.44 --
+      Lehman Brothers estaba en el S&P500, afecta a los DOS backtests por
+      igual (mismo hueco de datos historicos, los 352-640 tickers sin
+      descargar). El riesgo real es estructural de small-caps en panico
+      generalizado, no de un ticker puntual.
+      Confirmado importante: el baseline v3 YA VALIDADO Y A PUNTO DE
+      OPERAR CON DINERO REAL el lunes 03/08/2026 tambien supero el limite
+      operativo del 10% durante 46 dias en su peor año historico (2008) --
+      esto no es un fallo, es el Risk Guardian bloqueando entradas nuevas
+      correctamente sin cerrar posiciones existentes, exactamente como
+      esta diseñado para hacer.
+
+      HIPOTESIS ABIERTA PARA FUTURO EXPERIMENTO (propuesta por Javier,
+      01/08/2026, NO validada, NO ejecutada): en vez de Russell 2000
+      (small-caps, mas gaps, mas quiebras silenciosas), probar el
+      diferencial Russell 1000 (grandes/medianas capitalizaciones fuera
+      del S&P500 -- mas liquidas, menos riesgo tipo Lehman) con un LIMITE
+      DURO de que ese segmento nunca supere el 40% del capital de la
+      cartera. Razonamiento: mismo tipo de diversificacion que aporto el
+      Exp.44 pero con empresas estructuralmente mas seguras, evitando el
+      patron de drawdown tardio que penalizo al Russell 2000 en la crisis
+      de 2008. PENDIENTE TODO: extraer diferencial Russell 1000 (pipeline
+      nuevo, no reutilizable del Exp.44), filtro de liquidez propio,
+      backtest completo, y si los numeros cuadran, cambio de diseño real
+      en position_size.py/risk_guardian.py para el limite del 40% -- esto
+      ultimo es cambio de codigo en el corazon del sistema, no ajuste de
+      parametro de laboratorio. Candidato a Exp.46, otoño 2026, respetando
+      la Regla de Oro (un cambio grande a la vez).
+
       CASO LIMITE VERIFICADO (07/07/2026): que pasa si una posicion abierta
       en un ticker Russell 2000 es absorbida por una empresa del Russell 1000
       (fuera del universo de escaneo)? Verificado en codigo: NO hay agujero.
