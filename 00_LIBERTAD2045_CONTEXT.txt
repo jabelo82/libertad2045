@@ -166,9 +166,37 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
       conexion_ib.py). Se conecta directo a IB Gateway por puerto — este punto
       del Anexo B queda simplificado, sin accion adicional.
 
-    DIA -1 (viernes 31/07/2026 — PENDIENTE):
-      Ultimo ciclo en PAPER. Verificar Telegram y dashboard tras las 22:10.
-      Capturar foto del estado final: capital paper, posiciones, stops.
+    DIA -1 (viernes 31/07/2026 — HECHO):
+      Ultimo ciclo real en PAPER, verificado con datos del dashboard real
+      (timestamp 31/07/2026 22:15), no de memoria.
+      FOTO FINAL DEL ESTADO PAPER:
+        Capital        : 7.505€ (pico 7.766€)
+        Rentabilidad   : -3,03% desde inicio PAPER
+        Drawdown actual: -3,36% (limite -10,00%)
+        Sesiones       : 37 | Trades ejecutados: 127 | Señales: 190
+        Posiciones abiertas (8): DVN, IFF, APA, DRI, NEE, APH, EMR, ANET
+        Risk Guardian  : 9 bloqueos historicos totales, ninguno nuevo
+                         desde el 07/07 — 4 semanas sin incidentes de
+                         apalancamiento nuevos
+        Entradas nuevas HOY (4): DVN, APA, APH, ANET — el sistema seguia
+                         encontrando señales normales el ultimo dia,
+                         sin degradacion de actividad
+      Decision de Javier (31/07/2026, 23:51): confiar los 4.000€ pese al
+      mes en -3,03% — la decision se basa en el comportamiento correcto
+      del sistema durante las 4 semanas (sin incidentes de ejecucion,
+      drawdown muy por debajo del limite, Risk Guardian funcionando),
+      no en que el mes haya sido positivo. Coherente con el Articulo II:
+      la supervivencia y el comportamiento del sistema pesan mas que el
+      resultado de un mes concreto.
+      Contexto adicional: el mismo dia se detecto que el S&P500 remonto
+      un 1,36% en una sola sesion (30/07, tras resultados de Microsoft
+      +17%) mientras LIBERTAD seguia cayendo ligeramente — comparativa
+      mensual paso de +favorable a -favorable para LIBERTAD en cuestion
+      de dias. Explicado: el sistema busca pullback+recuperacion, no
+      rupturas verticales de un solo dia — el mismo diseño que le gano
+      a "El Motor" por 77x en 20 años es el que se pierde saltos
+      puntuales como el de Microsoft. Verificado que el sistema si
+      opero en el sector relacionado (ANET, APH entraron el mismo dia).
 
     DIA DEL CORTE (lunes 03/08/2026, antes de las 22:10 — PENDIENTE):
       1. Parar cron del VPS
