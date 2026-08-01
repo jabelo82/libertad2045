@@ -600,10 +600,22 @@ Commits principales en producción (más recientes primero):
       comparar contra el mismo periodo del baseline v3 (capital v3 en
       2015-01-02: 174.891,99€ -> final 31/12/2025: 8.460.168,77€,
       variacion +4737,4% en el subperiodo, solo como referencia de base,
-      no comparable en magnitud directamente). Resultado pendiente.
+      no comparable en magnitud directamente).
+      RESULTADO 2015-2025 (con universo joven incluido, sin sesgo de
+      solo veteranas): capital 4.000€ -> 587.218,36€, WR 55,4%, PF 2,47,
+      DRAWDOWN MAXIMO 7,9% (vs 8,87% del v3 baseline en la misma ventana,
+      18/10/2023) -- el Exp.46 MEJORA el drawdown respecto al baseline en
+      esta ventana reciente, y NINGUNO de los dos supera ya el limite
+      operativo del 10% (a diferencia de 2006-2025, donde ambos lo
+      rompian en la crisis de 2008). Confirma que el resultado del Exp.46
+      no depende de un artefacto de seleccion de muestra sesgada hacia
+      empresas veteranas -- en la ventana donde el universo joven SI
+      puede evaluarse, el resultado sigue siendo bueno.
 
-      DECISION SOBRE ACTIVACION EN LIVE DESDE EL PRINCIPIO (02/08/2026,
-      discutido y decidido la noche antes del cutover a LIVE): NO se activa
+      VALORACION SOBRE ACTIVACION EN LIVE DESDE EL PRINCIPIO (02/08/2026,
+      debatido la noche antes del cutover a LIVE, AUN ABIERTO -- pendiente
+      del resultado del backtest con limite de exposicion 40% en curso):
+      hasta este punto de la noche, NO se activa
       el Russell 1000 desde el primer dia de LIVE, pese al buen resultado.
       Motivos: (1) Regla de Oro -- LIVE con dinero real ya es el cambio
       grande de esta semana, no debe mezclarse con otro cambio grande de
