@@ -555,6 +555,69 @@ Commits principales en producción (más recientes primero):
       parametro de laboratorio. Candidato a Exp.46, otoño 2026, respetando
       la Regla de Oro (un cambio grande a la vez).
 
+      EXP.46 — RUSSELL 1000, BACKTEST REAL COMPLETADO (01-02/08/2026):
+      hipotesis del 01/08 confirmada con datos reales. Fuente de datos
+      NUEVA (Wikipedia + pandas.read_html(), ya que iShares dejo de
+      responder correctamente para descargas automatizadas durante esta
+      sesion): 1.013 tickers Russell 1000 extraidos, 520 en diferencial
+      fuera del S&P500, 512 pasan filtro de liquidez (99,6% -- confirma
+      que el Russell 1000 es estructuralmente mucho mas liquido que el
+      Russell 2000, que solo tuvo 74,4% de aprobados en el mismo filtro).
+      Universo final: 1.013 tickers (501 S&P500 + 512 diferencial filtrado).
+        Capital final    : 11.413.218€ (vs 8.888.418€ v3, +28,4%)
+        Win Rate         : 53,8% (vs 54,1% v3 -- practicamente igual)
+        Profit Factor    : 2,6132 (vs 2,607 v3 -- LIGERAMENTE MEJOR,
+                           sin el trade-off que si tiene el Exp.44)
+        Drawdown maximo  : 11,7% (vs 10,4% v3 -- sigue superando el
+                           limite operativo real del 10%, pero por menos
+                           margen que el Exp.44/Russell2000, que llego a 12,5%)
+        Trades           : 2.501 (vs 2.402 v3)
+      Comparativa directa Exp.44 vs Exp.46 (mismo capital inicial, misma
+      metodologia, mismo periodo 2006-2025):
+        Capital: 11.554.924€ (Exp.44) vs 11.413.218€ (Exp.46) -- practicamente
+                 empatados (diferencia de solo 1,2%)
+        WR: 52,9% (Exp.44) vs 53,8% (Exp.46) -- Exp.46 mejor
+        PF: 2,368 (Exp.44) vs 2,613 (Exp.46) -- Exp.46 claramente mejor
+        DD: 12,5% (Exp.44) vs 11,7% (Exp.46) -- Exp.46 mejor (menos peor)
+      CONCLUSION: el Russell 1000 aporta el MISMO beneficio de capital que
+      el Russell 2000 pero con MEJOR calidad de riesgo en las tres metricas
+      restantes -- confirma la intuicion de Javier del 01/08 sobre small-caps
+      vs large/mid-caps y el patron de drawdown tardio tipo Lehman.
+
+      LIMITACION SERIA IDENTIFICADA DURANTE EL ANALISIS (02/08/2026,
+      Javier): el filtro de "minimo 200 barras" aplicado sobre la ventana
+      2006-2025 excluye por diseño a cualquier empresa que saliera a bolsa
+      despues de 2006 -- de los 830 candidatos brutos del Exp.44 original,
+      511 (62%) quedaron fuera NO por falta de liquidez ni por historial de
+      quiebra, sino simplemente por ser demasiado jovenes para el backtest.
+      Esto significa que el backtest de 20 años representa solo al
+      subconjunto de empresas "veteranas" del universo -- si se activara
+      en produccion hoy, el sistema escanearia el diferencial COMPLETO
+      actual (incluyendo las jovenes nunca vistas en el backtest). Sin
+      resolver del todo: se lanzo en paralelo un backtest de ventana
+      recortada 2015-2025 (mismo universo, mismo umbral de 200 barras
+      pero exigiendo solo ~1 año de historia en vez de ~20) para poder
+      comparar contra el mismo periodo del baseline v3 (capital v3 en
+      2015-01-02: 174.891,99€ -> final 31/12/2025: 8.460.168,77€,
+      variacion +4737,4% en el subperiodo, solo como referencia de base,
+      no comparable en magnitud directamente). Resultado pendiente.
+
+      DECISION SOBRE ACTIVACION EN LIVE DESDE EL PRINCIPIO (02/08/2026,
+      discutido y decidido la noche antes del cutover a LIVE): NO se activa
+      el Russell 1000 desde el primer dia de LIVE, pese al buen resultado.
+      Motivos: (1) Regla de Oro -- LIVE con dinero real ya es el cambio
+      grande de esta semana, no debe mezclarse con otro cambio grande de
+      universo: si algo falla las primeras semanas no se podria distinguir
+      la causa; (2) el universo ampliado nunca ha corrido ni un solo dia,
+      ni siquiera en PAPER -- se saltaria la disciplina de rodaje que ha
+      tenido todo el resto del proyecto; (3) drawdown 11,7% sigue superando
+      el limite operativo real del 10%; (4) carga operativa (doble de
+      tickers a escanear cada noche) nunca verificada en el VPS real.
+      Camino acordado: mismo que el Exp.44 -- laboratorio ahora (este
+      backtest), activacion controlada en otoño 2026 tras walk-forward y
+      una temporada de rodaje en PAPER, respetando el Articulo III
+      (evolucion controlada, no parches sobre el sistema en caliente).
+
       CASO LIMITE VERIFICADO (07/07/2026): que pasa si una posicion abierta
       en un ticker Russell 2000 es absorbida por una empresa del Russell 1000
       (fuera del universo de escaneo)? Verificado en codigo: NO hay agujero.
