@@ -708,6 +708,40 @@ Commits principales en producción (más recientes primero):
   Trades             : 2.402
   Rebalanceos        : ~390
 
+
+⚠️ COBERTURA DE DATOS CUANTIFICADA (02/08/2026, madrugada previa al
+  cutover a LIVE): el universo historico completo (sp500_composicion.csv,
+  1.459 tickers incluyendo empresas deslistadas) tiene 352 tickers SIN
+  cache real en disco. De ellos, 108 SI eran candidatos relevantes dentro
+  de la ventana 2006-2025 (confirmado cruzando contra la composicion
+  historica de ese periodo especifico, 831 candidatos relevantes en
+  total) -- es decir, el 13,0% de los candidatos que deberian haberse
+  evaluado en el backtest NO lo fueron, por falta de datos de precio.
+  Verificado que 0 de esos 108 aparecen en el fichero de trades del
+  resultado (coherente, sin datos no pueden generar trades -- no
+  demuestra que el hueco sea inocuo, solo confirma que existe).
+  Intentado descargar los 108 el 02/08/2026: 0 de 108 consiguieron datos
+  -- el fallo NO es rate limit (a diferencia del Exp.46), es
+  "possibly delisted; no timezone found" -- Yahoo Finance ya NO reconoce
+  estos simbolos en absoluto (empresas deslistadas hace años: Celgene,
+  Cerner, Twitter, Xilinx, Anthem, Activision Blizzard, JCPenney, y 101
+  mas). NO ES UN PROBLEMA TEMPORAL RESOLUBLE CON REINTENTOS NI VPN.
+  El S&P500 ACTUAL (501 tickers, lo que el bot escanea cada noche en
+  produccion real) SI tiene cobertura del 100% -- el hueco esta
+  exclusivamente en la parte historica usada para el backtest de 20
+  años, no en la operativa diaria del sistema.
+  DECISION EXPLICITA DE JAVIER (02/08/2026, madrugada antes del cutover):
+  el LIVE del lunes 03/08/2026 continua tal como estaba planeado, con el
+  baseline v3. Los numeros de este backtest (capital final 8.888.418€,
+  drawdown 10,4%, profit factor 2,6071) pasan a tratarse como
+  ORIENTATIVOS, no como cifras exactas garantizadas -- el sistema puede
+  comportarse de forma parecida en la realidad, pero estos numeros
+  concretos estan calculados sobre un universo de candidatos incompleto
+  en un 13%. Esta limitacion no es nueva de esta noche -- ya estaba
+  documentada en espiritu desde hace semanas (sin alternativa gratuita a
+  Norgate/WRDS para el dataset completo) -- lo nuevo es la cuantificacion
+  exacta y verificada del hueco real.
+
   Parámetros activos en producción:
     SMA50 > SMA200    : filtro de tendencia alcista
     ATR dinámico      : stop loss adaptativo (percentil histórico B1)
