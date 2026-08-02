@@ -555,6 +555,42 @@ Commits principales en producción (más recientes primero):
       parametro de laboratorio. Candidato a Exp.46, otoño 2026, respetando
       la Regla de Oro (un cambio grande a la vez).
 
+      ⚠️ INVALIDADO (02/08/2026, madrugada) — LOS TRES RESULTADOS DEL
+      EXP.46 QUE SIGUEN A CONTINUACION (backtest 2006-2025, backtest
+      2015-2025, backtest con limite 40%) ESTAN CONTAMINADOS POR
+      COBERTURA DE DATOS INCOMPLETA. Descubierto verificando la cache
+      real en disco (data/), no el texto del log: de los 512 tickers
+      del diferencial Russell 1000 filtrado por liquidez, SOLO 132
+      (25,8%) tenian datos reales descargados con exito -- el resto
+      fallo por YFRateLimitError durante la descarga y quedo excluido
+      SILENCIOSAMENTE del universo de ese backtest, sin que el
+      "VEREDICTO" final lo reflejara de ninguna forma. Los tres
+      backtests de esta madrugada usan la MISMA cache parcial (845
+      activos cargados de 1.598 en los tres casos) -- no son tres
+      resultados independientes, son el mismo universo incompleto
+      analizado tres veces con parametros distintos.
+      CONSECUENCIA: ninguna conclusion de esta seccion es fiable --
+      ni la comparativa favorable Exp.44 vs Exp.46, ni la mejora de
+      drawdown en 2015-2025, ni el efecto (aparentemente nulo) del
+      limite de exposicion 40%. El 25,8% de cobertura no es una
+      muestra aleatoria representativa -- es simplemente "lo que
+      Yahoo dejo pasar esa noche antes de bloquear", sin ningun
+      criterio de calidad o representatividad.
+      LECCION PARA EL FUTURO: antes de dar por bueno CUALQUIER
+      resultado de backtest, verificar "Activos cargados" en el log
+      contra el "Universo total" esperado, Y ademas verificar
+      directamente la cache en disco para el segmento especifico que
+      se esta evaluando (no basta con el agregado global, que mezcla
+      el universo con y sin problemas de descarga).
+      PENDIENTE REAL: repetir estos tres backtests cuando se pueda
+      garantizar cobertura completa (>95%) del diferencial Russell
+      1000 -- probablemente necesita varias sesiones con VPN en dias
+      distintos para completar la descarga de los ~380 tickers que
+      faltan, dado que Yahoo bloquea de forma intermitente e
+      impredecible incluso con VPN activa.
+
+      --- Resultados originales de esta noche (NO FIABLES, conservados
+      solo como referencia historica de lo que se penso inicialmente) ---
       EXP.46 — RUSSELL 1000, BACKTEST REAL COMPLETADO (01-02/08/2026):
       hipotesis del 01/08 confirmada con datos reales. Fuente de datos
       NUEVA (Wikipedia + pandas.read_html(), ya que iShares dejo de
