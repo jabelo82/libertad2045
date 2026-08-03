@@ -213,8 +213,24 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
       7. Editar ~/ibc/config.ini: TradingMode=live
       8. Reiniciar Gateway: systemctl --user restart ibgateway.service
       9. Verificar que el bot ve la cuenta U24595040 con 4.000€ y 0 posiciones
-      10. Ciclo manual: bash run_bot.sh, observar el log completo
-      11. Confirmar Telegram dice "Modo: LIVE", no PAPER
+      10. Ciclo manual EN MODO SIM (CORREGIDO 03/08/2026, dia del corte):
+          decision de Javier de verificar sin arriesgar una operacion real
+          fuera de la ventana nocturna habitual -- el primer ciclo LIVE de
+          verdad sera el automatico de las 22:10, no este manual de tarde.
+          NO usar run_bot.sh tal cual -- el propio script hace
+          "source .env" DESPUES de arrancar, lo que sobreescribiria
+          cualquier TRADING_MODE=SIM puesto delante del comando (se
+          detecto y evito este fallo antes de ejecutarlo). Comando
+          correcto, forzando SIM DESPUES de cargar el .env real:
+            ssh ... "cd /root/PROYECTO_LIBERTAD_2045 && set -a && \
+              source .env && set +a && export TRADING_MODE=SIM && \
+              source venv/bin/activate && python libertad2045.py"
+          Esto conecta de verdad a la cuenta LIVE (lee 4.000€, 0 posiciones)
+          pero NO ejecuta ninguna orden real. No usa el lockfile de
+          run_bot.sh -- aceptable por ser ejecucion manual unica y
+          controlada, sin riesgo de solape con otro proceso.
+      11. Confirmar Telegram dice "Modo: SIM" en esta prueba de tarde (no
+          "LIVE" -- eso se confirma esta noche con el ciclo real 22:10)
       12. Si OK, reactivar cron. Si falla, ver PLAN DE ROLLBACK abajo
 
     ESA NOCHE 22:10 (lunes 03/08/2026):
