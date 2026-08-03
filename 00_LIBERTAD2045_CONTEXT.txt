@@ -198,7 +198,7 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
       puntuales como el de Microsoft. Verificado que el sistema si
       opero en el sector relacionado (ANET, APH entraron el mismo dia).
 
-    DIA DEL CORTE (lunes 03/08/2026, antes de las 22:10 — PENDIENTE):
+    DIA DEL CORTE (lunes 03/08/2026 — COMPLETADO, con incidencias resueltas):
       1. Parar cron del VPS
       2. Cerrar MANUALMENTE todas las posiciones paper (DUP301657) desde
          el portal/app IBKR — decision explicita de Javier 30/07/2026,
@@ -235,6 +235,58 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
 
     ESA NOCHE 22:10 (lunes 03/08/2026):
       Primer ciclo automatico real en LIVE. Estar delante de la pantalla.
+
+
+  RESULTADO REAL DEL CORTE Y PRIMER CICLO LIVE (03/08/2026):
+    Pasos 1-9 completados sin incidentes mayores, salvo:
+      - Gateway no abria el puerto 4001 tras el reinicio (paso 8): causa
+        real fue un SEGUNDO dialogo de 2FA (ademas del login inicial) que
+        caduco antes de verse — resuelto conectando por VNC (x11vnc +
+        tigervnc-viewer via tunel SSH) para ver la pantalla del Gateway
+        en directo, aprobando el 2FA a tiempo, y pulsando "Apply" en la
+        pantalla de Configure->Settings->API->Settings para que el
+        socket terminara de activarse. Sin esa verificacion visual
+        directa no se habria detectado la causa real.
+    Paso 10 (ciclo manual SIM) ejecutado DOS veces: una con bloqueo por
+    Risk Guardian (fuera de ventana horaria, 16h), y una segunda con
+    TRADING_MODE=SIM + FORCE_HOUR_BYPASS=true que si completo el ciclo
+    entero (4 señales calculadas: AMZN, WY, ANET, LUV, ninguna orden
+    real enviada) — confirmacion de extremo a extremo antes del ciclo
+    real de esta noche.
+    PRIMER CICLO AUTOMATICO REAL 22:10-22:12: 13 señales detectadas,
+    10 tras filtro, 5 intentos de entrada. RESULTADO: 4 de 5 RECHAZADOS
+    por IBKR (AMZN, WY, DD, LUV) con Error 201 "BEFORE WE CAN ACCEPT
+    YOUR ORDER IN THIS SECURITY, PLEASE LOGIN TO CLIENT PORTAL AND
+    VERIFY USING THE TOKEN WE EMAILED TO YOU". Solo ANET se ejecuto con
+    exito. El mecanismo de seguridad ya existente (cancelar la entrada
+    si el stop es rechazado) funciono correctamente en los 4 casos —
+    verificado con Interactive Brokers (IBKR):get_account_orders que no
+    quedo ninguna orden huerfana activa.
+    HIPOTESIS INICIAL (INCORRECTA): se penso que el problema era el
+    margen de 1 segundo entre placeOrder() y la comprobacion del estado
+    del stop, y se amplio a 3s en trade_executor.py (commit dbec018).
+    Este cambio SI paso los 34 tests pero NO era la causa real.
+    CAUSA REAL CONFIRMADA (segundo ciclo manual, mismo dia, con el fix
+    de 3s ya aplicado): los mismos 4 simbolos volvieron a fallar con el
+    MISMO error 201 — descarta el timing como causa. Es una verificacion
+    de seguridad de IBKR ESPECIFICA POR VALOR ("security-specific"),
+    exigida la primera vez que se opera cada simbolo en una cuenta LIVE
+    nueva. Confirmado por soporte IBKR (chat FAQ automatizado, no agente
+    humano): "This is a security-specific requirement, which explains
+    why some symbols (like ANET) work while others are being rejected."
+    PENDIENTE REAL PARA MAÑANA (04/08/2026, horario de oficina): no ha
+    llegado ningun email de verificacion (revisado inbox y spam, email
+    de la cuenta confirmado correcto, cerrar/reabrir sesion tampoco lo
+    disparo). Soporte automatizado de IBKR recomienda contactar con el
+    Trade Desk directamente (telefono o chat con agente humano, no el
+    buscador de FAQ) para resolver la restriccion especifica por valor.
+    NO ES URGENTE NI BLOQUEANTE: el sistema sigue operando con
+    normalidad para el resto del universo (500 simbolos), el mecanismo
+    de seguridad ya demostrado protege cualquier intento fallido, y
+    ANET ya tiene su primera posicion real abierta y protegida con GTC.
+    trade_executor.py con sleep(3) se queda tal cual (no hace daño,
+    aunque no fuera la causa real) salvo que se decida revertir mas
+    adelante con calma.
 
   PLAN DE ROLLBACK (si algo falla en el ciclo manual o el primero automatico):
     1. Desactivar cron inmediatamente
