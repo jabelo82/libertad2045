@@ -109,7 +109,18 @@ def ejecutar_trade(ib, symbol, df, shares, stop_distance, buffer=0.05, mode="SIM
 
     try:
         stop_trade = ib.placeOrder(contract, stop)
-        ib.sleep(1)
+        # Margen ampliado de 1s a 3s (03/08/2026, primer ciclo LIVE real):
+        # 4 de 5 stops rechazados con "Cancelled" en la primera noche de
+        # produccion real, todos exitosos en ANET donde por azar IBKR
+        # respondio mas rapido. Hipotesis: 1s insuficiente para que IBKR
+        # confirme el estado real de la orden en una cuenta LIVE, sobre
+        # todo recien activada -- nunca se vio este problema en meses de
+        # PAPER, posible mayor latencia/validacion adicional en cuentas
+        # reales. Verificado en IBKR tras el ciclo: ninguna orden huerfana
+        # quedo activa, el mecanismo de seguridad funciono correctamente
+        # en cualquier caso -- este cambio busca reducir falsos positivos,
+        # no es un fix de seguridad critico.
+        ib.sleep(3)
     except Exception as e:
         log_event("ERROR",
                   f"Stop GTC fallido para {symbol} — cancelando entrada BUY para evitar orden huérfana: {e}",
