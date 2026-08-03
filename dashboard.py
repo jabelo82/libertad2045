@@ -69,7 +69,7 @@ CAPITAL_PEAK_FILE = os.path.join(os.path.dirname(__file__), "capital_peak.txt")
 PORTFOLIO_CACHE   = os.path.join(os.path.dirname(__file__), "portfolio_cache.json")
 
 # Nueva etapa desde esta fecha — los logs anteriores se ignoran
-RESET_DATE        = "2026-06-10"
+RESET_DATE        = "2026-08-03"
 
 # clientId exclusivo para el dashboard (bot=1, rebalancer=5, watchdog=6)
 DASHBOARD_CLIENT_ID = 7

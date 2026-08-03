@@ -866,6 +866,40 @@ Commits principales en producción (más recientes primero):
     IBKR financia el exceso en USD (saldo USD negativo). Esto es correcto por
     diseño — el Risk Guardian bloquea correctamente en esos momentos.
 
+  DASHBOARD LIMPIADO Y REORGANIZACION DE LOGS (03/08/2026, dia del corte):
+    RESET_DATE en dashboard.py cambiado de "2026-06-10" a "2026-08-03" —
+    el dashboard deja de mostrar la historia de PAPER (38 sesiones, capital
+    peak 7.766€) y arranca de cero para la fase LIVE. La historia de PAPER
+    NO se pierde: los CSV siguen existiendo en disco, solo el dashboard
+    deja de leerlos.
+    Los 38 CSV de sesiones diarias de PAPER (04/04/2026 a 02/07/2026 en el
+    ProBook, hasta 02/07/2026 en el VPS) se movieron manualmente a
+    logs/paper/ en el VPS, como archivo organizativo. El CSV del propio
+    03/08/2026 (dia de transicion: reset de capital_peak + ciclo de prueba
+    SIM) se guardo en logs/live/ por separado.
+    DECISION IMPORTANTE: se intento inicialmente cambiar tambien LOG_DIR
+    en dashboard.py para que apuntara a logs/live/ de forma permanente,
+    pero se descubrio que logger.py (el modulo central de logging usado
+    por TODO el sistema — bot, watchdog, rebalanceo) sigue escribiendo en
+    logs/ a secas, sin conocer la subcarpeta live/. Cambiar logger.py
+    habria sido un cambio de mucho mayor alcance justo la noche del primer
+    ciclo LIVE real — se descarto por prudencia (Articulo I, Regla de Oro).
+    SOLUCION FINAL, MAS SIMPLE Y SEGURA: LOG_DIR en dashboard.py se dejo
+    sin tocar (sigue apuntando a logs/, no a logs/live/). El propio filtro
+    RESET_DATE=2026-08-03 ya hace todo el trabajo necesario — cualquier
+    CSV con fecha anterior a hoy se ignora automaticamente. Los nuevos CSV
+    que logger.py escriba a partir de esta noche (bot, watchdog) se
+    quedaran en logs/ tal cual, y el dashboard los leera con normalidad
+    porque su fecha ya sera >= RESET_DATE.
+    logs/paper/ y logs/live/ quedan como carpetas de ARCHIVO MANUAL
+    unicamente — ningun codigo del sistema depende de ellas ni las lee.
+    CONFIRMADO CON CICLO REAL DE PRUEBA (FORCE_HOUR_BYPASS=true,
+    TRADING_MODE=SIM) ejecutado ANTES de comitear este cambio: dashboard
+    aun mostro "Sesiones: 38" (el numero de la fase PAPER completa) —
+    coherente, confirma que RESET_DATE=2026-08-03 no estaba aplicado
+    todavia en ese momento. Tras comitear este cambio, el proximo ciclo
+    (esta noche 22:10) deberia mostrar Sesiones: 1.
+
 --------------------------------------------------------------------------------
 12. INCIDENTES HISTÓRICOS
 --------------------------------------------------------------------------------
