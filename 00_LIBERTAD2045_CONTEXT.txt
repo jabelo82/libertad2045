@@ -274,19 +274,54 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
     nueva. Confirmado por soporte IBKR (chat FAQ automatizado, no agente
     humano): "This is a security-specific requirement, which explains
     why some symbols (like ANET) work while others are being rejected."
-    PENDIENTE REAL PARA MAÑANA (04/08/2026, horario de oficina): no ha
-    llegado ningun email de verificacion (revisado inbox y spam, email
-    de la cuenta confirmado correcto, cerrar/reabrir sesion tampoco lo
-    disparo). Soporte automatizado de IBKR recomienda contactar con el
-    Trade Desk directamente (telefono o chat con agente humano, no el
-    buscador de FAQ) para resolver la restriccion especifica por valor.
-    NO ES URGENTE NI BLOQUEANTE: el sistema sigue operando con
-    normalidad para el resto del universo (500 simbolos), el mecanismo
-    de seguridad ya demostrado protege cualquier intento fallido, y
-    ANET ya tiene su primera posicion real abierta y protegida con GTC.
-    trade_executor.py con sleep(3) se queda tal cual (no hace daño,
-    aunque no fuera la causa real) salvo que se decida revertir mas
-    adelante con calma.
+    ACTUALIZACION 04/08/2026 (tarde): el bloqueo del Error 201 se
+    RESOLVIO SOLO, sin contactar con el Trade Desk. Ciclo de prueba real
+    (FORCE_HOUR_BYPASS=true, sin SIM, 15:46h) tras reconectar el Gateway:
+    AMZN, GOOG, LUV, WY, CSCO y NVDA -- las 6 ordenes se enviaron con
+    EXITO, ningun rechazo Error 201. Confirmado con
+    Interactive Brokers (IBKR):get_account_positions: 3 posiciones reales
+    ejecutadas (ANET, CSCO, GOOG), las otras 3 (AMZN, LUV, WY) quedan
+    como BUY STOP pendientes de activarse por precio. Conclusion: la
+    verificacion "security-specific" de IBKR no es permanente ni
+    requiere accion humana explicita -- se destraba sola, probablemente
+    ligada al paso de tiempo o a alguna verificacion de sesion general
+    (posible relacion con el propio 2FA aprobado hoy, sin confirmar con
+    certeza). trade_executor.py con sleep(3) (commit dbec018 del 03/08)
+    se queda tal cual, sin revertir -- no hace daño aunque no fuera la
+    causa real del problema original.
+
+    NUEVO HALLAZGO 04/08/2026: EL GATEWAY EN LIVE EXIGE 2FA CADA DIA,
+    A DIFERENCIA DE PAPER (que nunca lo pedia). Causa raiz identificada:
+    IBKR fuerza un corte de sesion cada noche desde su propio lado
+    (observado consistentemente ~01:45 CEST en los logs del VPS) --
+    esto NO depende de nosotros, ocurre siempre. Sin AutoRestartTime
+    configurado en config.ini (confirmado que no existia), systemd
+    revivia el Gateway con un LOGIN COMPLETO DESDE CERO tras cada corte
+    -- y un login nuevo siempre exige 2FA. Esto exigio rescate manual
+    por VNC (x11vnc + tigervnc-viewer) DOS mañanas seguidas (03/08 y
+    04/08), con el riesgo real de que el ciclo automatico de las 22:10
+    fallara por completo si nadie aprobaba el 2FA a tiempo.
+    FIX APLICADO (04/08/2026, ~16h, NO VERIFICADO TODAVIA): añadida
+    AutoRestartTime=01:30 a /root/ibc/config.ini (hora elegida por
+    patron observado en los logs, ~15 min antes del corte real de
+    IBKR). Segun documentacion de IBC y experiencia de otros usuarios
+    con automatizacion (fuentes: elitetrader.com, ibeam/github,
+    supa.is), este mecanismo hace que IBC reinicie el Gateway de forma
+    PROACTIVA y CONTROLADA, reutilizando el token de sesion ya
+    autenticado -- sin pedir 2FA, salvo una vez por semana (domingo).
+    IMPORTANTE: esto es una hipotesis fundamentada, NO una certeza
+    verificada para este proyecto en concreto. Deliberadamente NO
+    probado con un reinicio manual esta tarde -- un reinicio forzado
+    desde fuera (systemctl restart) dispara el mecanismo "en frio" de
+    login completo, no el temporizador interno de IBC, asi que no
+    habria sido una prueba valida. PENDIENTE DE VERIFICACION REAL:
+    revisar el log de IBC mañana temprano (grep en torno a 01:30 CEST
+    en el log del Gateway o journalctl) para confirmar si el reinicio
+    de esta madrugada pidio 2FA o no. TEMOR FUNDADO explicitamente
+    señalado por Javier: si el fix no funciona como se espera, el
+    Gateway podria quedar caido toda la noche sin que nadie lo note
+    hasta la mañana -- mismo riesgo que ya se ha materializado dos
+    veces esta semana.
 
   PLAN DE ROLLBACK (si algo falla en el ciclo manual o el primero automatico):
     1. Desactivar cron inmediatamente
