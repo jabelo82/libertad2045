@@ -323,6 +323,58 @@ Actualizado: 2026-07-03  |  Versión del sistema: v2.8
     hasta la mañana -- mismo riesgo que ya se ha materializado dos
     veces esta semana.
 
+    VERIFICACION 05/08/2026 (tarde): el fix del 04/08 NO funciono como
+    se esperaba, y ya se sabe por que -- CAUSA RAIZ CONFIRMADA leyendo
+    el log de diagnostico de IBC (/root/ibc/logs/ibc-3.19.0_GATEWAY-
+    1037_*.txt), no solo journalctl:
+      "IBC: Auto restart time setting must be hh:mm AM or hh:mm PM,
+       for example '09:30 AM' or '04:00 PM'"
+    AutoRestartTime=01:30 estaba en formato de 24h; IBC exige 12h con
+    AM/PM y RECHAZA el valor si no cumple el formato -- lo detecta,
+    lo loguea como error y sigue sin aplicarlo. O sea: el reinicio
+    proactivo y controlado que se creia haber activado el 04/08 NUNCA
+    se llego a activar. journalctl --user -u ibgateway.service confirma
+    que los cortes en frio (con restart de systemd, RestartCounter
+    subiendo) siguieron ocurriendo cada madrugada tal cual antes del
+    "fix" (04/08: 3 reinicios en cadena entre 01:45 y 01:52; 05/08:
+    reinicio en frio a las 01:46 igualmente).
+    Adicionalmente, en /root/ibc_reboot.log aparecia repetido:
+      "/root/ibc/scripts/displaybannerandlaunch.sh: line 1: kill:
+       (PID) - No such process" seguido de "**** An error has
+       occurred **** / Press enter to continue."
+    Ese "line 1" no es la linea 1 del fichero -- es la trap
+    'kill -TERM $PID' (linea 58 de displaybannerandlaunch.sh, y su
+    gemela en ibcstart.sh linea 495, patron estandar de forwarding de
+    señales de IBC) ejecutandose como mini-script propio, e intentando
+    matar un proceso hijo que ya habia muerto por su cuenta -- inofensivo
+    en si mismo (systemd --user tiene StandardInput=null por defecto en
+    esta unit, confirmado con systemctl --user show, asi que el "read"
+    final NO se queda colgado esperando una tecla física indefinidamente;
+    el servicio si se recupera solo via Restart=always). El riesgo real
+    no era un cuelgue eterno sino la CASCADA de logins en frio (con 2FA
+    cada vez) que el AutoRestartTime mal formado dejaba sin frenar.
+    FIX APLICADO (05/08/2026, ~15:50h, config + wrapper, SIN tocar
+    scripts internos de IBC ni el flujo de login/2FA):
+      1. /root/ibc/config.ini: AutoRestartTime=01:30 -> 01:30 AM
+         (backup: config.ini.bak_20260805_154752)
+      2. /root/ibc_autostart.sh (nuestro wrapper, no es IBC): limpieza
+         defensiva de Xvfb/java huerfanos y locks de X11 antes de cada
+         arranque + stdin explicito a /dev/null como cinturon y
+         tirantes; tambien se quito un --mode=paper que llevaba de
+         antes y que gatewaystart.sh ignora sin más (confirmado
+         comparando con el comando java real en ejecucion, que muestra
+         --mode= vacio -- el modo LIVE lo decide solo TradingMode=live
+         de config.ini, nunca estuvo operando en paper por error)
+         (backup: ibc_autostart.sh.bak_20260805_154752)
+    NO se ha reiniciado el servicio para probarlo (son las 15:50h,
+    mercado USA abierto) -- el cambio queda listo para el proximo
+    ciclo natural de esta noche (~01:30-01:46 CEST). 34/34 tests
+    siguen en verde antes y despues del cambio (no toca codigo Python).
+    PENDIENTE DE VERIFICACION REAL: revisar journalctl --user -u
+    ibgateway.service y el log de IBC de esta noche para confirmar que
+    el reinicio de madrugada del 06/08 fue proactivo (sin restart
+    counter subiendo, sin pedir 2FA) y no un corte en frio mas.
+
   PLAN DE ROLLBACK (si algo falla en el ciclo manual o el primero automatico):
     1. Desactivar cron inmediatamente
     2. Restaurar .env.paper-backup como .env
