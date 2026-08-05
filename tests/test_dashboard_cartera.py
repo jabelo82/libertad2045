@@ -65,18 +65,22 @@ def _make_position(symbol: str, qty: int, avg_cost: float) -> MagicMock:
     return pos
 
 
-def _make_bar(close: float) -> MagicMock:
-    bar = MagicMock()
-    bar.close = close
-    return bar
+def _make_portfolio_item(symbol: str, market_price: float) -> MagicMock:
+    item = MagicMock()
+    item.contract.symbol = symbol
+    item.marketPrice = market_price
+    return item
 
 
-def _make_ib(account_items, positions, bar_close=100.0) -> MagicMock:
+def _make_ib(account_items, positions, market_price=100.0) -> MagicMock:
     ib = MagicMock()
     ib.isConnected.return_value = True
     ib.accountSummary.return_value = list(account_items)
     ib.positions.return_value = list(positions)
-    ib.reqHistoricalData.return_value = [_make_bar(bar_close)]
+    ib.portfolio.return_value = [
+        _make_portfolio_item(p.contract.symbol, market_price) for p in positions
+    ]
+    ib.reqTickers.return_value = []
     ib.reqAllOpenOrders.return_value = []
     return ib
 
@@ -95,7 +99,7 @@ class TestAccountSummaryCurrencyFilter(unittest.TestCase):
         if positions is None:
             positions = [_make_position("TRV", 4, 275.0)]
 
-        ib_mock = _make_ib(account_items, positions, bar_close=327.0)
+        ib_mock = _make_ib(account_items, positions, market_price=327.0)
 
         # Parchear IB() para devolver nuestro mock en lugar de conectarse
         with patch.object(dashboard, "_obtener_tipo_cambio_mercado", return_value=fx):
@@ -185,6 +189,9 @@ class TestAccountSummaryCurrencyFilter(unittest.TestCase):
         cash_val = result["values_eur"][cash_idx]
         expected_sum = pos_sum + cash_val
         self.assertEqual(sum(result["values_eur"]), expected_sum)
+        # pos_sum debe reflejar el marketPrice de ib.portfolio() (327 USD),
+        # no un valor cualquiera de fallback
+        self.assertAlmostEqual(pos_sum, round(4 * 327.0 / fx), delta=1)
         # cash debe ser ≈ -306 (BASE tiene prioridad sobre EUR=+7)
         self.assertAlmostEqual(cash_val, -306, delta=1)
 

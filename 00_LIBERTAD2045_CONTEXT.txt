@@ -1165,6 +1165,47 @@ Commits principales en producción (más recientes primero):
   (junto a _hay_stop_gtc_activo y reconciliar_stops_gtc) funcionando en
   produccion real por primera vez desde que se documenta el proyecto.
 
+  INCIDENTE — DASHBOARD USABA CIERRE DIARIO EN VEZ DE PRECIO EN TIEMPO
+  REAL (05/08/2026) — CERRADO
+  Sintoma: el PnL mostrado en el dashboard podia no coincidir con el PnL
+  real de la cuenta IBKR — comparaban momentos distintos del mercado.
+  Causa: _precios_ib() (linea 419) y el bucle de posiciones dentro de
+  obtener_cartera_ib() (linea ~551) llamaban a ib.reqHistoricalData() con
+  barSizeSetting="1 day" y useRTH=True para obtener el "precio actual" —
+  en realidad es el precio de CIERRE de la ultima sesion diaria, no el
+  precio de mercado en vivo. Ademas, ambos sitios pedian el precio del
+  MISMO simbolo por separado (una llamada para el pie de cartera, otra
+  para la tabla de trades) — dos peticiones, ambas con el mismo dato
+  desfasado.
+  Fix: eliminadas las dos llamadas a reqHistoricalData. Ahora:
+    1. El bucle de posiciones usa ib.portfolio(), que IBKR ya devuelve
+       con marketPrice (precio de mercado real) calculado sin peticiones
+       adicionales — misma llamada que ib.positions(), gratis en la
+       practica.
+    2. _precios_ib() (para simbolos que no son posicion actual, p.ej.
+       trades ya cerrados) usa ib.reqTickers() — snapshot sincrono en
+       tiempo real, sin barras historicas.
+    3. precios_trades reutiliza el marketPrice ya obtenido de
+       ib.portfolio() para los simbolos que SI son posicion abierta
+       (mismo valor que alimenta el pie de cartera — una sola fuente,
+       una sola peticion) y solo llama a reqTickers() para los que
+       faltan. Elimina la duplicidad y garantiza que el pie de cartera
+       y la tabla de trades muestren siempre el mismo precio para el
+       mismo simbolo en el mismo ciclo.
+  Fallback de yfinance (obtener_precio_yfinance(), usado solo cuando IB
+  Gateway esta totalmente inaccesible y se cae a cache) se dejo sin
+  tocar deliberadamente — es un modo degradado donde no hay datos de
+  cuenta en vivo de todos modos, y period="2d" de yfinance ya era el
+  comportamiento previo en ese camino.
+  Tests: tests/test_dashboard_cartera.py mockeaba ib.reqHistoricalData(),
+  que con el fix deja de llamarse — se actualizo _make_ib() para
+  mockear ib.portfolio() en su lugar (con marketPrice), y se añadio una
+  asercion en test_sum_values_eur_es_posiciones_mas_cash que verifica
+  que el precio usado es realmente el de portfolio() y no un fallback
+  silencioso a avgCost. 34/34 tests en verde.
+  Backups: dashboard.py.bak_20260805_163003,
+  tests/test_dashboard_cartera.py.bak_20260805_163222
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------

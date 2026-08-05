@@ -416,29 +416,31 @@ def calcular_stats(sesiones):
 # DATOS DE CARTERA  (IB Gateway → caché → vacío)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _precio_valido(valor):
+    """True si valor es un número > 0 (descarta None y NaN de ib_insync)."""
+    return valor is not None and valor == valor and valor > 0
+
+
 def _precios_ib(ib, symbols):
     """
-    Obtiene precios de cierre recientes para una lista de símbolos usando
-    una conexión IB ya abierta. Retorna {symbol: precio} con los que tenga éxito.
+    Obtiene precios de MERCADO EN TIEMPO REAL (no cierre diario) para una
+    lista de símbolos usando una conexión IB ya abierta, vía reqTickers()
+    (snapshot síncrono, sin suscripción de streaming). Retorna
+    {symbol: precio} con los que tenga éxito.
     """
     from ib_insync import Stock
     precios = {}
-    for sym in symbols:
-        try:
-            contract = Stock(sym, "SMART", "USD")
-            bars = ib.reqHistoricalData(
-                contract,
-                endDateTime="",
-                durationStr="2 D",
-                barSizeSetting="1 day",
-                whatToShow="TRADES",
-                useRTH=True,
-                keepUpToDate=False,
-            )
-            if bars:
-                precios[sym] = bars[-1].close
-        except Exception as e:
-            print(f"[dashboard] IB: error obteniendo precio de {sym}: {e}")
+    if not symbols:
+        return precios
+    try:
+        contracts = [Stock(sym, "SMART", "USD") for sym in symbols]
+        tickers = ib.reqTickers(*contracts)
+        for tk in tickers:
+            precio = tk.marketPrice()
+            if _precio_valido(precio):
+                precios[tk.contract.symbol] = precio
+    except Exception as e:
+        print(f"[dashboard] IB: error obteniendo precios en tiempo real: {e}")
     return precios
 
 
@@ -538,37 +540,32 @@ def obtener_cartera_ib(extra_symbols=None):
                 "stops_actuales": stops_actuales,
             }
 
-        # ── Precio de cierre reciente para cada posición ─────────────────────
+        # ── Precio de mercado en tiempo real para cada posición ──────────────
+        # ib.portfolio() ya trae marketPrice calculado por IBKR para cada
+        # posición abierta (misma llamada que ib.positions(), sin peticiones
+        # de datos adicionales) — evita reqHistoricalData (cierre diario,
+        # desfasado respecto al PnL real de la cuenta).
         labels     = []
         values_usd = []
+        precios_portfolio = {}  # symbol -> marketPrice, reutilizado abajo en precios_trades
+
+        portfolio_por_symbol = {item.contract.symbol: item for item in ib.portfolio()}
 
         for pos in positions:
             symbol = pos.contract.symbol
             shares = int(pos.position)
 
-            precio = None
-            try:
-                bars = ib.reqHistoricalData(
-                    pos.contract,
-                    endDateTime="",
-                    durationStr="2 D",
-                    barSizeSetting="1 day",
-                    whatToShow="TRADES",
-                    useRTH=True,
-                    keepUpToDate=False,
-                )
-                if bars:
-                    precio = bars[-1].close
-            except Exception as e:
-                print(f"[dashboard] Error obteniendo precio de {symbol}: {e}")
+            item = portfolio_por_symbol.get(symbol)
+            precio = item.marketPrice if item is not None else None
 
-            if precio is None:
+            if not _precio_valido(precio):
                 # Fallback: usar coste medio como proxy de precio
                 precio = pos.avgCost if pos.avgCost > 0 else 0
 
             if precio > 0:
                 labels.append(symbol)
                 values_usd.append(shares * precio)
+                precios_portfolio[symbol] = precio
 
         # ── Conversión USD → EUR: tipo de mercado real (yfinance) ───────────
         # total_stocks_eur = GrossPositionValue cuando cash_eur es el neto BASE
@@ -592,7 +589,13 @@ def obtener_cartera_ib(extra_symbols=None):
         values_eur.append(round(cash_eur))
 
         # ── Precios para símbolos de trades (mientras IB está conectado) ──────
-        precios_trades = _precios_ib(ib, extra_symbols)
+        # Reutiliza el marketPrice de ib.portfolio() para los símbolos que ya
+        # son posiciones abiertas (mismo valor que alimenta el pie de cartera
+        # arriba — evita pedirlo dos veces) y solo llama a reqTickers() para
+        # los símbolos que faltan (trades cerrados / no son posición actual).
+        symbols_sin_precio = [s for s in extra_symbols if s not in precios_portfolio]
+        precios_trades = {s: precios_portfolio[s] for s in extra_symbols if s in precios_portfolio}
+        precios_trades.update(_precios_ib(ib, symbols_sin_precio))
 
         return {
             "timestamp":      datetime.now().isoformat(),
