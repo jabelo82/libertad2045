@@ -1457,13 +1457,25 @@ Commits principales en producción (más recientes primero):
     (position_size.py) y obtener_precio_vivo() (portfolio_manager.py) ya
     están listas para reutilizarse ahí sin cambios.
 
-  BLOQUEANTE — VERIFICACION URGENTE (ver INCIDENTE ANET 05/08/2026 en
-    sección 12):
-  □ Confirmar en IBKR TWS/Portal directamente (no solo via API) que los
-    stops GTC de ANET (196,40), GOOG (358,72) y GOOGL (361,05) siguen
-    vivos y protegiendo la posicion, o si quedaron huerfanos tras una
-    sustitucion in-place. Corregir el nivel de ANET manualmente si sigue
-    mal colocado — NO hacerlo via codigo automatico.
+  CERRADO 07/08/2026 — VERIFICACION STOPS ANET/GOOG/GOOGL:
+  Los tres se cerraron el 06/08/2026 13:30 UTC (15:30 CEST) via stop GTC,
+  sin quedar huerfanos. Confirmado con Interactive Brokers (IBKR):
+  get_account_trades: GOOGL vendida a 360,64 (stop 360,64 GTC, P&L -24,98$),
+  GOOG vendida a 358,398 (stop 358,4 GTC, P&L -15,45$), ANET vendida a
+  192,545 (stop 192,54 GTC, P&L +1,59$). El status "REPLACED" visto el
+  06/08 era ruido de la sustitucion in-place normal, mismo patron que el
+  incidente GOOG del 16/07/2026 (ya cerrado como "funciono segun diseño").
+  DESVIACION EXPLICADA (ANET): el ultimo nivel de stop documentado era
+  196,40 (05/08), pero se ejecuto a 192,545 — 3,86 puntos por debajo.
+  Causa confirmada con datos reales de mercado (Interactive Brokers (IBKR):
+  get_price_history, barra diaria 06/08/2026): apertura del dia 192,41,
+  ya por debajo del nivel del stop 196,40 (gap bajista sobre el cierre del
+  05/08, que fue 197,31). Un stop-loss no garantiza precio de ejecucion,
+  solo dispara la orden al tocar el nivel — con hueco a la baja en la
+  apertura, se ejecuto al precio real de mercado (192,545, practicamente
+  igual a los 192,41 de apertura), no al nivel teorico del stop. GOOG y
+  GOOGL no tuvieron gap significativo, de ahi que su precio de ejecucion
+  coincidiera casi exacto con el nivel del stop. Nada roto, nada huerfano.
 
   BLOQUEANTES ANTES DE LIVE:
   □ C-1: resetear capital_peak.txt a 4.000 € antes del primer ciclo LIVE
