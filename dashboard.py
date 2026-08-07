@@ -1603,7 +1603,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
     <div class="kpi {'danger' if stats.get('rentabilidad',0) < 0 else ''}">
       <div class="kpi-label">Rentabilidad</div>
       <div class="kpi-value" style="color:{rentabilidad_color}">{stats.get('rentabilidad',0):+.2f}%</div>
-      <div class="kpi-sub">Desde inicio PAPER</div>
+      <div class="kpi-sub">Desde inicio LIVE</div>
     </div>
     <div class="kpi {'danger' if stats.get('dd_actual',0) < -5 else 'warn' if stats.get('dd_actual',0) < 0 else ''}">
       <div class="kpi-label">Drawdown actual</div>
