@@ -1547,5 +1547,5 @@ Commits principales en producción (más recientes primero):
     temprano por calendario, no es un fallo real)
 
 ================================================================================
-FIN DEL CONTEXTO — LIBERTAD_2045 v2.8 — 2026-07-02
+FIN DEL CONTEXTO — LIBERTAD_2045 v2.9 — 2026-08-07
 ================================================================================
