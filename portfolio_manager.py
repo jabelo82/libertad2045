@@ -1,10 +1,11 @@
 import os
+import time
 from datetime import date
 
 from ib_insync import *
 
 from logger import log_event
-from position_size import calcular_trailing_stop
+from position_size import calcular_trailing_stop, verificar_margen_stop_vivo
 
 
 # --------------------------------------------------
@@ -21,6 +22,60 @@ B1_MULT_MIN    = 2.2
 B1_MULT_MAX    = 4.0
 B1_VENTANA     = 252   # ventana rolling para ATR percentil
 TRAILING_FACTOR = 0.75  # Aprobado en Experimento 40-ter (stress test 3/3 crisis)  # Ver también config.py — TRAILING_FACTOR
+
+
+def obtener_precio_vivo(ib, contrato, symbol=None, timeout=2.0):
+    """
+    Snapshot de precio en tiempo real, acotado en el tiempo — guardia de
+    frescura pedida justo antes de transmitir un trailing stop (incidente
+    ANET 05/08/2026, ver verificar_margen_stop_vivo en position_size.py).
+
+    Deliberadamente NO usa ib.reqTickers() (bloqueante sin timeout — ver
+    dashboard.py._precios_ib para ese patrón en un contexto sin la misma
+    urgencia): aquí un snapshot que se cuelga sería peor que el problema
+    que se intenta resolver, porque retrasaría aún más la propia orden de
+    stop. Usa reqMktData + sondeo acotado por `timeout`.
+
+    Devuelve el precio o None si no se pudo obtener a tiempo — un None
+    nunca bloquea la transmisión, solo desactiva esta guardia adicional
+    para este símbolo en este ciclo (ver verificar_margen_stop_vivo).
+    """
+    try:
+        ticker   = ib.reqMktData(contrato, "", True, False)
+        deadline = time.monotonic() + timeout
+        precio   = None
+
+        while time.monotonic() < deadline:
+            ib.sleep(0.2)
+            valor = ticker.marketPrice()
+            if valor == valor and valor > 0:   # descarta NaN
+                precio = valor
+                break
+
+        # reqMktData con snapshot=True se cierra solo en TWS al entregar el
+        # dato (tickSnapshotEnd) — pero ib_insync no limpia su bookkeeping
+        # local (wrapper.tickers/ticker2ReqId) en ese momento. Si ya
+        # tenemos precio, cancelMktData() sería redundante: TWS ya cerró
+        # la suscripción y solo generaría un "Error 300: Can't find EId
+        # with tickerId" en el log de ib_insync, cada símbolo, cada noche.
+        # Solo cancelamos si NO llegó a tiempo — ahí el snapshot puede
+        # seguir vivo en TWS y sí conviene liberarlo explícitamente.
+        if precio is None:
+            try:
+                ib.cancelMktData(contrato)
+            except Exception:
+                pass
+
+        return precio
+
+    except Exception as e:
+        log_event("WARN", f"No se pudo obtener precio vivo de {symbol}: {e}",
+                  symbol=symbol)
+        try:
+            ib.cancelMktData(contrato)
+        except Exception:
+            pass
+        return None
 
 
 # --------------------------------------------------
@@ -196,17 +251,45 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
             if nuevo_stop is not None and nuevo_stop > stop_level:
                 try:
                     trade_stop = stops_gtc[symbol]
-                    trade_stop.order.auxPrice = nuevo_stop
+                    transmitir = True
+
                     if mode in ("PAPER", "LIVE"):
-                        ib.placeOrder(trade_stop.contract, trade_stop.order)
-                        ib.sleep(0.5)
-                        log_event("INFO",
-                                  f"Trailing stop actualizado | {symbol} | "
-                                  f"{stop_level:.2f} → {nuevo_stop:.2f} | mult={mult}",
-                                  symbol=symbol)
-                    else:
-                        log_event("SIM", f"Orden simulada — no enviada a IBKR", symbol=symbol)
-                    stop_level = nuevo_stop
+                        # Guardia de frescura temporal (incidente ANET 05/08/2026):
+                        # nuevo_stop se calculó con el cierre leído al INICIO del
+                        # ciclo (_cargar_datos_posiciones). Entre esa lectura y
+                        # este placeOrder() ya han corrido reqAllOpenOrders() y
+                        # el resto de posiciones de la cartera — varios minutos
+                        # en el incidente real. Se pide un precio VIVO justo
+                        # antes de transmitir y se reevalúa el margen en el
+                        # instante real de envío, no en el instante de cálculo.
+                        precio_vivo = obtener_precio_vivo(ib, trade_stop.contract, symbol=symbol)
+                        atr_actual  = None
+                        try:
+                            if df_sym is not None:
+                                atr_actual = float(df_sym["ATR"].iloc[-1])
+                        except Exception:
+                            atr_actual = None
+
+                        if not verificar_margen_stop_vivo(precio_vivo, nuevo_stop, atr_actual, symbol=symbol):
+                            transmitir = False
+                            log_event("WARN",
+                                      f"Trailing stop de {symbol} NO transmitido — margen insuficiente "
+                                      f"frente al precio vivo en el instante de envío "
+                                      f"(stop GTC vigente {stop_level:.2f} conservado)",
+                                      symbol=symbol)
+
+                    if transmitir:
+                        trade_stop.order.auxPrice = nuevo_stop
+                        if mode in ("PAPER", "LIVE"):
+                            ib.placeOrder(trade_stop.contract, trade_stop.order)
+                            ib.sleep(0.5)
+                            log_event("INFO",
+                                      f"Trailing stop actualizado | {symbol} | "
+                                      f"{stop_level:.2f} → {nuevo_stop:.2f} | mult={mult}",
+                                      symbol=symbol)
+                        else:
+                            log_event("SIM", f"Orden simulada — no enviada a IBKR", symbol=symbol)
+                        stop_level = nuevo_stop
                 except Exception as e:
                     log_event("WARN",
                               f"Error actualizando trailing stop de {symbol}: {e}",

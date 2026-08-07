@@ -216,3 +216,64 @@ def calcular_trailing_stop(df, trailing_factor=TRAILING_FACTOR, symbol=None):
 
     except Exception:
         return None, None
+
+
+# --------------------------------------------------
+# Guardia de frescura temporal — desfase cálculo/transmisión
+# Incidente ANET 05/08/2026 (segunda causa, tras las guardias anti-outlier
+# de arriba): el trailing stop se calcula con el cierre oficial leído al
+# INICIO del ciclo, pero portfolio_manager.evaluar_stops_por_cierre() no
+# transmite la orden a IBKR hasta después de procesar el resto de la
+# cartera (reqAllOpenOrders, resto de posiciones) — en el incidente real,
+# 13-14 minutos de desfase entre "leer el cierre" y "colocar la orden".
+# Verificado que el reordenamiento del ciclo (stops de cartera antes del
+# escaneo de 500 símbolos) NO es la causa: esa fase ya se ejecuta antes
+# del escaneo desde el 21/05/2026 (commit 29fb968) — el desfase ocurre
+# DENTRO de la propia fase de gestión de cartera, entre símbolos.
+# Esta guardia no sustituye al cálculo por cierre (que sigue siendo la
+# fuente de verdad del nivel del stop) — solo verifica, con un precio VIVO
+# pedido justo antes de placeOrder(), que el margen no se ha desplomado en
+# el tiempo transcurrido desde el cálculo. Ver 00_LIBERTAD2045_CONTEXT.txt.
+# --------------------------------------------------
+
+def verificar_margen_stop_vivo(precio_vivo, stop_price, atr,
+                                min_mult=MIN_STOP_DISTANCE_ATR, symbol=None):
+    """
+    Verifica, justo antes de transmitir un trailing stop, que el margen
+    respecto a un precio VIVO (snapshot pedido en el instante del envío)
+    sigue siendo válido — no solo respecto al cierre usado minutos antes
+    para calcularlo.
+
+    Reaplica el mismo umbral que la guardia STOP_DEMASIADO_CERCA
+    (min_mult × ATR) pero contra el precio del instante de transmisión.
+
+    Es una guardia adicional, no la fuente de verdad: si no hay precio vivo
+    disponible o no hay ATR, deja pasar sin bloquear (fail-open) — un
+    snapshot fallido no debe impedir un trailing stop legítimo. Solo
+    bloquea con una lectura vivo válida que confirme el margen colapsado.
+
+    Retorna True si es seguro transmitir, False si debe abortarse (se
+    conserva el stop GTC vigente y se alerta).
+    """
+    try:
+        if precio_vivo is None or pd.isna(precio_vivo) or precio_vivo <= 0:
+            return True
+        if atr is None or pd.isna(atr) or atr <= 0:
+            return True
+
+        distancia = float(precio_vivo) - float(stop_price)
+
+        if distancia < min_mult * float(atr):
+            _alertar_anomalia_trailing(
+                "STOP_DEMASIADO_CERCA_VIVO",
+                f"stop={stop_price:.2f} a solo {distancia:.2f} del precio vivo="
+                f"{precio_vivo:.2f} en el instante de transmisión (ATR={atr:.2f}) "
+                f"— desfase temporal entre cálculo y envío",
+                symbol=symbol,
+            )
+            return False
+
+        return True
+
+    except Exception:
+        return True

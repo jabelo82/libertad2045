@@ -1298,6 +1298,144 @@ Commits principales en producción (más recientes primero):
     ambos sitios segun git) y en consultas en vivo a IBKR via MCP, no en
     los CSV de log reales del VPS de esas fechas.
 
+  DESFASE TEMPORAL CALCULO→TRANSMISION DEL STOP — SEGUNDA CAUSA DEL
+  INCIDENTE ANET 05/08/2026, FIX APLICADO (07/08/2026)
+  Contexto: aparte de la causa raiz de arriba (guardias anti-outlier,
+    commit 9d64e2a), quedaba una segunda pregunta abierta: el calculo del
+    trailing stop de ANET uso el cierre oficial de las 22:00, pero la orden
+    no se transmitio a IBKR hasta las 22:13-22:14 — 13-14 min de desfase,
+    confirmados con datos reales de post-mercado de IBKR, en los que el
+    precio ya se habia movido lo suficiente como para dejar el margen de
+    seguridad practicamente a cero incluso si el calculo original hubiera
+    sido valido.
+  Hipotesis a evaluar: ¿el ciclo nocturno calcula los trailing stops de la
+    cartera DESPUES de escanear los 500 simbolos del universo (SP500), y
+    ese escaneo es el que consume los 13-14 minutos?
+  Verificacion (localizacion exacta en libertad2045.py/portfolio_manager.py):
+    HIPOTESIS DESCARTADA. evaluar_stops_por_cierre() (portfolio_manager.py)
+    ya se ejecuta ANTES del escaneo de los 500 simbolos — libertad2045.py
+    llama a evaluar_stops_por_cierre() en la linea ~411, y el escaneo del
+    universo (bucle `for symbol in SP500`) no empieza hasta la linea ~511.
+    Este orden (gestion de cartera antes de nuevas entradas) existe desde
+    el 21/05/2026 (commit 29fb968, consolidado en b2741cb "V3 FIX:
+    Verificar datos de posiciones abiertas ANTES del escaneo") — es decir,
+    ya estaba en vigor el 05/08/2026 cuando ocurrio el incidente. Reordenar
+    de nuevo esta fase no habria evitado nada — el sistema real ya operaba
+    con este orden cuando el incidente ocurrio.
+  Causa real del desfase: el patron "leer todo, luego transmitir todo"
+    DENTRO de la propia fase de gestion de cartera, no entre fases:
+      1. _cargar_datos_posiciones() (libertad2045.py ~406-409) descarga el
+         cierre oficial (2 años diarios, useRTH=True) de TODAS las
+         posiciones abiertas, una por una, de forma secuencial — el mismo
+         DataFrame que luego calcula tanto el cierre de evaluacion como el
+         nivel de trailing stop.
+      2. Antes de eso, otros 4 pasos con llamadas propias a IBKR ya
+         corrieron de forma secuencial: registrar_fills_recientes()
+         (reqExecutions + sleep(3)), obtener_capital(),
+         cancelar_ordenes_pendientes(), reconciliar_stops_gtc().
+      3. Dentro de evaluar_stops_por_cierre() hay una SEGUNDA pasada
+         secuencial (reqAllOpenOrders + sleep(1), luego bucle por cada
+         posicion de la cartera) antes de llegar a colocar la orden de un
+         simbolo concreto.
+    Para un simbolo que no es el primero en procesarse, el precio "leido"
+    en el paso 1 y la orden "transmitida" en el paso 3 pueden separarse por
+    varios minutos aunque las DOS fases (stops vs. escaneo de 500) esten en
+    el orden correcto — exactamente el patron observado con ANET.
+  Alternativas evaluadas:
+    A) Reordenar el ciclo — DESCARTADA (ya implementada desde mayo, no
+       resuelve el desfase real, que ocurre dentro de la fase de cartera).
+    B) Pedir un precio fresco justo antes de transmitir cada stop concreto
+       — APLICADA. Mucho menor alcance que reestructurar todo el pipeline
+       de lectura/transmision (que obligaria a tocar tambien el uso
+       compartido de datos_cartera en rebalanceo), y ataca directamente el
+       sintoma real: el margen en el INSTANTE DE ENVIO, no en el instante
+       de calculo.
+  Fix aplicado:
+    - position_size.py::verificar_margen_stop_vivo(precio_vivo, stop_price,
+      atr, symbol=None): guardia pura, reaplica el mismo umbral que
+      STOP_DEMASIADO_CERCA (MIN_STOP_DISTANCE_ATR × ATR) pero contra un
+      precio VIVO en vez del cierre cacheado. Fail-open (no bloquea) si no
+      hay precio vivo o ATR disponible — es una guardia adicional, no la
+      fuente de verdad del calculo.
+    - portfolio_manager.py::obtener_precio_vivo(ib, contrato, symbol=None,
+      timeout=2.0): snapshot de precio ACOTADO EN EL TIEMPO via
+      reqMktData + sondeo con limite explicito (nunca ib.reqTickers() sin
+      timeout, que es el patron ya usado en dashboard.py pero que aqui
+      seria contraproducente: un snapshot colgado retrasaria aun mas la
+      propia orden de stop que se intenta proteger). Devuelve None si no
+      llega a tiempo — nunca se cuelga, nunca bloquea la transmision por si
+      solo.
+    - portfolio_manager.py::evaluar_stops_por_cierre(): en el bloque que
+      actualiza el trailing stop (modo PAPER/LIVE), pide un precio vivo
+      justo antes de placeOrder() y aborta la transmision (conservando el
+      stop GTC vigente, log WARN + alerta Telegram via
+      _alertar_anomalia_trailing) si el margen respecto al precio vivo ya
+      no es suficiente. El calculo por cierre sigue siendo la fuente de
+      verdad del NIVEL del stop — esta guardia solo decide si es seguro
+      transmitirlo EN ESTE INSTANTE.
+  Alcance deliberadamente limitado: el fix se aplico solo al camino
+    nocturno principal (evaluar_stops_por_cierre(), el que gestiona el
+    trailing stop de TODAS las posiciones abiertas cada ciclo — el camino
+    del incidente real). rebalance.py tiene otros 2 puntos que colocan
+    stops GTC via calcular_trailing_stop() (auto-creacion de stop en
+    posicion desprotegida, y reemplazo de stop tras resize por
+    AMPLIAR/REDUCIR) que NO se tocaron esta vez — son caminos de baja
+    frecuencia (solo disparan en eventos concretos de rebalanceo, no cada
+    noche para toda la cartera) y ampliar el cambio ahi habria significado
+    tocar mas superficie de un sistema con dinero real en un unico ciclo de
+    trabajo. verificar_margen_stop_vivo() ya esta exportada y lista para
+    reutilizarse ahi sin cambios — ver PENDIENTES.
+  Tests: tests/test_stop_vivo_guard.py (18 tests nuevos) — cubre la
+    guardia pura (margen sano, margen colapsado reproduciendo el patron
+    del desfase real, fail-open sin precio vivo/sin ATR, nunca propaga
+    excepciones), obtener_precio_vivo (precio inmediato, precio tras varios
+    sondeos, timeout acotado sin colgarse, excepciones en reqMktData/
+    cancelMktData nunca propagan) y la integracion completa en
+    evaluar_stops_por_cierre() (margen colapsado no transmite y conserva el
+    stop vigente, margen sano transmite igual que antes, sin precio vivo
+    disponible cae al comportamiento previo al fix, modo SIM no pide
+    precio vivo). 59/59 tests passed (41 preexistentes + 18 nuevos),
+    ningun test existente se toco ni se rompio.
+  Nota metodologica sobre los tests (aplica tambien a
+    test_trailing_stop_guardrails.py): varios archivos de test popean y
+    reimportan position_size/portfolio_manager en sys.modules para evitar
+    los stubs crudos de test_gtc_dedup.py — con `pytest tests/` (orden
+    alfabetico, la forma normal de ejecutar la suite) esto es estable y
+    reproducible (59/59 verificado 2 veces seguidas), pero es fragil ante
+    ordenes de ejecucion arbitrarios (verificado). test_stop_vivo_guard.py
+    usa @patch.object() con la referencia de modulo capturada en el propio
+    archivo en vez de @patch() por string precisamente para no heredar esa
+    fragilidad.
+  Revision post-implementacion (mismo dia, antes de comitear): dos preguntas
+    del propio Javier detectaron un detalle real sin verificar y confirmaron
+    una decision de diseno:
+      1. cancelMktData() tras un snapshot ya cerrado por TWS SI generaba
+         ruido — confirmado leyendo el codigo fuente de ib_insync
+         (wrapper.py::tickSnapshotEnd solo resuelve el future interno via
+         _endReq(), NO limpia wrapper.tickers/ticker2ReqId; cancelMktData()
+         encuentra el ticker igualmente y envia una cancelacion real a TWS
+         para un reqId que TWS ya cerro, tipicamente Error 300 "Can't find
+         EId with tickerId", logueado por el logger interno de ib_insync,
+         no por el try/except que lo envolvia — no rompia nada pero
+         ensuciaba logs cada simbolo, cada noche). Fix: obtener_precio_vivo()
+         ahora solo llama a cancelMktData() cuando NO llego precio a tiempo
+         (timeout o excepcion) — si el snapshot tuvo exito, TWS ya cerro la
+         suscripcion sola y cancelar seria redundante. Tests actualizados
+         para reflejar el comportamiento correcto (cancelMktData NO se
+         llama en el camino exitoso).
+      2. Presupuesto de tiempo en el peor caso: con MAX_POSITIONS=10 y
+         timeout=2.0s, el peor caso añade hasta 20s al ciclo (10
+         posiciones necesitando actualizar el stop a la vez, con los 10
+         snapshots fallando/tardando el maximo) — no se habia acotado
+         explicitamente al elegir el valor. Frente a los 780-840s del
+         desfase real que se corrige, es un margen pequeño. Se decidio
+         mantener 2.0s deliberadamente en vez de bajarlo: un timeout mas
+         corto reduce el peor caso pero aumenta el riesgo de fail-open
+         (guardia desactivada por falta de dato) precisamente en noches
+         con la red de datos de IBKR cargada — el mismo tipo de noche
+         donde, segun el analisis de causa raiz de arriba, es mas probable
+         que el precio se haya movido y la guardia importe.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
@@ -1309,6 +1447,15 @@ Commits principales en producción (más recientes primero):
   PENDIENTES NO BLOQUEANTES:
   □ OAuth IBKR: repuntar token de U24595040 a DUP301657 (no bloqueante,
     pendiente para lecturas fiables vía OAuth)
+
+  □ Extender la guardia de frescura temporal (ver sección 12, DESFASE
+    TEMPORAL CALCULO→TRANSMISION, 07/08/2026) a los 2 puntos de
+    rebalance.py que colocan stops GTC vía calcular_trailing_stop()
+    (auto-creación de stop en posición desprotegida, y reemplazo tras
+    resize por AMPLIAR/REDUCIR) — quedaron fuera del alcance de este fix
+    por ser caminos de baja frecuencia. verificar_margen_stop_vivo()
+    (position_size.py) y obtener_precio_vivo() (portfolio_manager.py) ya
+    están listas para reutilizarse ahí sin cambios.
 
   BLOQUEANTE — VERIFICACION URGENTE (ver INCIDENTE ANET 05/08/2026 en
     sección 12):
