@@ -661,7 +661,7 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                 if df_sym is None:
                     df_sym = obtener_datos(ib, symbol)
                 if df_sym is not None:
-                    nuevo_stop, mult = calcular_trailing_stop(df_sym)
+                    nuevo_stop, mult = calcular_trailing_stop(df_sym, symbol=symbol)
                     if nuevo_stop and nuevo_stop > 0:
                         # Guard: no crear si ya existe stop activo (puede pasar tras reinicio)
                         if _hay_stop_gtc_activo(ib, symbol, nuevo_stop, int(abs(pos.position))):
@@ -938,7 +938,7 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     # Usar calcular_trailing_stop (misma función que el trailing normal)
                     # para garantizar que TRAILING_FACTOR=0.75 se aplica también aquí.
                     shares_nuevas = decision.shares_optimo
-                    stop_price_nuevo, _ = calcular_trailing_stop(df)
+                    stop_price_nuevo, _ = calcular_trailing_stop(df, symbol=symbol)
 
                     if stop_price_nuevo is not None and stop_price_nuevo > 0:
                         # H-9: stop por encima del precio actual → se activaría en apertura

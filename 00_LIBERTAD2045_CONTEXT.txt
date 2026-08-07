@@ -1206,6 +1206,98 @@ Commits principales en producción (más recientes primero):
   Backups: dashboard.py.bak_20260805_163003,
   tests/test_dashboard_cartera.py.bak_20260805_163222
 
+  INCIDENTE CRITICO — TRAILING STOP ANET CASI PEGADO AL PRECIO (05/08/2026)
+  — FIX APLICADO, VERIFICACION MANUAL PENDIENTE EN IBKR
+  Sintoma:  progresion del stop GTC de ANET (logs LIBERTAD_2026-08-0*.csv):
+              04/08 15:48  stop 174,59  cierre 191,32  (margen 16,73)
+              04/08 22:10  stop 177,09  cierre 190,51  (margen 13,42)
+              05/08 22:10  stop 196,40  cierre 197,31  (margen  0,91)
+            El stop quedo a solo 0,91 del cierre — riesgo real de cierre
+            prematuro de una posicion real con dinero real (sistema ya en
+            LIVE en esa fecha).
+  Hipotesis inicial (descartada): "colapso del ATR" (~8x en un dia) por
+            fallo en la actualizacion diaria de la cache de precios en
+            data/ (5 ficheros ANET_*.csv con rangos solapados).
+  Investigacion:
+    1. Se rastreo el pipeline de datos real de produccion: libertad2045.py,
+       portfolio_manager.py y rebalance.py llaman TODOS a
+       data_loader.obtener_datos(ib, symbol) — descarga en vivo desde IBKR
+       (reqHistoricalData, "2 Y", "1 day") en cada ciclo. data_manager.py
+       (obtener_datos_cached(), fuente de los 5 CSV de data/) usa Yahoo
+       Finance y NO tiene ninguna llamada desde codigo de produccion —
+       es una utilidad exclusiva de los backtests. CONFIRMADO: los 5
+       ficheros de cache de ANET son irrelevantes para este incidente,
+       nunca los toca el sistema en vivo.
+    2. Se recupero el historico real de ANET via IBKR (MCP, get_price_history)
+       y se recalculo TR/ATR(14) manualmente para el 04/08 y 05/08. El ATR
+       resulto ESTABLE (~10,7 → ~11,1, no un colapso). La hipotesis inicial
+       de "ATR implicito" del informe original asumia margen≈ATR (mult≈1),
+       pero la formula real es nuevo_stop = high_hoy − ATR×mult, con
+       mult ∈ [1,65 – 3,00] (B1_MULT_MIN/MAX × TRAILING_FACTOR) — la
+       estimacion manual de partida no era valida.
+    3. Causa raiz real: calcular_trailing_stop() (position_size.py) usa
+       df["high"].iloc[-1] — el high intradia bruto de UN SOLO dia — como
+       ancla del stop, sin ninguna validacion. El 05/08 la barra diaria de
+       ANET trajo un high anomalo (~20 puntos por encima del rango
+       reciente del valor y muy por encima del propio cierre del dia),
+       consistente con un bad tick / gap erroneo del feed de IBKR — no
+       confirmado por la accion posterior del precio. Como el ATR es una
+       media movil de 14 dias, ese unico dato outlier solo pesa 1/14 en el
+       ATR, mientras que el stop resta el ATR×mult completo de un high ya
+       inflado por el outlier al 100% → el margen stop-cierre se desploma
+       aunque la "volatilidad media" (ATR) apenas se mueva.
+  Fix aplicado (position_size.py, calcular_trailing_stop, commit pendiente):
+    Dos guardias anti-outlier en la fuente unica de la logica B1 (protegen
+    automaticamente los 3 puntos de llamada: trailing diario en
+    portfolio_manager.py, auto-creacion de GTC y reemplazo tras resize en
+    rebalance.py):
+      - Guardia ATR_SALTO: si ATR de hoy / ATR de ayer cae por debajo de
+        0,3x o supera 3,0x, se descarta el ciclo (se conserva el stop GTC
+        vigente).
+      - Guardia STOP_DEMASIADO_CERCA: si el stop calculado queda a menos
+        de 1×ATR del cierre de hoy, se descarta el ciclo. Esta es la
+        guardia que habria evitado el incidente real (el ATR no saltaba,
+        pero el margen resultante si era anomalamente pequeño).
+    Ambas guardias registran CRITICAL en el log y avisan por Telegram
+    (send_telegram_critical) sin poder romper el calculo (try/except
+    interno) ni bloquear el ciclo. calcular_trailing_stop() acepta ahora
+    un parametro opcional symbol= (wireado en los 3 call sites) solo para
+    identificar el activo en la alerta.
+    Nota: el check H-9 ya existente en rebalance.py (linea ~945,
+    "stop_price_nuevo >= precio") sigue vigente como red adicional, pero
+    NO habria detectado este caso — 196,40 < 197,31, no dispara H-9. La
+    guardia STOP_DEMASIADO_CERCA es estrictamente mas sensible.
+  Tests: tests/test_trailing_stop_guardrails.py (7 tests nuevos, incluye
+    reproduccion literal del escenario ANET real) + 34 tests preexistentes
+    = 41 passed. Ningun test existente se toco ni se rompio.
+  IMPORTANTE — pendiente de accion humana (Javier): el stop real de ANET
+    en IBKR seguia en 196,40 en el momento de este analisis. NINGUN codigo
+    automatico lo ha tocado ni lo tocara — corregirlo en IBKR es una
+    accion manual deliberada, tal como se pidio.
+  HALLAZGO ADICIONAL SIN CERRAR (verificar manualmente en IBKR cuanto
+    antes): al consultar get_account_orders() via MCP el 06/08, TRES
+    stops GTC activos aparecian con order_status "REPLACED" y precio
+    IGUAL O POR ENCIMA del precio de mercado del momento:
+      ANET   stop 196,40  vs precio 195,00
+      GOOG   stop 358,72  vs precio 358,39
+      GOOGL  stop 361,05  vs precio 360,51
+    Los otros 6 (AMZN, CSCO, DD, LUV, NVDA, WY) tenian margen normal
+    (2,8%-15% por debajo del precio). El status "REPLACED" podria ser
+    simplemente el rastro de la modificacion in-place normal (mismo
+    patron que el incidente GOOG del 16/07 documentado arriba, que se
+    cerro como "funciono segun diseño") — pero no se pudo confirmar de
+    forma concluyente desde la API si estas 3 ordenes siguen vivas o si
+    quedaron huerfanas tras una sustitucion, lo que dejaria las posiciones
+    sin proteccion real. Verificar directamente en IBKR TWS/Portal antes
+    de dar el incidente por cerrado.
+  Entorno de este analisis: se trabajo desde el ProBook
+    (/home/jabelopc/PROYECTO_LIBERTAD_2045), NO desde el VPS de produccion
+    (/root/PROYECTO_LIBERTAD_2045) — no habia logs locales de agosto/2026
+    disponibles (logs/ solo llega hasta junio/2026 en este clon). El
+    analisis de causa raiz se apoyo en el codigo fuente (identico en
+    ambos sitios segun git) y en consultas en vivo a IBKR via MCP, no en
+    los CSV de log reales del VPS de esas fechas.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
@@ -1217,6 +1309,14 @@ Commits principales en producción (más recientes primero):
   PENDIENTES NO BLOQUEANTES:
   □ OAuth IBKR: repuntar token de U24595040 a DUP301657 (no bloqueante,
     pendiente para lecturas fiables vía OAuth)
+
+  BLOQUEANTE — VERIFICACION URGENTE (ver INCIDENTE ANET 05/08/2026 en
+    sección 12):
+  □ Confirmar en IBKR TWS/Portal directamente (no solo via API) que los
+    stops GTC de ANET (196,40), GOOG (358,72) y GOOGL (361,05) siguen
+    vivos y protegiendo la posicion, o si quedaron huerfanos tras una
+    sustitucion in-place. Corregir el nivel de ANET manualmente si sigue
+    mal colocado — NO hacerlo via codigo automatico.
 
   BLOQUEANTES ANTES DE LIVE:
   □ C-1: resetear capital_peak.txt a 4.000 € antes del primer ciclo LIVE
@@ -1294,8 +1394,10 @@ Commits principales en producción (más recientes primero):
     · python -m pytest tests/ -v 2>&1 | tail -3   ← 34 passed esperado
 
   Git HEAD esperado (torre y VPS): 677e1f5
-  Tests esperados: 34 passed (33 si es festivo NYSE — ver sección 12, el 12º
-    test hace un return temprano por calendario, no representa un fallo real)
+  Tests esperados: 41 passed desde el fix de guardias anti-outlier del
+    trailing stop (05/08/2026, ver sección 12 — INCIDENTE ANET) — antes
+    eran 34 passed (33 si es festivo NYSE, ver el 12º test con return
+    temprano por calendario, no es un fallo real)
 
 ================================================================================
 FIN DEL CONTEXTO — LIBERTAD_2045 v2.8 — 2026-07-02

@@ -186,12 +186,12 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
             # Modificación in-place (mismo orderId) para evitar ventana sin protección.
             df_sym = (datos or {}).get(symbol)
             if df_sym is not None:
-                nuevo_stop, mult = calcular_trailing_stop(df_sym)
+                nuevo_stop, mult = calcular_trailing_stop(df_sym, symbol=symbol)
             else:
                 # Fallback: descarga propia (watchdog, relanzo aislado)
                 from data_loader import obtener_datos
                 df_sym = obtener_datos(ib, symbol)
-                nuevo_stop, mult = calcular_trailing_stop(df_sym) if df_sym is not None else (None, None)
+                nuevo_stop, mult = calcular_trailing_stop(df_sym, symbol=symbol) if df_sym is not None else (None, None)
 
             if nuevo_stop is not None and nuevo_stop > stop_level:
                 try:
