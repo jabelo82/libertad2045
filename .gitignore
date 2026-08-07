@@ -40,3 +40,23 @@ venv/
 # Backups locales
 BACKUP_*/
 *.zip
+
+# Artefactos de laboratorio Exp.44/46 (Russell 2000/1000) — se quedan
+# en el ProBook para referencia, ya documentados en 00_LIBERTAD2045_CONTEXT.txt
+backtest_exp44*.py
+backtest_exp46*.py
+exp44_checkpoint.json
+exp44_diferencial*.txt
+exp44_liquidez*.json
+exp44_universo*.py
+exp46_universo*.py
+faltan_352.txt
+v3_faltan_108.txt
+russell1000_*.txt
+russell1000_*.json
+
+# Estado en tiempo real adicional
+pending_rebalance.json
+
+# Entornos virtuales rotos/obsoletos
+venv_torre_roto/
