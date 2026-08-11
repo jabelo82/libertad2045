@@ -1266,6 +1266,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             # Buscar exit price siempre — un trade cerrado puede tener aún
             # un stop GTC stale en stops_actuales si no se canceló al vender
             _exit_precio = None
+            _sal_ts = None
             _salidas_sym = (precios_salida or {}).get(_sym, [])
             if _salidas_sym and t.get("ts"):
                 for _sal_ts, _sal_precio in _salidas_sym:
@@ -1279,8 +1280,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
             _color = "#ff4455" if _exit_precio < (_entrada_f or _exit_precio) else "#00c896"
             stop_salida_str = f'<span style="color:{_color}">{_exit_precio:.2f}</span>'
             stop_inicial_str = t["stop"].strip() if t.get("stop", "").strip() else "—"
-            precio_actual = precios_trades.get(_sym)
-            precio_actual_str = f"{precio_actual:.2f}" if precio_actual is not None else "—"
+            fecha_salida_str = _sal_ts[:10] if _sal_ts else "—"
 
             pnl_cell = "—"
             pct_cell = "—"
@@ -1304,7 +1304,7 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
                 {_tipo_cell(t.get("side", "BUY"))}
                 <td class="num">{t['shares']}</td>
                 <td class="num">{t['entry']}</td>
-                <td class="num">{precio_actual_str}</td>
+                <td>{fecha_salida_str}</td>
                 <td class="num">{stop_inicial_str}</td>
                 <td class="num">{stop_salida_str}</td>
                 <td class="num">{pnl_cell}</td>
@@ -1550,6 +1550,11 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
   tbody tr:hover {{ background: rgba(0,200,150,.04); }}
   tbody td {{ padding: 10px 16px; }}
   .num {{ text-align: right; }}
+  th.sortable {{ cursor: pointer; user-select: none; }}
+  th.sortable:hover {{ color: var(--text); }}
+  th.sortable::after {{ content: ''; margin-left: 4px; }}
+  th.sort-asc::after {{ content: '▲'; margin-left: 4px; color: var(--accent); }}
+  th.sort-desc::after {{ content: '▼'; margin-left: 4px; color: var(--accent); }}
 
   .badge {{
     font-size: 9px;
@@ -1673,16 +1678,16 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
         <table>
           <thead>
             <tr>
-              <th>Fecha</th>
+              <th class="sortable" data-sort="date" onclick="sortTable(this)">Fecha</th>
               <th>Símbolo</th>
               <th>Tipo</th>
-              <th class="num">Acciones</th>
-              <th class="num">Entrada</th>
-              <th class="num">Precio actual</th>
-              <th class="num">Stop inicial</th>
-              <th class="num">Stop / Salida</th>
-              <th class="num">PnL (€)</th>
-              <th class="num">%</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Acciones</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Entrada</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Precio actual</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Stop inicial</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Stop / Salida</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">PnL (€)</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">%</th>
             </tr>
           </thead>
           <tbody id="trades-abiertos-tbody">{filas_trades_abiertos}</tbody>
@@ -1709,16 +1714,16 @@ def generar_html(sesiones, stats, cartera, precios_trades=None, usd_per_eur=1.0,
         <table>
           <thead>
             <tr>
-              <th>Fecha</th>
+              <th class="sortable" data-sort="date" onclick="sortTable(this)">Fecha</th>
               <th>Símbolo</th>
               <th>Tipo</th>
-              <th class="num">Acciones</th>
-              <th class="num">Entrada</th>
-              <th class="num">Precio actual</th>
-              <th class="num">Stop inicial</th>
-              <th class="num">Stop / Salida</th>
-              <th class="num">PnL (€)</th>
-              <th class="num">%</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Acciones</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Entrada</th>
+              <th class="sortable" data-sort="datecell" onclick="sortTable(this)">Fecha salida</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Stop inicial</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">Stop / Salida</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">PnL (€)</th>
+              <th class="num sortable" data-sort="num" onclick="sortTable(this)">%</th>
             </tr>
           </thead>
           <tbody id="trades-tbody">{filas_trades_cerrados}</tbody>
@@ -1850,6 +1855,50 @@ function filtrarTrades(dias, btn) {{
   rows.forEach(r => {{
     r.style.display = (!cutoff || (r.dataset.date && r.dataset.date >= cutoff)) ? '' : 'none';
   }});
+}}
+
+// Ordenación de tablas por columna — reutilizable para trades abiertos y cerrados.
+// th: cabecera clicada (data-sort = "date" | "datecell" | "num")
+//   "date"     → usa el data-date de la fila (fecha de entrada)
+//   "datecell" → usa el texto de la celda, que ya es una fecha ISO (o "—")
+//   "num"      → extrae el número real de la celda (ignora HTML de color y "—")
+function sortTable(th) {{
+  const type = th.dataset.sort;
+  if (!type) return;
+
+  const headRow = th.parentElement;
+  const ths = Array.from(headRow.children);
+  const colIndex = ths.indexOf(th);
+  const tbody = th.closest('table').querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+
+  const asc = th.dataset.dir !== 'asc';
+  ths.forEach(h => {{ h.classList.remove('sort-asc', 'sort-desc'); delete h.dataset.dir; }});
+  th.dataset.dir = asc ? 'asc' : 'desc';
+  th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+
+  function valor(row) {{
+    if (type === 'date') return row.dataset.date || null;
+    const cell = row.children[colIndex];
+    const text = cell ? cell.textContent.trim() : '';
+    if (!text || text === '—') return null;
+    if (type === 'datecell') return text;
+    const limpio = text.replace(/,/g, '').replace(/[^0-9.+-]/g, '');
+    const num = parseFloat(limpio);
+    return isNaN(num) ? null : num;
+  }}
+
+  rows.sort((a, b) => {{
+    const va = valor(a), vb = valor(b);
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;   // sin dato siempre al final
+    if (vb === null) return -1;
+    if (va < vb) return asc ? -1 : 1;
+    if (va > vb) return asc ? 1 : -1;
+    return 0;
+  }});
+
+  rows.forEach(r => tbody.appendChild(r));
 }}
 
 {portfolio_js}
