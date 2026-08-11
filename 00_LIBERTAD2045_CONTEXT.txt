@@ -1590,6 +1590,60 @@ Commits principales en producción (más recientes primero):
     cualquier futuro cambio de fase (PAPER→LIVE, cutover de cuenta, etc.)
     — no existe script/checklist de cutover reutilizable en el repo
     (CUTOVER_VPS.md nunca se creo, ver seccion 2). Ver seccion 13.
+  INCIDENTE — universe_updater.py LLEVABA 8 SEMANAS SIN EJECUTARSE, SIN
+  NINGUNA ALERTA (17/06 → 11/08/2026) — FIX APLICADO
+  Sintoma:  el watchdog nocturno reportaba "Fallos de datos: 2/501 (0.4%)"
+            de forma constante — EA y SATS fallando cada ciclo con "IBKR
+            devolvió respuesta vacía". Investigado a raíz de preguntar por
+            esas dos empresas concretas.
+  Causa raíz (dos fallos combinados, ambos silenciosos):
+    1. run_universe_updater.sh tenía PROJECT_DIR="/home/jabelo/..." como
+       ASIGNACIÓN DIRECTA (sin "${PROJECT_DIR:-...}"), a diferencia de
+       run_bot.sh y watchdog.sh que sí respetan la variable si el cron la
+       pasa. Por eso, aunque el crontab SÍ pasaba correctamente
+       PROJECT_DIR=/root/PROYECTO_LIBERTAD_2045, el script la ignoraba y
+       usaba siempre la ruta de la torre retirada — fallando cada lunes
+       desde el cutover con "No such file or directory", registrado en
+       cron_universe.log pero sin ninguna notificación Telegram (a
+       diferencia del bot/watchdog, este script no tiene aviso de fallo).
+    2. Una vez corregida la ruta y ejecutado a mano, el scraping de
+       Wikipedia falló por falta de la librería lxml en el venv del VPS
+       (pandas.read_html la requiere) — probablemente la causa original
+       de fondo incluso antes del cutover (última actualización real del
+       universo: 17/06/2026, según mtime de universe_sp500.py).
+       El fallback funcionó como estaba diseñado: al fallar el scraping,
+       NO tocó el fichero — universo desactualizado pero no corrupto.
+  Impacto real confirmado: universo operando con la foto del S&P500 del
+    17/06 durante todo PAPER tardío y TODO el periodo LIVE (03/08→11/08).
+    Casos confirmados vía prensa: EA deslistada del Nasdaq el 05/08/2026
+    (LBO de 55.000M$, va privada, sustituida por Ferguson Enterprises en
+    el índice) — coincide exacto con el día en que EA empezó a fallar en
+    los logs (no fallaba el 03-04/08). SATS: EchoStar cambió su ticker a
+    ECHO el 24/06/2026 (misma empresa, sigue en el índice) — un cambio de
+    ticker sin entrada/salida del índice no lo detecta la lógica de
+    comparación de universe_updater.py contra Wikipedia (punto ciego
+    aparte, no corregido en este fix — ver PENDIENTE abajo).
+  Fix aplicado:
+    1. run_universe_updater.sh corregido a
+       PROJECT_DIR="${PROJECT_DIR:-/home/jabelo/PROYECTO_LIBERTAD_2045}"
+       (mismo patrón que run_bot.sh/watchdog.sh).
+    2. lxml instalado en el venv del VPS.
+    3. Actualizador ejecutado a mano tras el fix: Wikipedia 503 tickers,
+       +4/-5 (salidas: CAG, CPB, EA, POOL, SATS; entradas validadas:
+       ECHO, FERG, FLEX, MRVL — FDXF/HONA/Q descartados por historia
+       insuficiente, filtro yfinance funcionando correctamente). Universo
+       final: 500 tickers, al día.
+  PENDIENTE: 1) el punto ciego de cambios de ticker sin entrada/salida del
+    índice (caso SATS→ECHO) sigue sin cubrirse — la próxima vez que una
+    empresa del universo cambie de símbolo sin salir del S&P500, no se
+    detectará hasta que falle en el escaneo diario. 2) no existe ninguna
+    verificación periódica de que los cron jobs SE EJECUTEN de verdad
+    (no solo que estén programados) — este fallo estuvo 8 semanas activo
+    sin ninguna alerta porque run_universe_updater.sh no tiene aviso
+    Telegram de fallo, a diferencia del bot y el watchdog. Valorar
+    añadir una comprobación semanal (o que el propio watchdog del lunes
+    verifique el mtime de universe_sp500.py) que alerte si la última
+    actualización real supera ~8-9 días.
 
 --------------------------------------------------------------------------------
 13. PENDIENTES
