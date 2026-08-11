@@ -1436,6 +1436,74 @@ Commits principales en producción (más recientes primero):
          donde, segun el analisis de causa raiz de arriba, es mas probable
          que el precio se haya movido y la guardia importe.
 
+  INCIDENTE — IB GATEWAY CAIDO SIN ProBook, DIAGNOSTICO POR CONSOLA DE
+  RESCATE (10/08/2026, ~15h) — CERRADO
+  Sintoma:  Watchdog de las 12:00 detecto IB Gateway caido (Errno 111 en
+            el puerto 4001) tras el reinicio proactivo AutoRestartTime
+            programado a las 01:30 CEST del sabado 08/08/2026.
+  Contexto: diagnostico realizado INTEGRAMENTE sin ProBook disponible,
+            via consola de rescate web del panel Hetzner (root reseteado
+            desde el propio panel) — sin acceso SSH normal, sin clave
+            privada a mano.
+  Notas tecnicas del entorno de rescate (dejar constancia para la
+            proxima vez que haga falta):
+              - systemctl sin --user falla porque ibgateway.service es
+                una user unit (no root).
+              - El teclado de la consola VNC de Hetzner tiene problemas
+                con "@" (usar Shift+2, no AltGr+2) y con "|" (los pipes
+                fallan — evitarlos o escribir los comandos sin pipe).
+  Diagnostico: el log de IBC (~/ibc/logs/ibc-3.19.0_GATEWAY-1037_
+            Saturday.txt — OJO, guion bajo antes de "Saturday", no
+            guion) confirmo que AutoRestartTime SI disparo a su hora (el
+            fix del formato 12h AM/PM del incidente del 05/08 funciono
+            como se esperaba), pero el login resultante fue LOGGED_OUT
+            — no reutilizo la sesion existente — y quedo esperando 2FA
+            sin nadie delante. Resultado: 2 dias enteros (sabado y
+            domingo) con el proceso Java vivo pero el puerto 4001 nunca
+            llegando a LISTEN.
+  Fix:      systemctl --user restart ibgateway.service + aprobar el
+            push de 2FA en el movil dentro de la ventana corta que da
+            IBKR (~18s, mensaje "Authenticating, trying for another 18
+            seconds"). Confirmado con ss -tln que *:4001 paso a LISTEN.
+  Nota:     a diferencia del incidente del 03/08 (ver mas arriba en esta
+            seccion), esta vez NO hizo falta VNC ni pulsar "Apply" en
+            Settings→API — solo restart + 2FA a tiempo bastaron.
+
+  INCIDENTE — IB GATEWAY CAIDO, RESCATE POR VNC CON PUERTO x11vnc
+  INCORRECTO (11/08/2026, ~21:45h) — CERRADO
+  Sintoma:  mismo sintoma que el incidente anterior (10/08) — Gateway
+            activo desde las 18:21 pero puerto 4001 sin abrir. "restart
+            counter is at 6" en los logs, es decir, varios reintentos
+            automaticos previos ya habian fallado solos.
+  Contexto: esta vez con ProBook disponible. El camino rapido del
+            incidente del 10/08 (restart + 2FA movil, sin VNC) NO se
+            probo de forma aislada — se fue directo a VNC completo por
+            tener ya ProBook a mano.
+  Procedimiento: tunel SSH con -L 5901:localhost:5901 hacia el VPS,
+            luego arranque de x11vnc en el propio VPS.
+  Error real encontrado: x11vnc lanzado sin especificar -rfbport
+            arranca por defecto en el puerto 5900, no en el 5901 que el
+            tunel SSH esperaba — el vncviewer no conseguia conectar
+            hasta detectar esto.
+  Fix aplicado: lanzar x11vnc explicitamente con el puerto esperado por
+            el tunel:
+              x11vnc -display :1 -localhost -forever -shared -rfbport 5901 &
+            Con el puerto correcto, vncviewer localhost:5901 conecto, se
+            completo el 2FA visualmente en pantalla, y aunque el visor
+            VNC mostro "disconnected" justo despues del login
+            (comportamiento ya visto en incidentes anteriores y no
+            preocupante en si mismo), ss -tln confirmo *:4001 en LISTEN.
+  CONCLUSION A REGISTRAR: todavia no hay un patron claro de cuando basta
+            con restart + 2FA movil (incidente 10/08) y cuando hace
+            falta VNC completo para que el socket termine de abrirse
+            (incidente 11/08) — parece variar entre incidentes por
+            razones aun no identificadas.
+  Recomendacion practica para la proxima vez: probar primero restart +
+            2FA movil (mas rapido); si tras ~1 minuto ss -tln sigue sin
+            mostrar 4001, pasar directamente a VNC con -rfbport 5901
+            explicito desde el principio, sin perder tiempo con el
+            puerto por defecto 5900.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
