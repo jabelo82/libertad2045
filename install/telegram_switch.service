@@ -1,0 +1,41 @@
+# telegram_switch.service — PROYECTO_LIBERTAD_2045
+#
+# Plantilla de servicio systemd de usuario para el "interruptor" remoto
+# por Telegram que reinicia IB Gateway (telegram_switch.py). Proceso
+# independiente del bot de trading — ver docstring de telegram_switch.py.
+#
+# INSTALACIÓN (en el VPS, usuario root — mismo patrón user-level que
+# ibgateway.service, con linger ya activado — ver INFRAESTRUCTURA_IBG.md
+# y sección 2 del contexto):
+#
+#   mkdir -p ~/.config/systemd/user/
+#   cp install/telegram_switch.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now telegram_switch.service
+#
+# Verificar:
+#   systemctl --user status telegram_switch.service --no-pager -l
+#   tail -f logs/telegram_switch.log
+#
+# NO requiere ninguna variable de entorno nueva — reutiliza TELEGRAM_TOKEN
+# y TELEGRAM_CHAT_ID ya presentes en .env (formato KEY=VALUE plano, sin
+# "export", compatible directamente con EnvironmentFile= de systemd).
+#
+# Ajustar las rutas de abajo si el proyecto no vive en /root/PROYECTO_LIBERTAD_2045.
+
+[Unit]
+Description=LIBERTAD_2045 — interruptor remoto por Telegram (restart IB Gateway)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/PROYECTO_LIBERTAD_2045
+EnvironmentFile=/root/PROYECTO_LIBERTAD_2045/.env
+ExecStart=/root/PROYECTO_LIBERTAD_2045/venv/bin/python /root/PROYECTO_LIBERTAD_2045/telegram_switch.py
+Restart=always
+RestartSec=15
+StandardOutput=append:/root/PROYECTO_LIBERTAD_2045/logs/telegram_switch_stdout.log
+StandardError=append:/root/PROYECTO_LIBERTAD_2045/logs/telegram_switch_stdout.log
+
+[Install]
+WantedBy=default.target
