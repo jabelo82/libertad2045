@@ -25,12 +25,12 @@ ese control lo hace el orquestador antes de invocar este módulo.
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
-from ib_insync import Order, Stock
+from ib_insync import ExecutionFilter, Order, Stock
 
 from data_loader import obtener_datos
 from logger import log_event
@@ -48,6 +48,15 @@ REBALANCE_THRESHOLD = float(os.getenv("REBALANCE_THRESHOLD", "0.25"))  # Ver tam
 # Delta mínimo de acciones para ejecutar el ajuste.
 # Evita micro-operaciones que generarían comisiones sin beneficio real.
 REBALANCE_MIN_SHARES = int(os.getenv("REBALANCE_MIN_SHARES", "5"))  # Ver también config.py — REBALANCE_MIN_SHARES
+
+# Días (naturales) desde que se guardó una entrada pendiente sin encontrar
+# rastro alguno del order_id (ni fill, ni orden abierta) antes de darla por
+# huérfana y descartarla. Las órdenes de rebalanceo son tif=DAY — IBKR las
+# resuelve (fill o cancelación) en un único día de mercado, así que este
+# umbral solo da margen para fines de semana / reconexiones tardías del
+# Gateway, no para esperar una ejecución legítima que tarde más.
+# Ver incidente DVN (10-11/08/2026, sección 12 del contexto).
+PENDING_ORPHAN_THRESHOLD_DAYS = int(os.getenv("PENDING_ORPHAN_THRESHOLD_DAYS", "3"))
 
 
 # --------------------------------------------------
@@ -105,33 +114,37 @@ def _guardar_pendientes(pendientes: dict) -> None:
         log_event("WARN", f"pending_rebalance: error guardando archivo: {e}")
 
 
-def _guardar_pendiente_ampliar(symbol: str, shares_esperadas: int, shares_delta: int) -> None:
+def _guardar_pendiente_ampliar(symbol: str, shares_esperadas: int, shares_delta: int,
+                                order_id: Optional[int] = None) -> None:
     pendientes = _leer_pendientes()
     pendientes[symbol] = {
         "accion":           "AMPLIAR",
         "shares_esperadas": shares_esperadas,
         "shares_delta":     shares_delta,
+        "order_id":         order_id,
         "timestamp":        datetime.now().isoformat(),
     }
     _guardar_pendientes(pendientes)
     log_event("INFO",
               f"pending_rebalance: AMPLIAR guardado para {symbol} "
-              f"(shares_esperadas={shares_esperadas})",
+              f"(shares_esperadas={shares_esperadas}, order_id={order_id})",
               symbol=symbol)
 
 
-def _guardar_pendiente_reducir(symbol: str, shares_esperadas: int, shares_delta: int) -> None:
+def _guardar_pendiente_reducir(symbol: str, shares_esperadas: int, shares_delta: int,
+                                order_id: Optional[int] = None) -> None:
     pendientes = _leer_pendientes()
     pendientes[symbol] = {
         "accion":           "REDUCIR",
         "shares_esperadas": shares_esperadas,
         "shares_delta":     shares_delta,
+        "order_id":         order_id,
         "timestamp":        datetime.now().isoformat(),
     }
     _guardar_pendientes(pendientes)
     log_event("INFO",
               f"pending_rebalance: REDUCIR guardado para {symbol} "
-              f"(shares_esperadas={shares_esperadas})",
+              f"(shares_esperadas={shares_esperadas}, order_id={order_id})",
               symbol=symbol)
 
 
@@ -140,6 +153,139 @@ def _eliminar_pendiente_ampliar(symbol: str) -> None:
     if symbol in pendientes:
         del pendientes[symbol]
         _guardar_pendientes(pendientes)
+
+
+def _edad_dias(ts_str: Optional[str]) -> Optional[int]:
+    """Días naturales transcurridos desde un timestamp ISO. None si no hay
+    timestamp o es ilegible."""
+    if not ts_str:
+        return None
+    try:
+        return (datetime.now() - datetime.fromisoformat(ts_str)).days
+    except Exception:
+        return None
+
+
+def _verificar_ejecucion_pendiente(ib, order_id: Optional[int], symbol: str) -> str:
+    """
+    Verifica en IBKR si existe una ejecución real asociada al order_id de una
+    entrada pendiente de pending_rebalance.json.
+
+    No basta con que exista *alguna* posición del símbolo con la cantidad
+    esperada: una entrada nueva e independiente del escáner, una operación
+    manual, o el resto de una fase anterior (PAPER, otro cutover) pueden
+    coincidir por casualidad en símbolo y cantidad sin tener ninguna
+    relación con la orden que se está rastreando — ver incidente real DVN,
+    10-11/08/2026 (sección 12 del contexto): un AMPLIAR arrastrado de PAPER
+    se dio por resuelto porque el escáner abrió una entrada nueva
+    independiente en el mismo símbolo.
+
+    Nota sobre el alcance de ib.fills()/ib.trades(): ib_insync los rellena
+    en connect() con un backfill automático de reqCompletedOrders() +
+    reqExecutions() sin filtro contra IBKR (ib_insync/ib.py::connectAsync),
+    no solo con lo ocurrido literalmente tras esa conexión — pero no está
+    confirmado hasta qué punto IBKR conserva ese historial a través de un
+    reinicio del propio Gateway (no solo de la conexión del cliente), y
+    aquí el Gateway se reinicia cada noche (AutoRestartTime). Por eso, si
+    no aparece rastro en la caché local, se hace ADEMÁS una consulta
+    explícita a reqExecutions() con un ExecutionFilter acotado a los
+    últimos días relevantes antes de concluir que la orden es huérfana —
+    para no confundir "no está en la caché local" con "nunca se ejecutó".
+
+    Devuelve uno de:
+        "CONFIRMADA"       -> hay un fill real (en la caché local o tras la
+                               consulta explícita) para ESE order_id
+                               concreto, o su trade en ib.trades() ya
+                               aparece Filled/PartiallyFilled.
+        "PENDIENTE_ACTIVA" -> el order_id sigue vivo en ib.trades() sin
+                               fill todavía (Submitted/PreSubmitted/
+                               PendingSubmit/ApiPending) — seguir esperando.
+        "HUERFANA"         -> el order_id no aparece ni en fills() ni en
+                               trades(), NI tras la consulta explícita de
+                               reqExecutions() acotada en el tiempo (o su
+                               trade ya está Cancelled/ApiCancelled/
+                               Inactive/Expired) — la orden ya no existe.
+        "NO_VERIFICABLE"   -> no hay order_id que verificar (entrada legacy
+                               guardada antes de este fix), o hubo un error
+                               leyendo fills()/trades()/reqExecutions —
+                               usar el comportamiento previo como fallback.
+    """
+    if order_id is None:
+        return "NO_VERIFICABLE"
+
+    def _fill_encontrado() -> bool:
+        return any(getattr(f.execution, "orderId", None) == order_id
+                   for f in ib.fills())
+
+    try:
+        if _fill_encontrado():
+            return "CONFIRMADA"
+    except Exception as e:
+        log_event("WARN",
+                  f"pending_rebalance: error leyendo fills para verificar "
+                  f"order_id={order_id}: {e}", symbol=symbol)
+        return "NO_VERIFICABLE"
+
+    try:
+        for trade in ib.trades():
+            if getattr(trade.order, "orderId", None) == order_id:
+                estado = trade.orderStatus.status
+                if estado in ("Filled", "PartiallyFilled"):
+                    return "CONFIRMADA"
+                if estado in ("Cancelled", "ApiCancelled", "Inactive", "Expired"):
+                    # Estado terminal ya confirmado por IBKR para ESTA
+                    # orden concreta (no una ausencia ambigua) — no hace
+                    # falta la consulta explícita adicional de abajo.
+                    return "HUERFANA"
+                return "PENDIENTE_ACTIVA"
+    except Exception as e:
+        log_event("WARN",
+                  f"pending_rebalance: error leyendo trades para verificar "
+                  f"order_id={order_id}: {e}", symbol=symbol)
+        return "NO_VERIFICABLE"
+
+    # Ni en fills() ni en trades() de la caché local — antes de declarar
+    # huérfana, forzar una consulta explícita a IBKR acotada a los
+    # últimos días relevantes (ver docstring: reinicio nocturno del
+    # Gateway, backfill de connect() no garantizado más allá de eso).
+    try:
+        desde = datetime.now() - timedelta(days=PENDING_ORPHAN_THRESHOLD_DAYS + 1)
+        ib.reqExecutions(ExecutionFilter(
+            time=desde.strftime("%Y%m%d-%H:%M:%S"), symbol=symbol
+        ))
+        if _fill_encontrado():
+            return "CONFIRMADA"
+    except Exception as e:
+        log_event("WARN",
+                  f"pending_rebalance: error en reqExecutions explícito "
+                  f"verificando order_id={order_id}: {e}", symbol=symbol)
+        return "NO_VERIFICABLE"
+
+    return "HUERFANA"
+
+
+def _actualizar_stop_tras_reduccion(ib, symbol: str, pos_actual: int) -> None:
+    """Tras confirmar un REDUCIR, corrige el stop GTC a la cantidad real."""
+    try:
+        stops_pendientes = _obtener_gtc_stops(ib)
+        if symbol in stops_pendientes and pos_actual > 0:
+            stop_trade = stops_pendientes[symbol]
+            stop_price = getattr(stop_trade.order, "auxPrice", None)
+            if stop_price and stop_price > 0:
+                contrato_r = stop_trade.contract
+                contrato_r.exchange = "SMART"
+                if ib.qualifyContracts(contrato_r):
+                    _reemplazar_stop_gtc(
+                        ib, symbol, contrato_r, pos_actual, stop_price, stop_trade
+                    )
+                    log_event("INFO",
+                              f"pending_rebalance: stop GTC corregido "
+                              f"a {pos_actual} acc @ {stop_price:.2f}",
+                              symbol=symbol)
+    except Exception as e_red:
+        log_event("WARN",
+                  f"pending_rebalance: error corrigiendo stop para {symbol}: {e_red}",
+                  symbol=symbol)
 
 
 # --------------------------------------------------
@@ -481,6 +627,169 @@ def evaluar_posicion(
 
 
 # --------------------------------------------------
+# H-4: Reconciliación de órdenes AMPLIAR/REDUCIR pendientes entre ciclos
+# --------------------------------------------------
+
+def _reconciliar_pendientes(ib, mode: str) -> set:
+    """
+    Procesa las entradas de pending_rebalance.json de ciclos anteriores.
+
+    Para cada entrada con order_id, verifica contra IBKR (_verificar_
+    ejecucion_pendiente) que la posición reportada proviene REALMENTE de
+    esa orden concreta antes de darla por resuelta — no basta con que
+    exista alguna posición del símbolo con la cantidad esperada (ver
+    incidente DVN, 10-11/08/2026, sección 12 del contexto: una entrada
+    nueva e independiente del escáner en el mismo símbolo se confundió con
+    el fill del AMPLIAR pendiente).
+
+    Si el order_id no tiene rastro alguno en IBKR (ni fill, ni orden
+    abierta) durante más de PENDING_ORPHAN_THRESHOLD_DAYS, la entrada se
+    trata como huérfana y se descarta con aviso — en vez de darla por
+    resuelta con una coincidencia no verificada, o dejarla viva
+    indefinidamente.
+
+    Entradas legacy sin order_id (guardadas antes de este fix) usan el
+    comportamiento previo (comparación de símbolo/cantidad) como fallback,
+    con un WARN explícito para que quede visible en los logs.
+
+    Devuelve el conjunto de símbolos con una entrada aún pendiente (no
+    resuelta, no huérfana este ciclo) — el llamador lo usa para evitar
+    duplicar un AMPLIAR el mismo ciclo.
+    """
+    pendientes_procesados: set = set()
+
+    if mode not in ("PAPER", "LIVE"):
+        return pendientes_procesados
+
+    pendientes = _leer_pendientes()
+    if not pendientes:
+        return pendientes_procesados
+
+    try:
+        pos_actuales = {p.contract.symbol: int(p.position)
+                        for p in ib.positions() if p.position > 0}
+    except Exception as e:
+        log_event("WARN", f"pending_rebalance: error leyendo posiciones: {e}")
+        pos_actuales = {}
+
+    for sym, entrada in list(pendientes.items()):
+        accion           = entrada.get("accion", "AMPLIAR")
+        shares_esperadas = entrada.get("shares_esperadas", 0)
+        order_id         = entrada.get("order_id")
+        pos_actual       = pos_actuales.get(sym, 0)
+
+        estado = _verificar_ejecucion_pendiente(ib, order_id, sym)
+
+        if estado == "CONFIRMADA":
+            if accion == "REDUCIR":
+                log_event("INFO",
+                          f"pending_rebalance: REDUCIR confirmado {sym} "
+                          f"(order_id={order_id}, pos={pos_actual}) "
+                          f"— actualizando stop GTC",
+                          symbol=sym)
+                _actualizar_stop_tras_reduccion(ib, sym, pos_actual)
+            else:
+                log_event("INFO",
+                          f"pending_rebalance: fill confirmado {sym} "
+                          f"(order_id={order_id}, pos={pos_actual}) "
+                          f"— stop GTC se actualizará en ciclo normal",
+                          symbol=sym)
+            _eliminar_pendiente_ampliar(sym)
+            continue
+
+        if estado == "HUERFANA":
+            age_days = _edad_dias(entrada.get("timestamp"))
+            if age_days is not None and age_days >= PENDING_ORPHAN_THRESHOLD_DAYS:
+                log_event("WARN",
+                          f"pending_rebalance: {accion} de {sym} huérfana — "
+                          f"order_id={order_id} sin fill ni orden activa tras "
+                          f"{age_days}d — descartando entrada "
+                          f"(pos_actual={pos_actual} puede venir de otro origen "
+                          f"no relacionado, p.ej. entrada nueva del escáner)",
+                          symbol=sym)
+                try:
+                    send_telegram(
+                        f"ℹ️ LIBERTAD_2045 — pending_rebalance: {accion} de {sym} "
+                        f"nunca se ejecutó, orden {order_id} expirada/cancelada. "
+                        f"Entrada pendiente descartada tras {age_days}d."
+                    )
+                except Exception:
+                    pass
+                _eliminar_pendiente_ampliar(sym)
+                continue
+            # Dentro del umbral de gracia: puede ser una cancelación muy
+            # reciente aún no reflejada en fills()/trades() de la sesión.
+            pendientes_procesados.add(sym)
+            log_event("INFO",
+                      f"pending_rebalance: {accion} {sym} sin rastro todavía "
+                      f"de order_id={order_id} ({age_days if age_days is not None else '?'}d, "
+                      f"umbral {PENDING_ORPHAN_THRESHOLD_DAYS}d) — esperando "
+                      f"antes de declarar huérfana",
+                      symbol=sym)
+            continue
+
+        if estado == "PENDIENTE_ACTIVA":
+            pendientes_procesados.add(sym)
+            log_event("INFO",
+                      f"pending_rebalance: {accion} {sym} aún pendiente "
+                      f"(order_id={order_id} sigue activo en IBKR) — "
+                      f"omitiendo nuevo {accion} este ciclo",
+                      symbol=sym)
+            continue
+
+        # estado == "NO_VERIFICABLE": entrada legacy sin order_id, o error
+        # leyendo fills/trades/reqExecutions — fallback al comportamiento
+        # previo a este fix, comparando solo símbolo/cantidad.
+        if order_id is None:
+            log_event("WARN",
+                      f"pending_rebalance: entrada legacy de {sym} sin "
+                      f"order_id (guardada antes del fix 11/08/2026) — no se "
+                      f"puede verificar el origen de la posición, usando "
+                      f"comparación de cantidad como fallback",
+                      symbol=sym)
+        else:
+            log_event("WARN",
+                      f"pending_rebalance: no se pudo verificar order_id="
+                      f"{order_id} para {sym} este ciclo (error leyendo "
+                      f"fills/trades/reqExecutions en IBKR) — usando "
+                      f"comparación de cantidad como fallback por este ciclo",
+                      symbol=sym)
+        if accion == "REDUCIR":
+            if pos_actual <= shares_esperadas:
+                log_event("INFO",
+                          f"pending_rebalance: REDUCIR confirmado {sym} "
+                          f"(pos={pos_actual} <= esperadas={shares_esperadas}) "
+                          f"— actualizando stop GTC",
+                          symbol=sym)
+                _actualizar_stop_tras_reduccion(ib, sym, pos_actual)
+                _eliminar_pendiente_ampliar(sym)
+            else:
+                pendientes_procesados.add(sym)
+                log_event("INFO",
+                          f"pending_rebalance: REDUCIR aún pendiente {sym} "
+                          f"(pos={pos_actual} > esperadas={shares_esperadas}) "
+                          f"— omitiendo nuevo REDUCIR este ciclo",
+                          symbol=sym)
+        else:  # AMPLIAR (backward compat: accion ausente también trata como AMPLIAR)
+            if pos_actual >= shares_esperadas:
+                log_event("INFO",
+                          f"pending_rebalance: fill confirmado {sym} "
+                          f"(pos={pos_actual} >= esperadas={shares_esperadas}) "
+                          f"— stop GTC se actualizará en ciclo normal",
+                          symbol=sym)
+                _eliminar_pendiente_ampliar(sym)
+            else:
+                pendientes_procesados.add(sym)
+                log_event("INFO",
+                          f"pending_rebalance: AMPLIAR aún pendiente {sym} "
+                          f"(pos={pos_actual} < esperadas={shares_esperadas}) "
+                          f"— omitiendo nuevo AMPLIAR este ciclo",
+                          symbol=sym)
+
+    return pendientes_procesados
+
+
+# --------------------------------------------------
 # Punto de entrada principal
 # --------------------------------------------------
 
@@ -512,80 +821,13 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
               f"min_shares={REBALANCE_MIN_SHARES}")
 
     # --------------------------------------------------
-    # H-4: Procesar órdenes AMPLIAR pendientes de ciclos anteriores
-    # Si el fill ocurrió: eliminar entrada (el ciclo normal actualiza el stop GTC).
-    # Si el fill no ocurrió aún: marcar símbolo para no duplicar el AMPLIAR.
+    # H-4: Procesar órdenes AMPLIAR/REDUCIR pendientes de ciclos anteriores.
+    # Ver _reconciliar_pendientes() — verifica contra el order_id real de
+    # IBKR, no solo contra una coincidencia de símbolo/cantidad (fix
+    # incidente DVN, 10-11/08/2026).
     # --------------------------------------------------
 
-    pendientes_procesados: set = set()
-
-    if mode in ("PAPER", "LIVE"):
-        pendientes = _leer_pendientes()
-        if pendientes:
-            try:
-                pos_actuales = {p.contract.symbol: int(p.position)
-                                for p in ib.positions() if p.position > 0}
-            except Exception as e:
-                log_event("WARN", f"pending_rebalance: error leyendo posiciones: {e}")
-                pos_actuales = {}
-
-            for sym, entrada in list(pendientes.items()):
-                accion           = entrada.get("accion", "AMPLIAR")
-                shares_esperadas = entrada.get("shares_esperadas", 0)
-                pos_actual       = pos_actuales.get(sym, 0)
-
-                if accion == "REDUCIR":
-                    if pos_actual <= shares_esperadas:
-                        # Fill de REDUCIR confirmado — actualizar stop GTC con cantidad correcta
-                        log_event("INFO",
-                                  f"pending_rebalance: REDUCIR confirmado {sym} "
-                                  f"(pos={pos_actual} <= esperadas={shares_esperadas}) "
-                                  f"— actualizando stop GTC",
-                                  symbol=sym)
-                        try:
-                            stops_pendientes = _obtener_gtc_stops(ib)
-                            if sym in stops_pendientes and pos_actual > 0:
-                                stop_trade = stops_pendientes[sym]
-                                stop_price = getattr(stop_trade.order, "auxPrice", None)
-                                if stop_price and stop_price > 0:
-                                    contrato_r = stop_trade.contract
-                                    contrato_r.exchange = "SMART"
-                                    if ib.qualifyContracts(contrato_r):
-                                        _reemplazar_stop_gtc(
-                                            ib, sym, contrato_r,
-                                            pos_actual, stop_price, stop_trade
-                                        )
-                                        log_event("INFO",
-                                                  f"pending_rebalance: stop GTC corregido "
-                                                  f"a {pos_actual} acc @ {stop_price:.2f}",
-                                                  symbol=sym)
-                        except Exception as e_red:
-                            log_event("WARN",
-                                      f"pending_rebalance: error corrigiendo stop para {sym}: {e_red}",
-                                      symbol=sym)
-                        _eliminar_pendiente_ampliar(sym)
-                    else:
-                        pendientes_procesados.add(sym)
-                        log_event("INFO",
-                                  f"pending_rebalance: REDUCIR aún pendiente {sym} "
-                                  f"(pos={pos_actual} > esperadas={shares_esperadas}) "
-                                  f"— omitiendo nuevo REDUCIR este ciclo",
-                                  symbol=sym)
-                else:  # AMPLIAR (backward compat: accion ausente también trata como AMPLIAR)
-                    if pos_actual >= shares_esperadas:
-                        log_event("INFO",
-                                  f"pending_rebalance: fill confirmado {sym} "
-                                  f"(pos={pos_actual} >= esperadas={shares_esperadas}) "
-                                  f"— stop GTC se actualizará en ciclo normal",
-                                  symbol=sym)
-                        _eliminar_pendiente_ampliar(sym)
-                    else:
-                        pendientes_procesados.add(sym)
-                        log_event("INFO",
-                                  f"pending_rebalance: AMPLIAR aún pendiente {sym} "
-                                  f"(pos={pos_actual} < esperadas={shares_esperadas}) "
-                                  f"— omitiendo nuevo AMPLIAR este ciclo",
-                                  symbol=sym)
+    pendientes_procesados = _reconciliar_pendientes(ib, mode)
 
     # --------------------------------------------------
     # 1. Posiciones largas abiertas
@@ -921,14 +1163,20 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                                   f"{accion_orden} {shares_abs} acc. | "
                                   f"estado={estado} — stop GTC se actualizará en el próximo ciclo",
                                   symbol=symbol)
-                        # H-4: persistir pendiente para seguimiento entre ciclos
+                        # H-4: persistir pendiente para seguimiento entre ciclos,
+                        # con el order_id real para poder verificar más tarde
+                        # que el fill que la resuelve viene de ESTA orden
+                        # concreta (fix incidente DVN, 10-11/08/2026).
+                        order_id_ajuste = getattr(trade_ajuste.order, "orderId", None)
                         if decision.accion == "AMPLIAR":
                             _guardar_pendiente_ampliar(
-                                symbol, decision.shares_optimo, decision.shares_delta
+                                symbol, decision.shares_optimo, decision.shares_delta,
+                                order_id=order_id_ajuste
                             )
                         elif decision.accion == "REDUCIR":
                             _guardar_pendiente_reducir(
-                                symbol, decision.shares_optimo, decision.shares_delta
+                                symbol, decision.shares_optimo, decision.shares_delta,
+                                order_id=order_id_ajuste
                             )
                         # Orden pendiente: no tocar el stop GTC hasta que se ejecute
                         decisiones.append(decision)

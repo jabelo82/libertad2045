@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 ib_stub = types.ModuleType("ib_insync")
 ib_stub.Order = MagicMock
 ib_stub.Stock = MagicMock
+ib_stub.ExecutionFilter = MagicMock
 for name in ("IB", "MarketOrder", "Trade", "OrderStatus"):
     setattr(ib_stub, name, MagicMock)
 sys.modules["ib_insync"] = ib_stub

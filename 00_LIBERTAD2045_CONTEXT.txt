@@ -1504,6 +1504,93 @@ Commits principales en producción (más recientes primero):
             explicito desde el principio, sin perder tiempo con el
             puerto por defecto 5900.
 
+  INCIDENTE — RECONCILIACION pending_rebalance.json CONFUNDIA POSICION NO
+  RELACIONADA CON FILL REAL (DVN, 10-11/08/2026) — FIX APLICADO
+  Sintoma:  un AMPLIAR pendiente de DVN llevaba 9 dias sin resolverse en
+            pending_rebalance.json (arrastrado casi con toda seguridad de
+            la fase PAPER anterior al cutover del 03/08 — el log de
+            cron_bot.log muestra un DVN de 11 acciones en modo PAPER
+            anterior al de LIVE). El escaner de senales genero ademas una
+            ENTRADA NUEVA e independiente en DVN (BUY STOP DAY, 8 acciones
+            a 45.48, via trade_executor.py — camino distinto del AMPLIAR
+            de rebalance.py, que usa MKT DAY). La reconciliacion H-4 de
+            rebalance.py vio que existia una posicion en DVN con la
+            cantidad esperada y dio la entrada pendiente por resuelta,
+            borrandola del JSON — sin comprobar que esa posicion no tenia
+            ninguna relacion con la orden AMPLIAR original que decia
+            esperar.
+  Causa raiz: el bloque H-4 en rebalancear() (antes de este fix) comparaba
+            pos_actual(symbol) >= shares_esperadas usando solo el simbolo
+            como clave — le valia cualquier posicion coincidente en ese
+            simbolo, con cualquier origen (entrada nueva del escaner,
+            operacion manual, resto de otra fase) y cualquier order_id no
+            relacionado con la orden rastreada.
+  Fix aplicado (rebalance.py):
+    1. _guardar_pendiente_ampliar()/_guardar_pendiente_reducir() ahora
+       capturan y persisten el order_id real devuelto por ib.placeOrder()
+       en pending_rebalance.json (call site ~linea 1082-1140).
+    2. Nueva _verificar_ejecucion_pendiente(ib, order_id, symbol):
+       verifica contra ib.fills() (fill real para ESE order_id concreto)
+       y ib.trades() (estado de la orden) antes de dar una entrada por
+       resuelta — nunca por coincidencia de simbolo/cantidad sola.
+    3. Nueva PENDING_ORPHAN_THRESHOLD_DAYS=3 (configurable via env): si
+       el order_id no tiene rastro alguno (ni fill, ni orden activa) tras
+       3 dias, la entrada se trata como huerfana y se descarta con log
+       WARN + Telegram informativo — en vez de darla por resuelta con una
+       coincidencia no verificada, o dejarla viva indefinidamente (el
+       purgado generico de 7 dias que ya existia en _leer_pendientes()
+       sigue intacto como red de seguridad adicional, sin tocar).
+    4. Bloque H-4 extraido de rebalancear() a su propia funcion
+       _reconciliar_pendientes(ib, mode) — testeable de forma aislada
+       (antes vivia inline dentro de rebalancear()).
+    5. Entradas legacy sin order_id (guardadas antes de este fix) usan el
+       comportamiento previo como fallback, con WARN explicito en el log
+       para que quede visible.
+  REFINAMIENTO 11/08/2026 (mismo dia, revision antes de comitear):
+    pregunta de Javier sobre el alcance real de ib.fills()/ib.trades() —
+    ¿solo la conexion actual, o tambien sesiones anteriores del Gateway
+    (que se reinicia cada noche por AutoRestartTime)? Verificado leyendo
+    el codigo fuente instalado de ib_insync 0.9.86 (no de memoria):
+      - ib.py::connectAsync() SI hace un backfill automatico en connect()
+        via reqCompletedOrdersAsync() (si server >= v150 y no readonly —
+        el proyecto conecta sin readonly=True, ver conexion_ib.py) y
+        reqExecutionsAsync() SIN filtro — no es solo "lo ocurrido tras
+        este connect() concreto".
+      - wrapper.py::completedOrder() confirma que ese backfill escribe en
+        el mismo diccionario que usa ib.trades()/ib.fills(), preservando
+        el orderId original (no uno nuevo de esta sesion).
+      - PERO: no se pudo confirmar (ni en el codigo de ib_insync, que es
+        solo el cliente, ni con documentacion oficial verificada esta
+        sesion) cuanto historial conserva el propio Gateway/TWS del lado
+        servidor a traves de sus PROPIOS reinicios nocturnos (distinto de
+        reconexiones del cliente API) — la incertidumbre real no esta en
+        ib_insync sino en IBKR, y no se pudo despejar con las herramientas
+        disponibles en este turno.
+    FIX ADICIONAL aplicado por precaucion (Articulo VIII — no afirmar
+    certeza sin comprobarla): si no hay rastro en la cache local
+    (ib.fills()/ib.trades()), _verificar_ejecucion_pendiente() hace ADEMAS
+    una llamada explicita a ib.reqExecutions() con ExecutionFilter
+    acotado a PENDING_ORPHAN_THRESHOLD_DAYS+1 dias y symbol=X antes de
+    concluir HUERFANA — por si el fill si ocurrio pero no llego al
+    backfill automatico de connect(). Si esa llamada tambien falla,
+    NO_VERIFICABLE (fallback a comparacion de cantidad, nunca huerfana
+    por un fallo de lectura). Un trade ya encontrado con estado terminal
+    (Cancelled/etc.) en ib.trades() es autoritativo y NO dispara esta
+    llamada extra — ya es una respuesta positiva de IBKR, no una ausencia
+    ambigua.
+  Tests: tests/test_pending_rebalance_reconciliacion.py (24 tests, 18
+    originales + 6 del refinamiento de reqExecutions explicito) — incluye
+    reproduccion literal del caso DVN (posicion coincidente sin relacion
+    con el order_id rastreado, descartada como huerfana solo tras superar
+    el umbral, nunca confundida con un fill real) y el caso del
+    refinamiento (fill que solo aparece tras la llamada explicita a
+    reqExecutions() se confirma, no se descarta). 83/83 tests passed (59
+    preexistentes + 24 nuevos), estable en 2 pasadas seguidas.
+  PENDIENTE: anadir un paso explicito de vaciar pending_rebalance.json en
+    cualquier futuro cambio de fase (PAPER→LIVE, cutover de cuenta, etc.)
+    — no existe script/checklist de cutover reutilizable en el repo
+    (CUTOVER_VPS.md nunca se creo, ver seccion 2). Ver seccion 13.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
@@ -1515,6 +1602,17 @@ Commits principales en producción (más recientes primero):
   PENDIENTES NO BLOQUEANTES:
   □ OAuth IBKR: repuntar token de U24595040 a DUP301657 (no bloqueante,
     pendiente para lecturas fiables vía OAuth)
+
+  □ PROCEDIMIENTO ESTANDAR PARA CUALQUIER FUTURO CAMBIO DE FASE (PAPER→LIVE
+    de nuevo, cutover de cuenta, etc.) — lección del incidente DVN
+    (10-11/08/2026, ver sección 12): vaciar pending_rebalance.json
+    (echo '{}' > pending_rebalance.json) como paso EXPLICITO antes de
+    operar en la fase nueva, para que ninguna entrada AMPLIAR/REDUCIR
+    pendiente de la fase anterior cruce el corte. No existe hoy un
+    script o checklist de cutover reutilizable en el repo (CUTOVER_VPS.md
+    nunca se creó, ver sección 2) — añadir este paso a mano la próxima
+    vez, o mejor aún, crear por fin ese script/checklist con este paso
+    incluido desde el principio.
 
   □ Extender la guardia de frescura temporal (ver sección 12, DESFASE
     TEMPORAL CALCULO→TRANSMISION, 07/08/2026) a los 2 puntos de
