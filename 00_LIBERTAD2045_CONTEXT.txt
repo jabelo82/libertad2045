@@ -1645,6 +1645,74 @@ Commits principales en producción (más recientes primero):
     verifique el mtime de universe_sp500.py) que alerte si la última
     actualización real supera ~8-9 días.
 
+  AUDITORIA EXHAUSTIVA DEL CODIGO — 07/08/2026 (Claude Code, commit
+  1c428d1, 59/59 tests) — 3 HALLAZGOS CRITICA SIN CORREGIR TODAVIA
+  Alcance completo: correccion, riesgo, errores/red, concurrencia,
+  seguridad, deuda tecnica. Informe completo en
+  LIBERTAD2045_Auditoria_20260807.pdf (fuera del repo). Aqui solo los
+  3 hallazgos de severidad CRITICA, pendientes de fix a fecha de hoy.
+
+  CRITICA 1 — AMPLIAR (rebalance.py) nunca verifica apalancamiento
+  Ubicacion: rebalance.py, bloque de ejecucion AMPLIAR/REDUCIR (comentario
+    "DECISION A-1", justo antes de construir la orden MKT de ajuste).
+  Que pasa: confirmado por grep en todo el fichero — rebalance.py no
+    contiene ninguna referencia a MAX_LEVERAGE, leverage ni risk_check.
+    rebalancear() se ejecuta en libertad2045.py ANTES que risk_check()
+    en el pipeline del ciclo — aunque quisiera consultarlo, nunca ve el
+    veredicto de riesgo de ese ciclo. AMPLIAR compra mas acciones de una
+    posicion YA existente con dinero/margen real, pero ningun camino
+    verifica el apalancamiento resultante.
+  Como se dispara en real: con la cartera llena y leverage ya cerca del
+    limite (ya ha pasado 6 veces documentadas en PAPER, 1,04x-1,13x vs
+    MAX_LEVERAGE=1,00x), si la volatilidad de una posicion existente baja,
+    el sistema optimo puede pedir mas acciones de esa posicion -> AMPLIAR
+    -> aumenta apalancamiento por encima del limite sin que nada lo
+    bloquee, violando el Articulo II.
+  Fix propuesto: comprobar apalancamiento actual (reutilizando logica del
+    punto 5 de risk_check()) antes de ejecutar un AMPLIAR — omitir solo
+    ESE AMPLIAR si supera MAX_LEVERAGE, nunca REDUCIR.
+
+  CRITICA 2 — Risk Guardian evaluado una sola vez ante ~500 simbolos
+  Ubicacion: libertad2045.py — risk_check() se evalua una vez al
+    principio de la fase de entradas, luego el sistema escanea ~500
+    simbolos secuencialmente (reqHistoricalData uno a uno) y ejecuta las
+    entradas sin volver a preguntar el estado de riesgo antes de cada
+    orden nueva.
+  Que pasa: mismo patron "leer todo, luego transmitir todo" que causo el
+    incidente ANET del 05/08, aqui aplicado al gate de riesgo completo en
+    vez de a un stop individual. No hay logs de produccion para medir
+    cuanto tarda el escaneo real en el VPS (no se afirma una cifra sin
+    medirla), pero el precedente documentado (13-14 min de desfase
+    evaluando solo ~9-10 posiciones) hace plausible que 500 simbolos
+    tarden varios minutos mas.
+  Como se dispara en real: si en ese intervalo el drawdown cruza el 10%
+    o el leverage sube, las entradas ya encoladas se ejecutan igual con
+    el veredicto "OK" obsoleto del principio del ciclo.
+  Fix propuesto: re-evaluar drawdown/leverage justo antes de cada
+    ejecutar_trade(), o repetir risk_check() inmediatamente antes de la
+    fase de ejecucion de entradas nuevas.
+
+  CRITICA 3 — Capital para entradas nuevas queda obsoleto tras rebalanceo
+  Ubicacion: libertad2045.py — el capital se lee una vez al principio del
+    ciclo (antes de evaluar_stops_por_cierre() y antes de rebalancear(),
+    que puede gastar caja real en AMPLIAR). Esa misma variable, sin
+    refrescar, es la base de capital_restante, que gatea cuanto se puede
+    comprometer en entradas nuevas.
+  Que pasa: si el rebalanceo gasto capital real en AMPLIAR, las entradas
+    nuevas del mismo ciclo se dimensionan como si ese dinero siguiera
+    disponible.
+  Como se dispara en real: cualquier ciclo donde AMPLIAR se ejecute y en
+    el mismo ciclo haya señales nuevas que quepan en los slots libres —
+    ambos caminos comparten el mismo ciclo nocturno, no es de laboratorio.
+  Fix propuesto: releer obtener_capital(ib) inmediatamente antes de la
+    fase de entradas nuevas (despues de stops + rebalanceo).
+
+  NOTA: los tres hallazgos comparten la misma raiz de fondo — una lectura
+  al principio del ciclo (capital, veredicto de riesgo) que no se
+  refresca mientras el resto del ciclo avanza, y rebalancear() corriendo
+  ANTES que risk_check() en el pipeline. AMPLIAR ademas no consulta el
+  Risk Guardian en ningun punto, a diferencia de las entradas nuevas.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
