@@ -1,14 +1,14 @@
 # --------------------------------------------------
 # LIBERTAD_2045 — Universo de activos
 #
-# ~501 empresas del S&P500 con historia validada
+# ~500 empresas del S&P500 con historia validada
 # 2015-2025. Experimento 25 confirmó 325 activos
 # con trades reales en el período.
 #
 # Revisión recomendada cada 6 meses para reflejar
 # cambios en la composición del índice.
 #
-# Última revisión: 2026-06-15
+# Última revisión: 2026-08-11
 # --------------------------------------------------
 
 
@@ -17,25 +17,25 @@ SP500 = [
     # Tecnología
     "AAPL",  "ACN",  "ADBE",  "ADI",  "ADSK",
     "AKAM",  "AMAT",  "AMD",  "ANET",  "APH",
-    "APP",  "AVGO",  "CDNS",  "CDW",  "CIEN",
-    "COHR",  "CRM",  "CRWD",  "CSCO",  "CTSH",
-    "DDOG",  "DELL",  "FFIV",  "FICO",  "FSLR",
+    "AVGO",  "CDNS",  "CDW",  "CIEN",  "COHR",
+    "CRM",  "CRWD",  "CSCO",  "CTSH",  "DDOG",
+    "DELL",  "FFIV",  "FICO",  "FLEX",  "FSLR",
     "FTNT",  "GDDY",  "GEN",  "GLW",  "HPE",
     "HPQ",  "IBM",  "INTC",  "INTU",  "IT",
     "JBL",  "KEYS",  "KLAC",  "LITE",  "LRCX",
-    "MCHP",  "MPWR",  "MSFT",  "MSI",  "MU",
-    "NOW",  "NTAP",  "NVDA",  "NXPI",  "ON",
-    "ORCL",  "PANW",  "PLTR",  "PTC",  "QCOM",
-    "ROP",  "SMCI",  "SNDK",  "SNPS",  "STX",
-    "SWKS",  "TDY",  "TEL",  "TER",  "TRMB",
-    "TXN",  "TYL",  "VRSN",  "WDAY",  "WDC",
-    "ZBRA",
+    "MCHP",  "MPWR",  "MRVL",  "MSFT",  "MSI",
+    "MU",  "NOW",  "NTAP",  "NVDA",  "NXPI",
+    "ON",  "ORCL",  "PANW",  "PLTR",  "PTC",
+    "QCOM",  "ROP",  "SMCI",  "SNDK",  "SNPS",
+    "STX",  "SWKS",  "TDY",  "TEL",  "TER",
+    "TRMB",  "TXN",  "TYL",  "VRSN",  "WDAY",
+    "WDC",  "ZBRA",
 
     # Comunicaciones
-    "CHTR",  "CMCSA",  "DIS",  "EA",  "FOX",
-    "FOXA",  "GOOG",  "GOOGL",  "LYV",  "META",
-    "NFLX",  "NWS",  "NWSA",  "OMC",  "PSKY",
-    "SATS",  "T",  "TKO",  "TMUS",  "TTD",
+    "APP",  "CHTR",  "CMCSA",  "DIS",  "ECHO",
+    "FOX",  "FOXA",  "GOOG",  "GOOGL",  "LYV",
+    "META",  "NFLX",  "NWS",  "NWSA",  "OMC",
+    "PSKY",  "T",  "TKO",  "TMUS",  "TTD",
     "TTWO",  "VZ",  "WBD",
 
     # Consumo discrecional
@@ -46,19 +46,18 @@ SP500 = [
     "HAS",  "HD",  "HLT",  "LEN",  "LOW",
     "LULU",  "LVS",  "MAR",  "MCD",  "MGM",
     "NCLH",  "NKE",  "NVR",  "ORLY",  "PHM",
-    "POOL",  "RCL",  "RL",  "ROST",  "SBUX",
-    "TJX",  "TPR",  "TSCO",  "TSLA",  "ULTA",
-    "WSM",  "WYNN",  "YUM",
+    "RCL",  "RL",  "ROST",  "SBUX",  "TJX",
+    "TPR",  "TSCO",  "TSLA",  "ULTA",  "WSM",
+    "WYNN",  "YUM",
 
     # Consumo básico
-    "ADM",  "BF B",  "BG",  "CAG",  "CASY",
-    "CHD",  "CL",  "CLX",  "COST",  "CPB",
-    "DG",  "DLTR",  "EL",  "GIS",  "HRL",
-    "HSY",  "KDP",  "KHC",  "KMB",  "KO",
-    "KR",  "KVUE",  "MDLZ",  "MKC",  "MNST",
-    "MO",  "PEP",  "PG",  "PM",  "SJM",
-    "STZ",  "SYY",  "TAP",  "TGT",  "TSN",
-    "WMT",
+    "ADM",  "BF B",  "BG",  "CASY",  "CHD",
+    "CL",  "CLX",  "COST",  "DG",  "DLTR",
+    "EL",  "GIS",  "HRL",  "HSY",  "KDP",
+    "KHC",  "KMB",  "KO",  "KR",  "KVUE",
+    "MDLZ",  "MKC",  "MNST",  "MO",  "PEP",
+    "PG",  "PM",  "SJM",  "STZ",  "SYY",
+    "TAP",  "TGT",  "TSN",  "WMT",
 
     # Salud
     "A",  "ABBV",  "ABT",  "ALGN",  "AMGN",
@@ -96,19 +95,20 @@ SP500 = [
     "ADP",  "ALLE",  "AME",  "AOS",  "AXON",
     "BA",  "BLDR",  "BR",  "CARR",  "CAT",
     "CHRW",  "CMI",  "CPRT",  "CSX",  "CTAS",
-    "DAL",  "DE",  "DOV",  "EFX",  "EME",
-    "EMR",  "ETN",  "EXPD",  "FAST",  "FDX",
-    "FIX",  "FTV",  "GD",  "GE",  "GEV",
-    "GNRC",  "GWW",  "HII",  "HON",  "HUBB",
-    "HWM",  "IEX",  "IR",  "ITW",  "J",
-    "JBHT",  "JCI",  "LDOS",  "LHX",  "LII",
-    "LMT",  "LUV",  "MAS",  "MMM",  "NDSN",
-    "NOC",  "NSC",  "ODFL",  "OTIS",  "PAYX",
-    "PCAR",  "PH",  "PNR",  "PWR",  "ROK",
-    "ROL",  "RSG",  "RTX",  "SNA",  "SWK",
-    "TDG",  "TT",  "TXT",  "UAL",  "UBER",
-    "UNP",  "UPS",  "URI",  "VLTO",  "VRSK",
-    "VRT",  "WAB",  "WM",  "XYL",
+    "DAL",  "DD",  "DE",  "DOV",  "EFX",
+    "EME",  "EMR",  "ETN",  "EXPD",  "FAST",
+    "FDX",  "FERG",  "FIX",  "FTV",  "GD",
+    "GE",  "GEV",  "GNRC",  "GWW",  "HII",
+    "HON",  "HUBB",  "HWM",  "IEX",  "IR",
+    "ITW",  "J",  "JBHT",  "JCI",  "LDOS",
+    "LHX",  "LII",  "LMT",  "LUV",  "MAS",
+    "MMM",  "NDSN",  "NOC",  "NSC",  "ODFL",
+    "OTIS",  "PAYX",  "PCAR",  "PH",  "PNR",
+    "PWR",  "ROK",  "ROL",  "RSG",  "RTX",
+    "SNA",  "SWK",  "TDG",  "TT",  "TXT",
+    "UAL",  "UBER",  "UNP",  "UPS",  "URI",
+    "VLTO",  "VRSK",  "VRT",  "WAB",  "WM",
+    "XYL",
 
     # Energía
     "APA",  "BKR",  "COP",  "CVX",  "DVN",
@@ -119,11 +119,10 @@ SP500 = [
 
     # Materiales
     "ALB",  "AMCR",  "APD",  "AVY",  "BALL",
-    "CF",  "CRH",  "CTVA",  "DD",  "DOW",
-    "ECL",  "FCX",  "IFF",  "IP",  "LIN",
-    "LYB",  "MLM",  "MOS",  "NEM",  "NUE",
-    "PKG",  "PPG",  "SHW",  "STLD",  "SW",
-    "VMC",
+    "CF",  "CRH",  "CTVA",  "DOW",  "ECL",
+    "FCX",  "IFF",  "IP",  "LIN",  "LYB",
+    "MLM",  "MOS",  "NEM",  "NUE",  "PKG",
+    "PPG",  "SHW",  "STLD",  "SW",  "VMC",
 
     # Utilities
     "AEE",  "AEP",  "AES",  "ATO",  "AWK",

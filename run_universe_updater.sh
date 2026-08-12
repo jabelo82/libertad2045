@@ -2,7 +2,7 @@
 # run_universe_updater.sh — Actualiza universe_sp500.py semanalmente
 # Ejecutado por cron los lunes a las 21:00 (1 h antes del bot)
 
-PROJECT_DIR="/home/jabelo/PROYECTO_LIBERTAD_2045"
+PROJECT_DIR="${PROJECT_DIR:-/home/jabelo/PROYECTO_LIBERTAD_2045}"
 VENV_ACTIVATE="$PROJECT_DIR/venv/bin/activate"
 
 set -a && source "$PROJECT_DIR/.env" && set +a
