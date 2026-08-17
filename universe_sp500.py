@@ -1,14 +1,14 @@
 # --------------------------------------------------
 # LIBERTAD_2045 — Universo de activos
 #
-# ~500 empresas del S&P500 con historia validada
+# ~501 empresas del S&P500 con historia validada
 # 2015-2025. Experimento 25 confirmó 325 activos
 # con trades reales en el período.
 #
 # Revisión recomendada cada 6 meses para reflejar
 # cambios en la composición del índice.
 #
-# Última revisión: 2026-08-11
+# Última revisión: 2026-08-17
 # --------------------------------------------------
 
 
@@ -26,10 +26,10 @@ SP500 = [
     "MCHP",  "MPWR",  "MRVL",  "MSFT",  "MSI",
     "MU",  "NOW",  "NTAP",  "NVDA",  "NXPI",
     "ON",  "ORCL",  "PANW",  "PLTR",  "PTC",
-    "QCOM",  "ROP",  "SMCI",  "SNDK",  "SNPS",
-    "STX",  "SWKS",  "TDY",  "TEL",  "TER",
-    "TRMB",  "TXN",  "TYL",  "VRSN",  "WDAY",
-    "WDC",  "ZBRA",
+    "Q",  "QCOM",  "ROP",  "SMCI",  "SNDK",
+    "SNPS",  "STX",  "SWKS",  "TDY",  "TEL",
+    "TER",  "TRMB",  "TXN",  "TYL",  "VRSN",
+    "WDAY",  "WDC",  "ZBRA",
 
     # Comunicaciones
     "APP",  "CHTR",  "CMCSA",  "DIS",  "ECHO",
