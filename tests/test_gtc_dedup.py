@@ -44,6 +44,11 @@ for mod in ("logger", "telegram", "data_loader", "position_size",
     m.calcular_trailing_stop = MagicMock(return_value=(None, None))
     m.calcular_posicion = MagicMock(return_value=(0, 0, 0))
     m.MAX_POSITION_PCT = 0.20
+    # verificar_apalancamiento_ampliar (CRÍTICA #1, auditoría 07/08/2026):
+    # stub permisivo — no es objeto de este fichero de test, AMPLIAR debe
+    # comportarse igual que antes de ese fix salvo que un test concreto
+    # lo sobreescriba.
+    m.verificar_apalancamiento_ampliar = MagicMock(return_value=(True, "OK", 0.0))
     sys.modules[mod] = m
 
 import rebalance

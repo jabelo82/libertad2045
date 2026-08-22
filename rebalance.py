@@ -35,6 +35,7 @@ from ib_insync import ExecutionFilter, Order, Stock
 from data_loader import obtener_datos
 from logger import log_event
 from position_size import MAX_POSITION_PCT, calcular_posicion, calcular_trailing_stop
+from risk_guardian import verificar_apalancamiento_ampliar
 from telegram import send_telegram
 
 
@@ -1104,12 +1105,39 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                         decisiones.append(decision)
                         continue
 
-                    # DECISIÓN A-1 (documentada 18/06/2026): AMPLIAR se permite incluso con
+                    # DECISIÓN A-1 (documentada 18/06/2026, actualizada 22/08/2026 —
+                    # CRÍTICA #1 auditoría 07/08/2026): AMPLIAR se permite incluso con
                     # Risk Guardian activo (drawdown > 10%) porque no abre exposición nueva,
                     # solo ajusta el tamaño de una posición existente que ya superó el filtro
-                    # de riesgo en su entrada original. REDUCIR siempre se permite (reduce
-                    # exposición). Si se quisiera bloquear AMPLIAR durante drawdown, añadir
-                    # aquí: `if risk_guardian_activo: continue`.
+                    # de riesgo en su entrada original. Eso sigue sin cambiar — drawdown NO
+                    # bloquea AMPLIAR. Lo que sí se comprueba ahora es el apalancamiento:
+                    # rebalancear() corre ANTES que risk_check() en el ciclo (libertad2045.py)
+                    # y nunca ve su veredicto, así que un AMPLIAR podía antes ejecutarse por
+                    # encima de MAX_LEVERAGE sin ningún control (Artículo II). Se comprueba
+                    # aquí mismo, justo antes de transmitir, con la misma lógica del punto 5
+                    # de risk_check() (ver verificar_apalancamiento_ampliar en
+                    # risk_guardian.py) — fail-safe: si no se puede leer el dato de cuenta,
+                    # se bloquea este AMPLIAR por precaución. REDUCIR nunca pasa por aquí:
+                    # reduce exposición, nunca la aumenta.
+                    if accion_orden == "BUY":
+                        exposicion_adicional = shares_abs * precio
+                        permitido, motivo_leverage, leverage_proy = verificar_apalancamiento_ampliar(
+                            ib, exposicion_adicional=exposicion_adicional
+                        )
+                        if not permitido:
+                            log_event("WARN",
+                                      f"Rebalanceo AMPLIAR omitido para {symbol} — {motivo_leverage}",
+                                      symbol=symbol)
+                            try:
+                                send_telegram(
+                                    f"⚠️ LIBERTAD_2045 — AMPLIAR omitido para {symbol}: "
+                                    f"{motivo_leverage}"
+                                )
+                            except Exception:
+                                pass
+                            decision.motivo += f" [AMPLIAR omitido: {motivo_leverage}]"
+                            decisiones.append(decision)
+                            continue
 
                     # Orden MKT DAY — solo horario regular (outsideRth=False).
                     # Si el mercado está cerrado IBKR la encola como PreSubmitted

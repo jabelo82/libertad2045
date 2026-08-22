@@ -19,8 +19,45 @@ MAX_LEVERAGE       = float(os.getenv("RISK_MAX_LEVERAGE",   "1.00"))  # Apalanca
 # Ventana horaria de operación (hora local del servidor)
 HOUR_START         = int(os.getenv("RISK_HOUR_START", "21"))  # Ver también config.py — HORA_INICIO
 HOUR_END           = int(os.getenv("RISK_HOUR_END",   "23"))  # Ver también config.py — HORA_FIN
- 
- 
+
+# Filtramos por moneda base para evitar comparar divisas distintas.
+# IBKR puede devolver el mismo tag en varias monedas (p.ej. USD para el
+# componente en USD y EUR/BASE para el total en moneda base de la cuenta).
+# Aceptamos "BASE" (valor documentado en el API TWS) y "EUR" (código real
+# devuelto en cuentas con base EUR según la implementación observada).
+_BASE_CURRENCIES = {"BASE", "EUR"}
+
+
+def _leer_cuenta(ib):
+    """
+    Lee NetLiquidation y GrossPositionValue de accountSummary(), filtrados
+    por moneda base (ver _BASE_CURRENCIES). Compartido por risk_check()
+    (punto 5) y verificar_apalancamiento_ampliar() — Artículo IV, evita
+    duplicar la lectura de accountSummary en dos sitios.
+
+    Devuelve (net_liq, gross_pos, error):
+      - Si accountSummary() lanza una excepción: (None, None, "mensaje").
+      - Si la lectura tiene éxito pero un tag no aparece en la respuesta,
+        ese valor queda en None y error es None — el fail-safe de qué
+        hacer ante un dato ausente queda a cargo de cada llamante, igual
+        que hacía risk_check() antes de esta extracción.
+    """
+    try:
+        account = ib.accountSummary()
+    except Exception as e:
+        return None, None, f"error leyendo cuenta IBKR: {e}"
+
+    net_liq   = None
+    gross_pos = None
+    for item in account:
+        if item.tag == "NetLiquidation" and item.currency in _BASE_CURRENCIES:
+            net_liq = float(item.value)
+        elif item.tag == "GrossPositionValue" and item.currency in _BASE_CURRENCIES:
+            gross_pos = float(item.value)
+
+    return net_liq, gross_pos, None
+
+
 def _leer_capital_pico(capital_actual=None):
     """
     Lee el capital pico registrado en disco.
@@ -99,28 +136,12 @@ def risk_check(ib):
     # 3. Capital de la cuenta
     # --------------------------------------------------
  
-    try:
-        account   = ib.accountSummary()
-        net_liq   = None
-        gross_pos = None
- 
-        # Filtramos por moneda base para evitar comparar divisas distintas.
-        # IBKR puede devolver el mismo tag en varias monedas (p.ej. USD para el
-        # componente en USD y EUR/BASE para el total en moneda base de la cuenta).
-        # Aceptamos "BASE" (valor documentado en el API TWS) y "EUR" (código real
-        # devuelto en cuentas con base EUR según la implementación observada).
-        _BASE_CURRENCIES = {"BASE", "EUR"}
+    net_liq, gross_pos, error = _leer_cuenta(ib)
 
-        for item in account:
-            if item.tag == "NetLiquidation" and item.currency in _BASE_CURRENCIES:
-                net_liq = float(item.value)
-            elif item.tag == "GrossPositionValue" and item.currency in _BASE_CURRENCIES:
-                gross_pos = float(item.value)
- 
-    except Exception as e:
-        log_event("ERROR", f"Risk Guardian: error leyendo cuenta IBKR: {e}")
-        return False, f"error leyendo cuenta IBKR: {e}"
- 
+    if error is not None:
+        log_event("ERROR", f"Risk Guardian: {error}")
+        return False, error
+
     if net_liq is None:
         log_event("ERROR", "Risk Guardian: NetLiquidation[BASE/EUR] no encontrado en "
                            "accountSummary — bloqueando por precaución (fail-safe)")
@@ -208,6 +229,67 @@ def risk_check(ib):
                        f"sin apalancamiento")
 
     return True, "OK"
+
+
+def verificar_apalancamiento_ampliar(ib, exposicion_adicional: float = 0.0):
+    """
+    Comprobación de apalancamiento reutilizada por rebalance.py antes de
+    ejecutar una orden AMPLIAR (CRÍTICA #1, auditoría 07/08/2026 —
+    LIBERTAD2045_Auditoria_20260807 — y comentario "DECISIÓN A-1" en
+    rebalance.py).
+
+    A diferencia de risk_check(), NO comprueba conexión, ventana horaria,
+    capital mínimo ni drawdown — rebalancear() se ejecuta ANTES que
+    risk_check() en el ciclo (libertad2045.py) y nunca ve su veredicto, así
+    que esta función solo replica el punto 5 (apalancamiento), que es la
+    única pieza que le falta a AMPLIAR según la auditoría.
+
+    exposicion_adicional es el valor nocional (shares × precio) que la
+    orden AMPLIAR concreta añadiría a GrossPositionValue si se ejecuta.
+    Se comprueba el apalancamiento PROYECTADO (actual + esta orden), no
+    solo el actual: con el apalancamiento ya al límite pero todavía por
+    debajo, un AMPLIAR concreto puede ser precisamente el que lo cruce, y
+    ese es el caso que el hallazgo de la auditoría pide bloquear. Con
+    exposicion_adicional=0.0 (valor por defecto) se comprueba solo el
+    apalancamiento actual.
+
+    Mismo fail-safe que el punto 5 de risk_check(): si NetLiquidation o
+    GrossPositionValue no se pueden leer, se bloquea el AMPLIAR por
+    precaución — nunca se asume que el apalancamiento está dentro de
+    límite sin poder comprobarlo.
+
+    Retorna (permitido: bool, motivo: str, leverage_proyectado: float | None).
+    """
+    net_liq, gross_pos, error = _leer_cuenta(ib)
+
+    if error is not None:
+        motivo = f"{error} — bloqueando AMPLIAR por precaución (fail-safe)"
+        log_event("ERROR", f"Risk Guardian (AMPLIAR): {motivo}")
+        return False, motivo, None
+
+    if net_liq is None or gross_pos is None:
+        tag = "NetLiquidation" if net_liq is None else "GrossPositionValue"
+        motivo = f"{tag}[BASE/EUR] no disponible en accountSummary (fail-safe)"
+        log_event("ERROR", f"Risk Guardian (AMPLIAR): {motivo} "
+                            f"— bloqueando AMPLIAR por precaución")
+        return False, motivo, None
+
+    if net_liq <= 0:
+        motivo = f"NetLiquidation no positivo ({net_liq:.2f}) — fail-safe"
+        log_event("ERROR", f"Risk Guardian (AMPLIAR): {motivo} "
+                            f"— bloqueando AMPLIAR por precaución")
+        return False, motivo, None
+
+    leverage_proyectado = (gross_pos + exposicion_adicional) / net_liq
+
+    if leverage_proyectado > MAX_LEVERAGE:
+        motivo = (f"apalancamiento proyectado {leverage_proyectado:.2f}x > límite "
+                  f"{MAX_LEVERAGE:.2f}x (exposición actual {gross_pos:.2f}€ + "
+                  f"orden {exposicion_adicional:.2f}€ | capital {net_liq:.2f}€)")
+        log_event("WARN", f"Risk Guardian (AMPLIAR): {motivo}")
+        return False, motivo, leverage_proyectado
+
+    return True, "OK", leverage_proyectado
 
 
 def resetear_capital_peak(capital_inicial: float) -> None:
