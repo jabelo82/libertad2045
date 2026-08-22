@@ -31,6 +31,18 @@ Actualizado: 2026-08-07  |  Versión del sistema: v2.9 (guardias trailing stop +
                            la parte digital y a la parte humana.
 
 --------------------------------------------------------------------------------
+
+  NOTA — LIBERTAD_2045 NUNCA OPERARÁ EN CORTO (decisión de fondo,
+  21/08/2026, derivada del Articulo II): asimetria de riesgo (perdida
+  potencialmente ilimitada en corto vs 100% maximo en largo) y
+  dependencia de terceros (prestamo de acciones, borrow fee, recall
+  forzoso del prestamista) que romperia la autonomia del sistema —
+  Libertad depende solo del mercado y de si misma, de nadie mas. Si
+  algun dia se explora, seria un laboratorio completamente aparte con
+  su propio backtest de 21 años, nunca una extension del motor
+  long-only actual.
+
+--------------------------------------------------------------------------------
 1. ESTADO ACTUAL (02 JULIO 2026)
 --------------------------------------------------------------------------------
 
