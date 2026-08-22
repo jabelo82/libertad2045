@@ -25,23 +25,67 @@ ATR_MULTIPLIER_BASE = 3.1     # Multiplicador de respaldo si ATR_PERCENTIL no es
 TRAILING_FACTOR = 0.75        # Aprobado en Experimento 40-ter (stress test 3/3 crisis)  # Ver también config.py — TRAILING_FACTOR
 
 # --------------------------------------------------
-# Guardias anti-outlier del trailing stop — incidente ANET 05/08/2026
-# El stop de ANET quedó a 0,91 del cierre (196,40 vs 197,31). CAUSA REAL
-# (verificada 06/08/2026 con datos oficiales de IBKR, get_price_history):
-# el "bad tick" NO se confirmo -- el 05/08 ANET tuvo un dia real y
-# extraordinariamente volatil (apertura 210,19, high oficial 214,89,
-# cierre 197,31, volumen 2-3x lo normal, probable reaccion a resultados).
-# El high de 214,89 era un dato REAL, no corrupto. calcular_trailing_stop()
-# confiaba en
-# df["high"].iloc[-1] sin validar que fuera coherente con la volatilidad
-# reciente. Estas guardias rechazan el ciclo (se conserva el stop GTC
-# vigente y se alerta) en vez de trasladar un dato corrupto a una orden
-# real. Ver 00_LIBERTAD2045_CONTEXT.txt para el análisis completo.
+# Guardias anti-outlier del trailing stop en calcular_trailing_stop()
+# — RETIRADAS 22/08/2026, historial completo abajo
+# --------------------------------------------------
+# ORIGEN (incidente ANET 05/08/2026): el stop de ANET quedó a 0,91 del
+# cierre (196,40 vs 197,31). CAUSA REAL (verificada 06/08/2026 con datos
+# oficiales de IBKR, get_price_history): el "bad tick" NO se confirmo --
+# el 05/08 ANET tuvo un dia real y extraordinariamente volatil (apertura
+# 210,19, high oficial 214,89, cierre 197,31, volumen 2-3x lo normal,
+# probable reaccion a resultados). El high de 214,89 era un dato REAL, no
+# corrupto. calcular_trailing_stop() confiaba en df["high"].iloc[-1] sin
+# validar que fuera coherente con la volatilidad reciente. Se añadieron
+# dos guardias (ATR_SALTO y STOP_DEMASIADO_CERCA) el 05-07/08/2026, en
+# reaccion directa al incidente y SIN pasar por el backtest de 21 años
+# antes de ir a produccion: si el ratio de ATR entre ciclos salia de
+# [ATR_RATIO_MIN, ATR_RATIO_MAX], o si el stop resultante quedaba a menos
+# de 1×ATR del cierre, el ciclo se descartaba (se conservaba el stop GTC
+# vigente y se alertaba) en vez de calcular el nuevo stop.
+#
+# RETIRADA (22/08/2026) — Experimento 47, backtest de 21 años completo
+# (backtest_exp47_guardias_trailing.py, resultados en backtest_results/
+# *_exp47_*.csv), comparando el calculo CON las guardias (Variante B, tal
+# como estaba en produccion) contra SIN ellas (Variante A, la que ya
+# validan los 21 años del backtest canonico):
+#   Variante A (sin guardias) : PF 2,6071 | capital 8.888.418€ | DD 10,4%
+#   Variante B (con guardias) : PF 2,4342 | capital 6.984.283€ (-21,42%
+#                               vs A) | DD 12,7% (peor drawdown)
+# La variante A gana en las 4 metricas. Una tercera variante amortiguada
+# (C, que capea el ATR en vez de descartar el ciclo, disenada el mismo
+# 22/08/2026 para intentar salvar la idea) dio resultados IDENTICOS a B
+# porque ATR_SALTO no se activo ni una sola vez en los 21 años de
+# backtest -- su mecanismo diferenciador nunca tuvo efecto real.
+# Adicionalmente: STOP_DEMASIADO_CERCA se disparo en el 73% de las
+# operaciones del backtest (3.364 activaciones sobre 2.256 trades) -- no
+# es una guardia de eventos raros, interviene en la mayoria de
+# operaciones normales, rechazando el trailing recalculado (mas ajustado,
+# protegiendo mas ganancia) y manteniendo el stop anterior mas flojo.
+# Caso real MRNA (20/08/2026): ATR_SALTO bloqueo la actualizacion del
+# trailing la noche antes de una reversion intradia del -23,6%. Verificado
+# con la formula real del sistema que, sin el bloqueo, el calculo habria
+# dado un stop entre 154-157$ -- MEJOR que los 150$ que Javier puso
+# manualmente esa noche. La guardia no protegio nada; impidio que el
+# sistema hiciera, solo, lo que habria hecho bien.
+# Hasta la fecha de la retirada, ninguna de las dos guardias tiene un
+# caso real documentado donde demostrablemente evitara una perdida que
+# sin ella si hubiera ocurrido -- ATR_SALTO ni siquiera existia cuando
+# paso el incidente original de ANET que las motivo (se añadio DESPUES,
+# como reaccion), y ANET nunca las puso a prueba.
+# calcular_trailing_stop() vuelve al calculo directo de la Variante A:
+# mult -> nuevo_stop, sin ninguna comprobacion de salto de ATR ni de
+# distancia minima. Ver 00_LIBERTAD2045_CONTEXT.txt para más contexto.
+#
+# NO SE TOCA verificar_margen_stop_vivo() (mas abajo en este modulo): es
+# un mecanismo distinto (guardia de precio vivo justo antes de transmitir
+# la orden, no del calculo por cierre), no medido por este backtest, y
+# sigue en produccion sin cambios. Por eso MIN_STOP_DISTANCE_ATR y
+# _alertar_anomalia_trailing() se conservan: verificar_margen_stop_vivo()
+# los sigue usando. ATR_RATIO_MIN y ATR_RATIO_MAX si se eliminan: solo
+# los usaba la guardia ATR_SALTO ya retirada (Articulo III).
 # --------------------------------------------------
 
-ATR_RATIO_MIN         = 0.3   # ATR no puede caer a menos del 30% del ciclo anterior en un día
-ATR_RATIO_MAX          = 3.0  # ATR no puede multiplicarse por más de 3x en un día
-MIN_STOP_DISTANCE_ATR  = 1.0  # El stop nunca puede quedar a menos de 1×ATR del cierre de hoy
+MIN_STOP_DISTANCE_ATR  = 1.0  # El stop nunca puede quedar a menos de 1×ATR del cierre de hoy — usado por verificar_margen_stop_vivo()
 
 
 def _alertar_anomalia_trailing(codigo, mensaje, symbol=None):
@@ -164,53 +208,28 @@ def calcular_trailing_stop(df, trailing_factor=TRAILING_FACTOR, symbol=None):
     Parámetros:
         df             : DataFrame de data_loader con columnas ATR, ATR_PERCENTIL, high, close
         trailing_factor: multiplicador de compresión del stop (por defecto TRAILING_FACTOR)
-        symbol         : ticker, opcional — solo para identificar el activo en logs/alertas
+        symbol         : ticker, opcional — no usado por este cálculo; se mantiene en la
+                         firma por compatibilidad con las llamadas existentes (portfolio_manager,
+                         rebalance). Lo usaban las guardias anti-outlier retiradas el 22/08/2026
+                         (ver comentario de cabecera del módulo) para identificar el activo en
+                         logs/alertas.
 
-    Incluye guardias anti-outlier (ver comentario de cabecera del módulo): si el
-    ATR salta de forma extrema respecto al ciclo anterior, o si el stop resultante
-    queda a menos de 1×ATR del cierre, el ciclo se descarta y se alerta en vez de
-    devolver un stop no confiable.
+    Cálculo directo B1 — sin guardias anti-outlier (retiradas 22/08/2026, ver
+    comentario de cabecera del módulo: el backtest de 21 años del Experimento 47
+    mostró que empeoraban las 4 métricas frente a este cálculo directo).
 
-    Retorna (nuevo_stop, mult) o (None, None) si los datos son insuficientes o
-    si una guardia anti-outlier descarta el ciclo.
+    Retorna (nuevo_stop, mult) o (None, None) si los datos son insuficientes.
     """
-    import pandas as pd
     try:
         atr_val       = df["ATR"].iloc[-1]
         percentil_val = df["ATR_PERCENTIL"].iloc[-1]
         high_hoy      = df["high"].iloc[-1]
-        close_hoy     = df["close"].iloc[-1]
 
         if pd.isna(atr_val) or pd.isna(percentil_val) or atr_val <= 0:
             return None, None
 
-        # ── Guardia 1: salto extremo de ATR entre ciclos consecutivos ──
-        if len(df) >= 2:
-            atr_prev = df["ATR"].iloc[-2]
-            if not pd.isna(atr_prev) and atr_prev > 0:
-                ratio = float(atr_val) / float(atr_prev)
-                if ratio < ATR_RATIO_MIN or ratio > ATR_RATIO_MAX:
-                    _alertar_anomalia_trailing(
-                        "ATR_SALTO",
-                        f"ATR paso de {atr_prev:.2f} a {atr_val:.2f} ({ratio:.2f}x) en un ciclo",
-                        symbol=symbol,
-                    )
-                    return None, None
-
         mult       = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * float(percentil_val)) * trailing_factor, 2)
         nuevo_stop = round(float(high_hoy) - float(atr_val) * mult, 2)
-
-        # ── Guardia 2: el stop no puede quedar pegado al precio ──
-        if not pd.isna(close_hoy):
-            distancia = float(close_hoy) - nuevo_stop
-            if distancia < MIN_STOP_DISTANCE_ATR * float(atr_val):
-                _alertar_anomalia_trailing(
-                    "STOP_DEMASIADO_CERCA",
-                    f"stop={nuevo_stop:.2f} a solo {distancia:.2f} del cierre={close_hoy:.2f} "
-                    f"(ATR={atr_val:.2f}, high={high_hoy:.2f}, mult={mult})",
-                    symbol=symbol,
-                )
-                return None, None
 
         return nuevo_stop, mult
 
@@ -244,8 +263,10 @@ def verificar_margen_stop_vivo(precio_vivo, stop_price, atr,
     sigue siendo válido — no solo respecto al cierre usado minutos antes
     para calcularlo.
 
-    Reaplica el mismo umbral que la guardia STOP_DEMASIADO_CERCA
-    (min_mult × ATR) pero contra el precio del instante de transmisión.
+    Reaplica el mismo umbral (min_mult × ATR) que usaba la guardia
+    STOP_DEMASIADO_CERCA de calcular_trailing_stop() antes de su retirada
+    el 22/08/2026 (ver comentario de cabecera del módulo) — pero contra
+    el precio del instante de transmisión, no el cierre usado minutos antes.
 
     Es una guardia adicional, no la fuente de verdad: si no hay precio vivo
     disponible o no hay ATR, deja pasar sin bloquear (fail-open) — un

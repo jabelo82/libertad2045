@@ -1,22 +1,40 @@
 """
 tests/test_trailing_stop_guardrails.py
 
-Tests unitarios de las guardias anti-outlier de calcular_trailing_stop()
-(position_size.py), añadidas tras el incidente ANET del 05/08/2026:
-el stop quedó a 0,91 del cierre porque un "high" de un solo ciclo,
-anómalo respecto a la volatilidad reciente, se trasladó sin validar
-al cálculo del stop.
+Tests unitarios de calcular_trailing_stop() (position_size.py) tras la
+RETIRADA (22/08/2026) de las guardias anti-outlier ATR_SALTO y
+STOP_DEMASIADO_CERCA, añadidas el 05-07/08/2026 tras el incidente ANET
+y revertidas después del Experimento 47 (backtest de 21 años,
+backtest_exp47_guardias_trailing.py): la variante SIN guardias (A) dio
+mejores resultados en las 4 métricas que la variante CON guardias (B, la
+que estaba en producción) — PF 2,6071 vs 2,4342, capital 8.888.418€ vs
+6.984.283€, DD 10,4% vs 12,7%. Ver comentario de cabecera de
+position_size.py para el análisis completo, incluido el caso real MRNA
+(20/08/2026) donde ATR_SALTO bloqueó una actualización que habría sido
+mejor que la corrección manual.
 
-Cubre:
-    - Caso normal (sin anomalía) → stop calculado como siempre.
-    - Guardia 1: salto extremo de ATR entre ciclos consecutivos.
-    - Guardia 2: stop resultante a menos de 1×ATR del cierre
-                 (reproduce el escenario real del incidente ANET).
-    - Ambas guardias no deben interrumpir el cálculo si la alerta
-      (log/telegram) falla.
+Este archivo probaba explícitamente el comportamiento de ambas guardias
+(descarte del ciclo + alerta). Con las guardias retiradas, esos
+escenarios ya no descartan nada — calcular_trailing_stop() debe seguir
+calculando el stop normalmente incluso ante un salto de ATR o un stop
+que quede cerca del cierre. Se ELIMINARON:
+    - TestGuardiaATRSalto (probaba el descarte por salto de ATR, que ya
+      no existe) y TestGuardiaStopDemasiadoCerca (ídem, descarte por
+      stop pegado al precio) — ambas verificaban un `return (None, None)`
+      + llamada a `_alertar_anomalia_trailing` que ya no ocurre.
+    - TestAlertaNuncaRompeElCalculo — probaba que un fallo de logging/
+      telegram durante una alerta de guardia no rompía el cálculo;
+      calcular_trailing_stop() ya no dispara ninguna alerta, así que el
+      escenario no aplica. La propiedad "una alerta que falla nunca debe
+      propagar" se sigue cubriendo donde sigue siendo relevante: en
+      tests/test_stop_vivo_guard.py, sobre verificar_margen_stop_vivo()
+      (que no se ha tocado y sigue usando _alertar_anomalia_trailing()).
+Se CONSERVA TestCasoNormal (el cálculo normal no cambia) y se AÑADEN dos
+casos que antes disparaban una guardia y ahora deben calcular el stop
+igual que cualquier otro ciclo, sin descartarlo ni alertar.
 
 Ejecutar desde la raíz del proyecto:
-    venv_torre_roto/bin/python3 -m pytest tests/test_trailing_stop_guardrails.py -v
+    venv/bin/python -m pytest tests/test_trailing_stop_guardrails.py -v
 """
 
 import sys
@@ -69,92 +87,47 @@ class TestCasoNormal(unittest.TestCase):
         mock_log.assert_not_called()
 
 
-class TestGuardiaATRSalto(unittest.TestCase):
+class TestSinGuardias(unittest.TestCase):
+    """
+    Escenarios que, con las guardias todavía activas, descartaban el ciclo
+    (ver historial en el docstring del módulo). Ahora deben calcular el
+    stop con la fórmula directa B1, sin descartar nada ni alertar.
+    """
 
-    @patch("position_size._alertar_anomalia_trailing")
-    def test_atr_colapsa_respecto_al_ciclo_anterior_se_descarta(self, mock_alerta):
-        # ATR previo 8.0 → ATR hoy 0.96 (colapso ~8x, igual que la hipótesis inicial del incidente)
-        atr_series = [8.0] * 13 + [0.96]
-        df = _df(atr_series, high=197.31, close=197.31, percentil=0.9)
-
-        nuevo_stop, mult = calcular_trailing_stop(df, symbol="ANET")
-
-        self.assertIsNone(nuevo_stop)
-        self.assertIsNone(mult)
-        mock_alerta.assert_called_once()
-        self.assertEqual(mock_alerta.call_args.args[0], "ATR_SALTO")
-        self.assertEqual(mock_alerta.call_args.kwargs.get("symbol"), "ANET")
-
-    @patch("position_size._alertar_anomalia_trailing")
-    def test_atr_se_dispara_respecto_al_ciclo_anterior_se_descarta(self, mock_alerta):
-        # ATR previo 8.0 → ATR hoy 30.0 (x3.75, por encima del umbral ATR_RATIO_MAX)
+    @patch("position_size.log_event")
+    def test_salto_extremo_de_atr_ya_no_descarta_el_ciclo(self, mock_log):
+        # Mismo salto de ATR (8.0 -> 30.0, x3.75) que antes disparaba ATR_SALTO
         atr_series = [8.0] * 13 + [30.0]
-        df = _df(atr_series, high=200.0, close=190.0, percentil=0.5)
+        percentil = 0.5
+        df = _df(atr_series, high=200.0, close=190.0, percentil=percentil)
 
         nuevo_stop, mult = calcular_trailing_stop(df)
 
-        self.assertIsNone(nuevo_stop)
-        self.assertIsNone(mult)
-        mock_alerta.assert_called_once()
-        self.assertEqual(mock_alerta.call_args.args[0], "ATR_SALTO")
+        mult_esperado = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * percentil) * TRAILING_FACTOR, 2)
+        stop_esperado = round(200.0 - 30.0 * mult_esperado, 2)
 
-    @patch("position_size._alertar_anomalia_trailing")
-    def test_atr_dentro_de_rango_normal_no_dispara_guardia(self, mock_alerta):
-        # Variación moderada día a día (dentro de ATR_RATIO_MIN/MAX) — no debe descartarse
-        atr_series = [8.0] * 13 + [9.5]
-        df = _df(atr_series, high=191.32, close=189.0, percentil=0.5)
+        self.assertEqual(mult, mult_esperado)
+        self.assertEqual(nuevo_stop, stop_esperado)
+        mock_log.assert_not_called()
 
-        nuevo_stop, mult = calcular_trailing_stop(df)
-
-        self.assertIsNotNone(nuevo_stop)
-        mock_alerta.assert_not_called()
-
-
-class TestGuardiaStopDemasiadoCerca(unittest.TestCase):
-
-    @patch("position_size._alertar_anomalia_trailing")
-    def test_reproduce_incidente_anet_05_08(self, mock_alerta):
-        # Reconstrucción aproximada del ciclo real: ATR estable (sin salto),
-        # pero un "high" de un solo ciclo muy por encima del rango reciente
-        # empuja el stop a quedar pegado al cierre.
+    @patch("position_size.log_event")
+    def test_stop_pegado_al_cierre_ya_no_descarta_el_ciclo(self, mock_log):
+        # Reconstrucción del caso ANET 05/08: high anómalo que antes empujaba
+        # el stop a quedar pegado al cierre y disparaba STOP_DEMASIADO_CERCA.
         atr_val = 10.9
         atr_series = [10.5] * 13 + [atr_val]
-        high_anomalo = 214.89   # ~20 puntos por encima del rango reciente (~165-195)
-        close_hoy    = 197.31
-        df = _df(atr_series, high=high_anomalo, close=close_hoy, percentil=0.95)
+        high_anomalo = 214.89
+        percentil = 0.95
+        df = _df(atr_series, high=high_anomalo, close=197.31, percentil=percentil)
 
         nuevo_stop, mult = calcular_trailing_stop(df, symbol="ANET")
 
-        self.assertIsNone(nuevo_stop)
-        self.assertIsNone(mult)
-        mock_alerta.assert_called_once()
-        self.assertEqual(mock_alerta.call_args.args[0], "STOP_DEMASIADO_CERCA")
-        self.assertEqual(mock_alerta.call_args.kwargs.get("symbol"), "ANET")
+        mult_esperado = round((B1_MULT_MAX - (B1_MULT_MAX - B1_MULT_MIN) * percentil) * TRAILING_FACTOR, 2)
+        stop_esperado = round(high_anomalo - atr_val * mult_esperado, 2)
 
-    @patch("position_size._alertar_anomalia_trailing")
-    def test_stop_con_margen_suficiente_no_dispara_guardia(self, mock_alerta):
-        atr_series = [8.0] * 13 + [8.0]
-        df = _df(atr_series, high=191.32, close=189.0, percentil=0.5)
-
-        nuevo_stop, mult = calcular_trailing_stop(df)
-
-        self.assertIsNotNone(nuevo_stop)
-        mock_alerta.assert_not_called()
-
-
-class TestAlertaNuncaRompeElCalculo(unittest.TestCase):
-
-    @patch("position_size.log_event", side_effect=Exception("disco lleno"))
-    @patch("telegram.send_telegram_critical", side_effect=Exception("sin red"))
-    def test_fallos_en_logging_y_telegram_no_propagan(self, mock_tg, mock_log):
-        atr_series = [8.0] * 13 + [0.5]
-        df = _df(atr_series, high=197.31, close=197.31, percentil=0.9)
-
-        # No debe lanzar excepción aunque logging y telegram fallen
-        nuevo_stop, mult = calcular_trailing_stop(df, symbol="ANET")
-
-        self.assertIsNone(nuevo_stop)
-        self.assertIsNone(mult)
+        self.assertEqual(mult, mult_esperado)
+        self.assertEqual(nuevo_stop, stop_esperado)
+        mock_log.assert_not_called()
 
 
 if __name__ == "__main__":
