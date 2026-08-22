@@ -547,7 +547,7 @@ Commits principales en producción (más recientes primero):
 7. EXPERIMENTOS Y LABORATORIO
 --------------------------------------------------------------------------------
 
-  BACKTEST v3 REFERENCIA (2006-2025):
+  BACKTEST v3 (HISTORICO -- ver BACKTEST v4 para la referencia vigente):
     Capital final     : 8.888.418 €
     CAGR              : 47,0%
     Win Rate          : 54,1%
@@ -938,14 +938,18 @@ Commits principales en producción (más recientes primero):
   coincide con ninguna fila de v2 para ningun periodo (el mas cercano es
   el 47,9% de v1-2005-2025). Probable mezcla de memoria al escribir el
   capitulo, no una fuente distinta ni un backtest no documentado.
-  v3 (2006-2025, PF 2,6071, WR 54,1%) sigue siendo la referencia oficial
-  vigente del proyecto -- superior a v1 en todo, con WR mejor que v2 a
-  costa de un PF ligeramente inferior segun el periodo.
+  v3 (2006-2025, PF 2,6071, WR 54,1%) fue la referencia oficial del
+  proyecto hasta el 22/08/2026 -- superior a v1 en todo, con WR mejor
+  que v2 a costa de un PF ligeramente inferior segun el periodo. DESDE
+  el 22/08/2026, v4 (mas abajo, mismo universo y periodo, motor con
+  gaps+slippage) es la referencia oficial vigente -- decision explicita
+  de Javier: v3 no reflejaba el coste de ejecucion real, v4 si.
 
   BACKTEST v4 (commits 8dfcd4d + 4a64acc, 22/08/2026 -- MOTOR MEJORADO,
-  resultado de laboratorio, NO sustituye a v3 como referencia operativa
-  vigente -- ver "Parametros activos en produccion" mas abajo, sin
-  cambios): iniciativa "backtest mas fiel a la realidad". Mismo universo,
+  resultado de laboratorio -- DECISION 22/08/2026 (Javier): v4 SUSTITUYE
+  a v3 como referencia operativa vigente del proyecto (ver "Parametros
+  activos en produccion" mas abajo). Iniciativa "backtest mas fiel a la
+  realidad". Mismo universo,
   mismo periodo y misma metodologia que v3 (S&P500 historico
   survivorship-bias corregido via universo_historico_sp500(), 2006-2025,
   MISMO script backtest_expandido.py sin cambiar START_DATE/END_DATE/
