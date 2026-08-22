@@ -292,6 +292,100 @@ def verificar_apalancamiento_ampliar(ib, exposicion_adicional: float = 0.0):
     return True, "OK", leverage_proyectado
 
 
+def verificar_riesgo_entrada(ib, exposicion_adicional: float = 0.0):
+    """
+    Re-comprobación ligera de drawdown y apalancamiento antes de ejecutar
+    UNA entrada nueva concreta, dentro del bucle de señales de
+    libertad2045.py (CRÍTICA #2, auditoría 07/08/2026 —
+    LIBERTAD2045_Auditoria_20260807).
+
+    risk_check() se evalúa una sola vez al principio de la fase de
+    entradas, antes de escanear ~500 símbolos secuencialmente
+    (reqHistoricalData uno a uno). Si durante ese escaneo el drawdown
+    cruza el límite o el apalancamiento sube (p.ej. por un AMPLIAR del
+    mismo ciclo — ver verificar_apalancamiento_ampliar — u otra vía),
+    las entradas nuevas ya encoladas se ejecutarían igual con el
+    veredicto "OK" obsoleto del principio del ciclo. Mismo patrón "leer
+    todo, luego transmitir todo" que el incidente ANET del 05/08,
+    aplicado aquí al gate de riesgo completo en vez de a un stop
+    individual.
+
+    A DIFERENCIA de risk_check(), esta función NO repite conexión,
+    ventana horaria ni capital mínimo: esas tres comprobaciones no
+    cambian de un símbolo a otro dentro del mismo ciclo y ya se
+    verificaron una vez en risk_check() al principio de la fase de
+    entradas. Solo re-evalúa los dos puntos que sí pueden cambiar
+    mientras el escaneo avanza — drawdown (punto 4) y apalancamiento
+    (punto 5) — reutilizando _leer_cuenta() y _leer_capital_pico() ya
+    existentes, sin duplicar su lógica. Se eligió esta versión ligera en
+    vez de llamar a risk_check() completo en cada entrada porque
+    risk_check() también dispara efectos secundarios pensados para
+    ejecutarse UNA vez por ciclo (telegram crítico en sus propios
+    fail-safes) — llamarlo por cada una de las varias entradas de un
+    ciclo generaría alertas duplicadas sin aportar información nueva,
+    ya que conexión/hora/capital mínimo no van a cambiar entrada a
+    entrada.
+
+    exposicion_adicional es el valor nocional (shares × precio) que ESTA
+    entrada concreta añadiría a GrossPositionValue si se ejecuta — se
+    comprueba el apalancamiento PROYECTADO (actual + esta orden), igual
+    que en verificar_apalancamiento_ampliar() y por el mismo motivo: con
+    el apalancamiento ya cerca del límite, la entrada concreta puede ser
+    la que lo cruce.
+
+    Mismo fail-safe que risk_check(): si NetLiquidation o
+    GrossPositionValue no se pueden leer, se bloquea la entrada por
+    precaución — nunca se asume que el estado sigue siendo "OK" sin
+    poder comprobarlo.
+
+    Retorna (permitido: bool, motivo: str).
+    """
+    net_liq, gross_pos, error = _leer_cuenta(ib)
+
+    if error is not None:
+        motivo = f"{error} — bloqueando entrada por precaución (fail-safe)"
+        log_event("WARN", f"Risk Guardian (re-check entrada): {motivo}")
+        return False, motivo
+
+    if net_liq is None or gross_pos is None:
+        tag = "NetLiquidation" if net_liq is None else "GrossPositionValue"
+        motivo = f"{tag}[BASE/EUR] no disponible en accountSummary (fail-safe)"
+        log_event("WARN", f"Risk Guardian (re-check entrada): {motivo}")
+        return False, motivo
+
+    if net_liq <= 0:
+        motivo = f"NetLiquidation no positivo ({net_liq:.2f}) — fail-safe"
+        log_event("WARN", f"Risk Guardian (re-check entrada): {motivo}")
+        return False, motivo
+
+    # Punto 4 — drawdown máximo desde capital pico. Mismo fallback que
+    # risk_check(): si no hay pico registrado, se usa el capital actual
+    # como pico (drawdown 0 este ciclo) en vez de bloquear a ciegas.
+    capital_pico = _leer_capital_pico(capital_actual=net_liq)
+    if capital_pico is None:
+        capital_pico = net_liq
+
+    if capital_pico > 0:
+        drawdown = (capital_pico - net_liq) / capital_pico
+        if drawdown > MAX_DRAWDOWN_PCT:
+            motivo = (f"drawdown {drawdown:.2%} > límite {MAX_DRAWDOWN_PCT:.2%} "
+                      f"(pico {capital_pico:.2f}€ | actual {net_liq:.2f}€)")
+            log_event("WARN", f"Risk Guardian (re-check entrada): {motivo}")
+            return False, motivo
+
+    # Punto 5 — apalancamiento proyectado (actual + esta entrada concreta)
+    leverage_proyectado = (gross_pos + exposicion_adicional) / net_liq
+
+    if leverage_proyectado > MAX_LEVERAGE:
+        motivo = (f"apalancamiento proyectado {leverage_proyectado:.2f}x > límite "
+                  f"{MAX_LEVERAGE:.2f}x (exposición actual {gross_pos:.2f}€ + "
+                  f"entrada {exposicion_adicional:.2f}€ | capital {net_liq:.2f}€)")
+        log_event("WARN", f"Risk Guardian (re-check entrada): {motivo}")
+        return False, motivo
+
+    return True, "OK"
+
+
 def resetear_capital_peak(capital_inicial: float) -> None:
     """
     Resetea capital_peak.txt al capital de inicio de una cuenta nueva.
