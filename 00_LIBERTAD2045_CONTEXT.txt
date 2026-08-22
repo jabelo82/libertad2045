@@ -909,6 +909,39 @@ Commits principales en producción (más recientes primero):
   Norgate/WRDS para el dataset completo) -- lo nuevo es la cuantificacion
   exacta y verificada del hueco real.
 
+  DISCREPANCIA DE CIFRAS RESUELTA (22/08/2026): el libro del proyecto
+  cita "60,3% Win Rate / 2,25 Profit Factor / periodo 2005-2025" en un
+  dossier PDF generado el 28/04/2026. Investigado con Claude Code contra
+  el historial real de git -- estas cifras NO corresponden a un backtest
+  fantasma ni a datos inventados. Existieron TRES versiones reales del
+  backtest, documentadas y sustituidas en su momento:
+
+    BACKTEST v1 (anterior al 21/05/2026, PRE-cambio Exp.27 intradia/cierre):
+      2005-2025: WR 47,9% | PF 2,1758 | DD 12,6%
+      2010-2025: WR 51,2% | PF 2,1921 | DD 9,3%
+      2015-2025: WR 49,3% | PF 2,1991 | DD 9,3%
+
+    BACKTEST v2 (commit 29fb968, 21/05/2026 -> eliminado en d3e716e,
+      08/06/2026, sustituido por v3):
+      2005-2025: WR 60,9% | PF 2,2711 | DD 12,2% | Capital final 3.774.259€
+      2010-2025: WR 62,1% | PF 2,2709 | DD 8,9%  | Capital final 1.357.059€
+      2015-2025: WR 60,3% | PF 2,2484 | DD 8,8%  | Capital final 283.884€
+
+    BACKTEST v3 (commit b45b902, 17/06/2026 -> VIGENTE, ver tabla arriba):
+      2006-2025: WR 54,1% | PF 2,6071 | DD 10,4% | Capital final 8.888.418€
+
+  El dossier del 28/04/2026 citaba correctamente la fila v2 2015-2025
+  (WR 60,3% / PF 2,25) -- cifras reales, no inventadas. La cita del libro
+  ("2005-2025, PF 2,25, WR 49%") mezcla piezas de tres sitios distintos:
+  el PF de v2 (real, pero de la fila 2015-2025, no 2005-2025), el periodo
+  de v2-2005-2025 (real, pero con WR 60,9%, no 49%), y un WR que no
+  coincide con ninguna fila de v2 para ningun periodo (el mas cercano es
+  el 47,9% de v1-2005-2025). Probable mezcla de memoria al escribir el
+  capitulo, no una fuente distinta ni un backtest no documentado.
+  v3 (2006-2025, PF 2,6071, WR 54,1%) sigue siendo la referencia oficial
+  vigente del proyecto -- superior a v1 en todo, con WR mejor que v2 a
+  costa de un PF ligeramente inferior segun el periodo.
+
   Parámetros activos en producción:
     SMA50 > SMA200    : filtro de tendencia alcista
     ATR dinámico      : stop loss adaptativo (percentil histórico B1)
