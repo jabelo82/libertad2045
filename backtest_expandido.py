@@ -385,6 +385,55 @@ def obtener_multiplicador(df, i):
     return ATR_MULTIPLIER
 
 
+def calcular_precio_salida_stop(bar, stop):
+    """
+    Precio de ejecución simulado para una salida ya disparada por stop
+    (Close del día <= stop, con SALIDA_POR_CIERRE=True).
+
+    Simulación de gap de apertura (22/08/2026, iniciativa "backtest más
+    fiel a la realidad", Fase 1): si el Open de este mismo día ya abrió
+    por debajo del stop (gap bajista overnight que atraviesa el nivel
+    antes de que el mercado pueda ejecutar al precio teórico — caso real
+    ANET 05-06/08/2026, stop 196,40 ejecutado a 192,545 por el Open del
+    día siguiente, ver sección 13 del contexto), el precio de ejecución
+    real es ese Open, no el nivel teórico del stop.
+
+    Si el Open sigue por encima del stop, el cruce fue intradía (no por
+    gap) y el precio teórico del stop sigue siendo una aproximación
+    razonable — comportamiento idéntico al anterior en ese caso.
+
+    Solo cubre posiciones largas (LIBERTAD_2045 nunca opera en corto,
+    ver Constitución del sistema).
+    """
+    if bar["Open"] <= stop:
+        return bar["Open"]
+    return stop
+
+
+def calcular_precio_entrada_stop(bar_entrada, buy_stop):
+    """
+    Precio de ejecución simulado para una entrada BUY STOP ya disparada
+    (High del día de entrada >= buy_stop).
+
+    Mismo patrón que calcular_precio_salida_stop(), lado contrario: si
+    el Open de ese día ya abrió por encima del buy_stop (gap alcista
+    overnight que atraviesa el nivel antes de que el mercado pueda
+    ejecutar al precio teórico), el precio de entrada real es ese Open
+    — peor precio para el comprador (paga más), no mejor.
+
+    Si el Open sigue por debajo del buy_stop, el cruce fue intradía (no
+    por gap) y el precio teórico del buy_stop sigue siendo una
+    aproximación razonable — comportamiento idéntico al anterior en ese
+    caso.
+
+    Solo cubre posiciones largas (LIBERTAD_2045 nunca opera en corto,
+    ver Constitución del sistema).
+    """
+    if bar_entrada["Open"] >= buy_stop:
+        return bar_entrada["Open"]
+    return buy_stop
+
+
 # ==================================================
 # SEÑAL
 # ==================================================
@@ -615,7 +664,7 @@ def ejecutar_backtest(datos, composicion_df=None):
 
             if precio_referencia <= pos["stop"]:
 
-                precio_salida = pos["stop"]
+                precio_salida = calcular_precio_salida_stop(bar, pos["stop"])
                 pnl           = (precio_salida - pos["entry"]) * pos["shares"]
                 capital      += pnl
 
@@ -824,13 +873,14 @@ def ejecutar_backtest(datos, composicion_df=None):
 
                 if bar_entrada["High"] >= buy_stop:
 
-                    coste = buy_stop * señal["shares"]
+                    precio_entrada = calcular_precio_entrada_stop(bar_entrada, buy_stop)
+                    coste          = precio_entrada * señal["shares"]
 
                     if coste > capital:
                         continue
 
                     posiciones[symbol] = {
-                        "entry"         : buy_stop,
+                        "entry"         : precio_entrada,
                         "stop"          : stop_loss,
                         "shares"        : señal["shares"],
                         "clase"         : señal["clase"],
