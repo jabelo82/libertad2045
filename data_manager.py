@@ -57,6 +57,14 @@ def _descargar(symbol, start, end):
     """
     Descarga datos de Yahoo Finance con reintentos.
     Devuelve un DataFrame o None si falla.
+
+    NOTA (22/08/2026, diagnóstico Exp.46 retomado): yf.download() NO lanza
+    una excepción cuando Yahoo devuelve rate limit — imprime "Failed
+    download" a stdout y devuelve un DataFrame vacío. El bloque
+    "except Exception" de abajo casi nunca se activa para este caso real;
+    antes de este fix, un df.empty devolvía None de inmediato sin
+    reintentar ni esperar, dejando MAX_REINTENTOS/backoff sin efecto
+    práctico. Ahora el caso "vacío" también reintenta con el mismo backoff.
     """
     for intento in range(1, MAX_REINTENTOS + 1):
         try:
@@ -64,6 +72,11 @@ def _descargar(symbol, start, end):
                              progress=False, auto_adjust=True)
 
             if df.empty:
+                if intento < MAX_REINTENTOS:
+                    espera = intento * 30
+                    print(f"    Vacío (probable rate limit) — esperando {espera}s antes de reintentar...")
+                    time.sleep(espera)
+                    continue
                 return None
 
             # Aplanar MultiIndex si existe
@@ -82,6 +95,8 @@ def _descargar(symbol, start, end):
             else:
                 print(f"    ERROR: {e}")
                 return None
+
+    return None
 
     return None
 

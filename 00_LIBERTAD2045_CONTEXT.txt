@@ -1758,6 +1758,55 @@ Commits principales en producción (más recientes primero):
   ANTES que risk_check() en el pipeline. AMPLIAR ademas no consulta el
   Risk Guardian en ningun punto, a diferencia de las entradas nuevas.
 
+  INCIDENTE — YFINANCE 0.2.54 BLOQUEADA POR ANTI-BOT DE YAHOO,
+  NO POR IP (22/08/2026) — CERRADO
+  Sintoma:  al retomar el Exp.46 (Russell 1000), solo 25,8% (132/512) de
+            los tickers del diferencial tenian cache real -- el resto
+            fallaba con YFRateLimitError. Se penso inicialmente que era
+            bloqueo de IP (patron ya visto en Exp.44, 3 semanas con VPN).
+  Diagnostico: probado con 4 IPs distintas en la misma sesion (2 exits
+            VPN — Montreal/M247, Mexico/Datacamp — y 2 residenciales —
+            Valencia y Madrid, misma operadora Xtra Telecom) -- las 4
+            dieron el MISMO error en los MISMOS tickers. Eso descarta
+            bloqueo de IP especifico: la propia libreria yfinance 0.2.54
+            esta siendo bloqueada por las medidas anti-bot de Yahoo en
+            general (patron conocido de la comunidad yfinance, no
+            especifico de este proyecto).
+  Fix:      pip install --upgrade yfinance (0.2.54 -> 1.6.0, trae
+            curl_cffi para impersonar navegador). Aplicado en ProBook
+            (dev) y VPS (produccion). Tras el upgrade, cobertura del
+            Exp.46 paso de 132/512 (25,8%) a 505/512 (98,6%) en una
+            sola tanda; los 7 restantes son tickers reales pero con
+            historial insuficiente (IPOs/spin-offs recientes, 48-132
+            barras), exclusion correcta y permanente, no un fallo.
+  Fix adicional: bug real encontrado en data_manager.py::_descargar() --
+            yf.download() no lanza excepcion en rate limit (solo
+            imprime "Failed download" y devuelve DataFrame vacio), asi
+            que el backoff de reintentos (30/60/90s) nunca se activaba
+            para ese caso. Corregido para reintentar tambien cuando el
+            resultado viene vacio.
+  Verificacion en produccion (VPS) antes de dejarlo para el ciclo cron:
+            94/94 tests passed tras el upgrade (sin relacion directa,
+            confirma que nada se rompio). Smoke test de las 3 funciones
+            reales que usan yfinance en produccion -- todas devuelven
+            resultado correcto con 1.6.0:
+              dashboard.py::obtener_precio_yfinance('AAPL')      -> 309,35
+              dashboard.py::_obtener_tipo_cambio_mercado()       -> 1,1678
+              universe_updater.py::tiene_historia_suficiente('MSFT') -> True
+            requirements.txt actualizado (yfinance==1.6.0), commit
+            78d9e7c en main, pusheado. data_loader.py (motor de
+            trading real, IBKR) no usa yfinance -- cero riesgo sobre
+            el camino de decision.
+  OBSERVACION APARTE (no arreglada, fuera de alcance de este fix): al
+            hacer este cambio se detecto que el VPS esta commit
+            df48588 (ciclo 17/08/2026) mientras origin/main ya tiene
+            varios commits mas (CRITICA #2/#3 de la auditoria del
+            07/08, y el revert de guardias trailing stop del Exp.47,
+            20-22/08) -- el VPS lleva ~5 dias sin desplegar esos
+            cambios. Deliberadamente NO desplegado como parte de este
+            fix (alcance distinto, Regla de Oro) -- deja constancia
+            para que Javier decida cuando hacer ese deploy completo.
+
 --------------------------------------------------------------------------------
 13. PENDIENTES
 --------------------------------------------------------------------------------
