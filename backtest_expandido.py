@@ -66,6 +66,16 @@ B2_MULT_ALTO     = 2.5
 B2_MULT_MEDIO    = 3.1
 B2_MULT_BAJO     = 3.7
 
+# Slippage por impacto de mercado (22/08/2026, iniciativa "backtest más
+# fiel a la realidad", Fase 2) — APROXIMACIÓN, no medición real: el
+# backtest usa datos diarios (un precio por día), no tick-by-tick ni
+# libro de órdenes, así que no puede calcularse el slippage exacto que
+# habría sufrido cada orden. SLIPPAGE_K es un coeficiente de
+# calibración genérico, NO estimado con datos de ejecución reales de
+# este proyecto — ver calcular_slippage() para la fuente del modelo y
+# el razonamiento completo.
+SLIPPAGE_K       = 0.10
+
 # Palanca 2B — salida por cierre
 SALIDA_POR_CIERRE = True
 
@@ -434,6 +444,59 @@ def calcular_precio_entrada_stop(bar_entrada, buy_stop):
     return buy_stop
 
 
+def calcular_slippage(shares_orden, volumen_dia, atr, k=SLIPPAGE_K):
+    """
+    Aproximación de slippage por impacto de mercado (22/08/2026,
+    iniciativa "backtest más fiel a la realidad", Fase 2).
+
+    LIMITACIÓN EXPLÍCITA: esto es una APROXIMACIÓN, no una simulación
+    precisa. El backtest usa datos diarios (un precio por día), no
+    tick-by-tick ni libro de órdenes real — no es posible calcular el
+    slippage exacto que habría sufrido una orden concreta con estos
+    datos. Esta función solo estima un orden de magnitud razonable en
+    función de qué fracción del volumen diario representa la orden.
+
+    MODELO: forma funcional de la "ley de raíz cuadrada" (square-root
+    law) de impacto de mercado, empíricamente bien establecida en la
+    literatura de microstructure — el impacto de una orden escala
+    aproximadamente con la raíz cuadrada de su tamaño relativo al
+    volumen diario, no linealmente:
+        Almgren, R., Thum, C., Hauptmann, E., Li, H. (2005),
+        "Direct Estimation of Equity Market Impact", Risk Magazine
+        (exponente empírico ~0.5-0.6, redondeado a 0.5 en la
+        formulación estándar más simple).
+        Bouchaud, J-P., Farmer, J.D., Lillo, F. (2008), "How markets
+        slowly digest changes in supply and demand" (revisión del
+        mismo resultado empírico en múltiples mercados).
+
+        slippage_precio = K · ATR · sqrt(shares_orden / volumen_dia)
+
+    La FORMA (raíz cuadrada del % de volumen, escalado por la
+    volatilidad diaria — aquí ATR como proxy ya calculado en el
+    sistema) viene de esa literatura. La CONSTANTE K (SLIPPAGE_K) es
+    una elección propia razonable, NO calibrada con datos de ejecución
+    reales de este proyecto — no existe ese dataset. Ajustar K si en
+    algún momento se dispone de datos reales de slippage con los que
+    calibrar.
+
+    Devuelve el desplazamiento de PRECIO, siempre >= 0 — el llamador
+    decide el signo (sumar en entradas, restar en salidas). Con
+    volumen_dia, atr o shares_orden no válidos (None, NaN, <= 0),
+    devuelve 0.0 — fail-safe: sin datos de liquidez fiables, no se
+    penaliza el precio en vez de bloquear el trade o inventar un
+    número.
+    """
+    if shares_orden is None or shares_orden <= 0:
+        return 0.0
+    if volumen_dia is None or pd.isna(volumen_dia) or volumen_dia <= 0:
+        return 0.0
+    if atr is None or pd.isna(atr) or atr <= 0:
+        return 0.0
+
+    fraccion_volumen = shares_orden / volumen_dia
+    return k * atr * (fraccion_volumen ** 0.5)
+
+
 # ==================================================
 # SEÑAL
 # ==================================================
@@ -664,8 +727,11 @@ def ejecutar_backtest(datos, composicion_df=None):
 
             if precio_referencia <= pos["stop"]:
 
-                precio_salida = calcular_precio_salida_stop(bar, pos["stop"])
-                pnl           = (precio_salida - pos["entry"]) * pos["shares"]
+                precio_salida_gap = calcular_precio_salida_stop(bar, pos["stop"])
+                slippage          = calcular_slippage(
+                    pos["shares"], bar["Volume"], atr)
+                precio_salida     = precio_salida_gap - slippage  # cobra menos
+                pnl               = (precio_salida - pos["entry"]) * pos["shares"]
                 capital      += pnl
 
                 trades.append({
@@ -873,8 +939,11 @@ def ejecutar_backtest(datos, composicion_df=None):
 
                 if bar_entrada["High"] >= buy_stop:
 
-                    precio_entrada = calcular_precio_entrada_stop(bar_entrada, buy_stop)
-                    coste          = precio_entrada * señal["shares"]
+                    precio_entrada_gap = calcular_precio_entrada_stop(bar_entrada, buy_stop)
+                    slippage           = calcular_slippage(
+                        señal["shares"], bar_entrada["Volume"], bar_entrada["ATR"])
+                    precio_entrada     = precio_entrada_gap + slippage  # paga más
+                    coste              = precio_entrada * señal["shares"]
 
                     if coste > capital:
                         continue
