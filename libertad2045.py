@@ -18,7 +18,7 @@ from order_manager import cancelar_ordenes_pendientes
 from logger import log_event, limpiar_logs_antiguos
 from telegram import send_telegram, send_telegram_critical
 from universe_sp500 import SP500
-from risk_guardian import risk_check
+from risk_guardian import risk_check, verificar_riesgo_entrada
 from process_guard import acquire_lock, release_lock
 from rebalance import rebalancear, resumen_texto as rebalance_resumen, reconciliar_stops_gtc
 import dashboard as _dashboard
@@ -462,6 +462,11 @@ def main():
         # --------------------------------------------------
         # Risk Guardian — gate exclusivo para nuevas entradas
         # Stops y rebalanceo ya ejecutados. Si falla: heartbeat + return.
+        # NOTA (CRÍTICA #2, auditoría 07/08/2026): este veredicto es del
+        # inicio de la fase de entradas, ANTES del escaneo secuencial de
+        # ~500 símbolos. verificar_riesgo_entrada() lo re-comprueba
+        # (drawdown + apalancamiento) justo antes de cada ejecutar_trade()
+        # individual, más abajo en el bucle de señales.
         # --------------------------------------------------
 
         rg_ok, rg_motivo = risk_check(ib)
@@ -622,6 +627,30 @@ def main():
                               f"Capital insuficiente para {symbol} "
                               f"({coste_estimado:.2f} > restante {capital_restante:.2f}) — skip",
                               symbol=symbol)
+                    continue
+
+                # CRÍTICA #2 (auditoría 07/08/2026): risk_check() se evaluó
+                # una sola vez antes de empezar el escaneo de ~500 símbolos.
+                # Re-comprobar drawdown y apalancamiento justo antes de ESTA
+                # entrada concreta — el estado de la cuenta puede haber
+                # cambiado durante el escaneo (p.ej. un AMPLIAR ejecutado en
+                # el rebalanceo del mismo ciclo). Ver docstring de
+                # verificar_riesgo_entrada() en risk_guardian.py.
+                riesgo_ok, riesgo_motivo = verificar_riesgo_entrada(
+                    ib, exposicion_adicional=coste_estimado
+                )
+                if not riesgo_ok:
+                    log_event("WARN",
+                              f"Entrada omitida para {symbol} — veredicto de riesgo "
+                              f"obsoleto: {riesgo_motivo}",
+                              symbol=symbol)
+                    try:
+                        send_telegram(
+                            f"⚠️ LIBERTAD_2045 — Entrada omitida para {symbol}: "
+                            f"{riesgo_motivo}"
+                        )
+                    except Exception:
+                        pass
                     continue
 
                 ejecutar_trade(

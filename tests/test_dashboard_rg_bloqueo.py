@@ -60,7 +60,7 @@ _stub_attrs = {
                            "evaluar_stops_por_cierre"],
     "trade_executor":     ["ejecutar_trade"],
     "order_manager":      ["cancelar_ordenes_pendientes"],
-    "risk_guardian":      ["risk_check"],
+    "risk_guardian":      ["risk_check", "verificar_riesgo_entrada"],
     "process_guard":      ["acquire_lock", "release_lock"],
     "rebalance":          ["rebalancear", "resumen_texto", "reconciliar_stops_gtc"],
     "github_publisher":   ["publicar_dashboard"],
@@ -85,10 +85,12 @@ sys.modules["dashboard"] = _dash_stub
 sys.modules.pop("libertad2045", None)
 import libertad2045  # noqa: E402
 
-# rebalance lo importa test_gtc_dedup.py directamente (from rebalance import ...).
-# Eliminar el stub del sys.modules para que ese test encuentre el módulo real.
+# rebalance y risk_guardian los importan otros ficheros de test directamente
+# (from rebalance import ..., from risk_guardian import ...). Eliminar los
+# stubs del sys.modules para que esos tests encuentren los módulos reales.
 # libertad2045 ya tiene los nombres ligados en su namespace — no se rompe nada.
 sys.modules.pop("rebalance", None)
+sys.modules.pop("risk_guardian", None)
 
 
 # ---------------------------------------------------------------------------
