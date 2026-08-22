@@ -756,6 +756,155 @@ Commits principales en producción (más recientes primero):
       faltan, dado que Yahoo bloquea de forma intermitente e
       impredecible incluso con VPN activa.
 
+      RESUELTO -- EXP.46 RETOMADO (22/08/2026), FASE 1 (cobertura):
+      causa raiz real NO era bloqueo de IP -- probado con 4 IPs distintas
+      (2 VPN + 2 residenciales), mismo error en todas. La libreria
+      yfinance 0.2.54 estaba siendo bloqueada por las medidas anti-bot de
+      Yahoo en general. Fix: actualizar a yfinance 1.6.0 (trae curl_cffi
+      para impersonar navegador) en ProBook y VPS. Cobertura del
+      diferencial Russell 1000 filtrado paso de 132/512 (25,8%) a
+      505/512 (98,6%) en una sola tanda tras el upgrade -- los 7
+      restantes son tickers reales pero con historial insuficiente
+      (IPOs/spin-offs recientes, 48-132 barras), exclusion correcta y
+      permanente, no un hueco de datos. Tambien corregido un bug real en
+      data_manager.py::_descargar() (yf.download() no lanza excepcion en
+      rate limit, el backoff nunca se activaba).
+
+      FASE 2 (perfil de riesgo, 22/08/2026): comparativa gaps/ATR%/
+      volumen entre el diferencial Russell 1000 (488 tickers usables) y
+      el S&P500 actual (500 tickers), sobre datos 2006-2025 ya cacheados:
+        Gap medio |apertura|  : S&P500 0,67% vs Russell 0,79% (+18%)
+        Gap p99 |apertura|    : S&P500 4,73% vs Russell 5,83% (+23%)
+        ATR(14) medio % precio: S&P500 2,75% vs Russell 3,66% (+33%)
+        Volumen medio diario  : S&P500 322M$ vs Russell 79M$ (~4x menos)
+        Eventos reorg/quiebra (|gap|>50%, verificados caso a caso --
+          CHRD, ALM, QXO, no artefactos de yfinance): Russell ~13x mas
+          frecuentes que S&P500 (0,0056% vs 0,0004% de dias-ticker).
+      Lectura: gap/ATR moderadamente peores (15-33%, no un orden de
+      magnitud) -- el sistema ya dimensiona por ATR, asi que compensa
+      parte del exceso de volatilidad solo. La liquidez ~4x menor y la
+      frecuencia ~13x de reorg son los puntos que mas pesarian si se
+      activara en produccion con limite de exposicion.
+
+      FASE 4 (22/08/2026) -- backtest completo, universo combinado
+      S&P500+Russell1000, usando v4 (motor con gaps+slippage) como linea
+      base -- NO v3. Numerado Exp.48 (provisional, a confirmar en la
+      tabla de experimentos de Javier). Script:
+      backtest_exp48_russell1000_v4.py (reutiliza backtest_expandido.py
+      sin modificarlo).
+
+      ⚠️ LIMITACION METODOLOGICA REAL Y NO RESUELTA -- SESGO DE
+      ANTICIPACION (LOOK-AHEAD), señalada por Javier el 22/08/2026 antes
+      de comitear, no detectada por Claude Code en el analisis inicial:
+      el diferencial Russell 1000 se extrajo de una FOTO ACTUAL (Wikipedia,
+      01/08/2026) mas un filtro de liquidez calculado tambien con datos
+      ACTUALES/RECIENTES -- a diferencia del S&P500, que usa
+      sp500_composicion.csv (fja05680) para saber via sp500_en_fecha()
+      exactamente que tickers pertenecian de verdad al indice cada dia
+      historico. NO EXISTE un dataset equivalente de composicion
+      historica del Russell 1000 en este proyecto (ni capitalizacion de
+      mercado historica, ni acciones en circulacion -- verificado
+      buscando en todo el repo, no hay ningun fichero de este tipo).
+      Consecuencia: el bypass de composicion de la Fase 4 (ver mas abajo)
+      trata a un ticker Russell-incremental como "elegible para operar"
+      en CUALQUIER fecha donde ya cotizara con 200+ barras, sin poder
+      verificar si esa empresa tenia de verdad tamaño de mercado
+      suficiente (top 1.000 por capitalizacion) para pertenecer al
+      Russell 1000 en ESE momento historico -- solo sabemos que existia
+      y cotizaba, no su tamaño relativo en esa epoca. ES UN SESGO DE
+      ANTICIPACION REAL, NO DESCARTADO.
+      Cuantificacion del alcance (verificado, no solo declarado): de los
+      430 tickers Russell-incrementales, 183 (42,6%) ya cotizaban el
+      03/01/2006 con la serie completa de 5.030 barras -- son los mas
+      expuestos al sesgo (20 años de posible desajuste entre su tamaño
+      real en 2006 y su estatus Russell 1000 de 2026). Distribucion del
+      PnL de los 1.056 trades Russell-only por año de entrada (proxy de
+      cuanto pesa cada era en el resultado, no una correccion del sesgo):
+        2006-2010: 179 trades (17,0%) -- PnL 4.410€    (0,3% del PnL Russell-only)
+        2011-2015: 230 trades (21,8%) -- PnL 28.247€   (2,0%)
+        2016-2020: 295 trades (27,9%) -- PnL 269.921€  (19,3%)
+        2021-2025: 352 trades (33,3%) -- PnL 1.099.412€ (78,4%)
+      El 78,4% del PnL Russell-only viene de trades 2021-2025, donde
+      "elegible hoy" es un proxy MENOS malo (aunque igual de NO
+      verificado) de "elegible hace pocos años" que para un trade de
+      2006. Esto NO resuelve el sesgo -- solo indica donde se concentra
+      la exposicion real del resultado reportado. El mismo tipo de
+      limitacion ya se documento sin resolver para el Russell 2000 del
+      Exp.44 ("no existe alternativa gratuita a Norgate/WRDS para el
+      dataset completo de composicion historica") -- aqui se aplica
+      igual, sin solucion barata conocida a fecha de hoy.
+      NO APLICADO NINGUN FIX -- esto queda como limitacion documentada,
+      no como problema resuelto. Cualquier decision de activacion en
+      produccion debe sopesar este sesgo explicitamente, no solo los
+      numeros de PF/capital ya reportados.
+
+      HALLAZGO METODOLOGICO IMPORTANTE (encontrado y corregido antes de
+      tener resultado valido): la primera ejecucion dio un resultado
+      IDENTICO BIT A BIT a v4 -- el Russell nunca llego a operar. Causa:
+      ejecutar_backtest() filtra cada dia por la composicion historica
+      real del S&P500 (sp500_en_fecha()); cualquier simbolo fuera de esa
+      lista se descarta del escaneo de señales, aunque este cargado en
+      datos. backtest_exp46.py (script original) ya tenia un bypass para
+      esto (_russell2000_extra) que no se habia replicado. Corregido SIN
+      tocar backtest_expandido.py -- se añaden los tickers Russell-
+      incrementales a TODAS las fechas del comp_df de entrada (dato, no
+      codigo del motor) antes de llamar a ejecutar_backtest().
+
+      Deduplicacion del universo combinado (mas exhaustiva de lo pedido
+      inicialmente): el diferencial Russell solapa no solo con el S&P500
+      ACTUAL (5 casos: ECHO, FERG, FLEX, MRVL, Q -- el caso ya conocido)
+      sino con el S&P500 HISTORICO completo (78 casos -- empresas que
+      estuvieron en el indice en algun momento de 2006-2025 y ya
+      salieron). Russell "incremental" real (sin solape con ninguno de
+      los dos): 430 tickers, no 511.
+
+      RESULTADO (2006-2025, universo combinado 1.596 tickers, 1.201
+      cargados con exito / 395 errores "possibly delisted", coherente
+      con el 13% ya documentado escalado al universo mayor):
+
+                            v4 (solo S&P500)   Combinado (S&P500+Russell)
+        Capital final     : 2.143.244€          2.984.388€   (+39,2%)
+        Profit Factor     : 1,8889              1,8963       (+0,4%)
+        Win Rate          : 51,3%               50,1%        (-1,2pp)
+        Max Drawdown      : 10,7%               11,2%        (+0,5pp)
+        Trades            : 2.340               2.499        (+159)
+        CAGR (fmla.proy.) : 36,92%               39,21%      (+2,29pp)
+        TIR (XIRR real)   : 26,74%               29,30%      (+2,56pp)
+        Rebalanceos       : 259                  332
+
+      DESGLOSE Russell-only vs S&P500 dentro del mismo run combinado
+      (430 tickers incrementales, aislados del CSV de trades):
+                          Solo Russell    Solo S&P500    Combinado
+        Trades          : 1.056 (42,3%)  1.443 (57,7%)  2.499
+        Win Rate        : 49,3%          50,7%          50,1%
+        Profit Factor   : 2,0070         1,7971         1,8963
+        PnL medio WIN   : 5.363€         3.813€         4.457€
+        % del PnL total : 53,1%          46,9%          --
+      LECTURA: el Russell APORTA CALIDAD GENUINA, no diluye con volumen
+      mediocre -- PF mejor que el S&P500 dentro del mismo run, y aporta
+      mas de la mitad del PnL total con menos de la mitad de los trades.
+
+      BUSQUEDA ESPECIFICA DE EVENTOS DE REORGANIZACION/QUIEBRA en los
+      1.056 trades Russell-only (la cola de riesgo que preocupaba tras
+      la Fase 2): 0 trades superan el umbral de gap >50% usado para
+      detectar reorgs. Un ticker (CHRD, Chord Energy) SI tiene una
+      discontinuidad real de reorganizacion por bancarrota en su serie
+      de precios (nov-2020, la misma ya detectada en v4/BIIB-FDX-SRE),
+      pero sus 3 trades reales en este backtest entran DESPUES de esa
+      discontinuidad (entrada 21,85€, ya en escala post-reorg) -- 2
+      ganadores, 1 perdedor, ninguno atrapado por el salto en si.
+      CONCLUSION HONESTA: en este run concreto de 21 años, ningun trade
+      realizado quedo atrapado por un evento de reorganizacion, pese a
+      que el universo Russell tiene ~13x mas frecuencia de estos eventos
+      en sus datos brutos (Fase 2) -- tranquilizador para este run
+      especifico, NO es garantia de que no pueda pasar en un futuro run
+      o en produccion real.
+
+      PENDIENTE: numero definitivo de experimento (Exp.48 provisional),
+      decision de activacion en produccion (laboratorio puro por ahora,
+      nada desplegado), limite de exposicion Russell si se activa
+      (idea original de Javier: maximo 40% del capital).
+
       --- Resultados originales de esta noche (NO FIABLES, conservados
       solo como referencia historica de lo que se penso inicialmente) ---
       EXP.46 — RUSSELL 1000, BACKTEST REAL COMPLETADO (01-02/08/2026):
@@ -1073,12 +1222,8 @@ Commits principales en producción (más recientes primero):
     universo grande (S&P500) y un periodo largo (21 años), no solo en el
     caso puntual que origino la iniciativa.
 
-    PENDIENTE -- FASE 4 (NO ejecutada, requiere aprobacion explicita de
-    Javier): repetir la comparacion Exp.46 (Russell 1000 diferencial)
-    usando este v4 (motor mejorado) como nueva linea base en vez de v3 --
-    se espera que el efecto de la Fase 2 (slippage) sea mucho mas visible
-    ahi, dado el diferencial de liquidez ~4x ya cuantificado en la Fase 2
-    del Exp.46 retomado (22/08/2026).
+    FASE 4 COMPLETADA (22/08/2026) -- ver Exp.48 (provisional, pendiente
+    de numero definitivo en la tabla de experimentos de Javier), seccion 7.
 
   Parámetros activos en producción:
     SMA50 > SMA200    : filtro de tendencia alcista
