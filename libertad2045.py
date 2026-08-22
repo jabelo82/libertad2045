@@ -460,6 +460,34 @@ def main():
 
 
         # --------------------------------------------------
+        # CRÍTICA #3 (auditoría 07/08/2026): releer capital tras stops +
+        # rebalanceo. `capital` (línea ~354) se leyó ANTES de
+        # evaluar_stops_por_cierre() (puede generar caja por cierres) y de
+        # rebalancear() (puede GASTAR caja real en un AMPLIAR — ya con el
+        # chequeo de apalancamiento de CRÍTICA #1, pero puede seguir
+        # ejecutándose si está dentro de límite). Si se reutiliza `capital`
+        # sin refrescar como base de capital_restante más abajo, las
+        # entradas nuevas del mismo ciclo se dimensionan como si el dinero
+        # gastado en AMPLIAR siguiera disponible. Mismo fail-safe que
+        # CRÍTICA #1/#2: si la relectura falla, WARN + Telegram no crítico
+        # y se sigue con la lectura de inicio de ciclo en vez de abortar el
+        # resto del ciclo.
+        # --------------------------------------------------
+
+        capital_tras_rebalanceo = obtener_capital(ib)
+        if capital_tras_rebalanceo is None:
+            log_event("WARN",
+                      "No se pudo releer capital tras stops/rebalanceo — "
+                      "entradas nuevas usarán la lectura de inicio de ciclo")
+            send_telegram(
+                "⚠️ LIBERTAD_2045 — no se pudo releer el capital tras "
+                "stops/rebalanceo. Entradas nuevas usarán el capital de "
+                "inicio de ciclo (puede estar desactualizado si hubo AMPLIAR)."
+            )
+            capital_tras_rebalanceo = capital
+
+
+        # --------------------------------------------------
         # Risk Guardian — gate exclusivo para nuevas entradas
         # Stops y rebalanceo ya ejecutados. Si falla: heartbeat + return.
         # NOTA (CRÍTICA #2, auditoría 07/08/2026): este veredicto es del
@@ -600,10 +628,12 @@ def main():
         # Ejecutar trades
         # capital_restante decrece conforme se comprometen posiciones,
         # evitando que el sizing acumulado supere el capital disponible.
+        # Parte de capital_tras_rebalanceo (CRÍTICA #3), no de `capital`
+        # (lectura de inicio de ciclo, obsoleta si hubo AMPLIAR real).
         # --------------------------------------------------
 
         trades_executed  = 0
-        capital_restante = capital
+        capital_restante = capital_tras_rebalanceo
 
         for senal in signals:
 
