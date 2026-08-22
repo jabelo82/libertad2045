@@ -76,6 +76,14 @@ B2_MULT_BAJO     = 3.7
 # el razonamiento completo.
 SLIPPAGE_K       = 0.10
 
+# Comisión IBKR (22/08/2026, iniciativa "backtest más fiel a la realidad",
+# Fase 5) — fija por pata (entrada o salida), calibrada con la
+# reconciliación real de la cuenta LIVE del 21/08/2026 (~1$/operación).
+# No escala con el número de acciones — no hay evidencia en la
+# reconciliación real de una estructura por-acción distinta en el rango
+# de tamaños de posición de este sistema.
+COMISION_IBKR    = 1.0  # USD por pata
+
 # Palanca 2B — salida por cierre
 SALIDA_POR_CIERRE = True
 
@@ -497,6 +505,101 @@ def calcular_slippage(shares_orden, volumen_dia, atr, k=SLIPPAGE_K):
     return k * atr * (fraccion_volumen ** 0.5)
 
 
+def calcular_comision_total(comision_por_pata=COMISION_IBKR):
+    """
+    Comisión IBKR de una operación completa (22/08/2026, iniciativa
+    "backtest más fiel a la realidad", Fase 5) — dos patas: entrada y
+    salida. Calibrada con la reconciliación real de la cuenta LIVE del
+    21/08/2026 (~1$/operación, comisión fija).
+
+    Se descuenta en el punto donde el motor realiza PnL (ninguna de las
+    dos patas se deduce de "capital" en ningún otro sitio — la entrada
+    solo comprueba disponibilidad contra "coste", no deduce caja real).
+    """
+    return 2 * comision_por_pata
+
+
+def convertir_a_eur(valor_usd, rate):
+    """
+    Convierte un valor en USD a EUR usando el tipo de cambio EUR/USD
+    (rate = USD por 1 EUR, mismo criterio que dashboard.py::
+    _obtener_tipo_cambio_mercado() en producción).
+
+    Fail-safe: rate inválido (None, NaN, <= 0) → devuelve NaN, nunca
+    inventa un tipo de cambio ni bloquea nada — el valor en USD sigue
+    siendo la fuente de verdad, esto es una capa de reporte aparte.
+    """
+    if valor_usd is None or rate is None or pd.isna(rate) or rate <= 0:
+        return float("nan")
+    return valor_usd / rate
+
+
+def calcular_pnl_eur(entry_value_usd, pnl_usd, rate_entrada, rate_salida):
+    """
+    Descompone el PnL de un trade individual en EUR en dos partes
+    (22/08/2026, iniciativa "backtest más fiel a la realidad", Fase 5),
+    separando el resultado de TRADING (en USD) del efecto de la DIVISA
+    — nunca mezclados, tal como se pidió explícitamente:
+
+      pnl_trading_eur : el PnL de trading en USD, convertido a EUR al
+        tipo de cambio de SALIDA (lo que realmente se repatriaría).
+      efecto_fx_eur   : cuánto cambió el valor en EUR de la posición
+        ORIGINAL (entry_value_usd) solo por el movimiento del tipo de
+        cambio entre entrada y salida — independiente de si el trade
+        ganó o perdió en USD.
+
+    pnl_total_eur = pnl_trading_eur + efecto_fx_eur, por construcción
+    (efecto_fx_eur es el residuo, no una fórmula aparte inventada).
+
+    El motor SIGUE dimensionando y decidiendo en USD sin cambios — esto
+    es una capa de reporte en paralelo, nunca afecta al tamaño de
+    posición ni al capital que usa el motor internamente.
+
+    Fail-safe: cualquier tipo de cambio invalido (None, NaN, <= 0) →
+    los tres valores devueltos son NaN — el PnL en USD (ya calculado
+    aparte) sigue siendo la fuente de verdad, esto nunca bloquea nada.
+    """
+    if (rate_entrada is None or pd.isna(rate_entrada) or rate_entrada <= 0 or
+            rate_salida is None or pd.isna(rate_salida) or rate_salida <= 0):
+        return float("nan"), float("nan"), float("nan")
+
+    exit_value_usd    = entry_value_usd + pnl_usd
+    valor_entrada_eur = entry_value_usd / rate_entrada
+    valor_salida_eur  = exit_value_usd / rate_salida
+    pnl_total_eur     = valor_salida_eur - valor_entrada_eur
+    pnl_trading_eur   = pnl_usd / rate_salida
+    efecto_fx_eur     = pnl_total_eur - pnl_trading_eur
+
+    return pnl_total_eur, pnl_trading_eur, efecto_fx_eur
+
+
+def obtener_tipo_cambio(eurusd, fecha):
+    """
+    Busca el tipo de cambio EUR/USD (Close de EURUSD=X) vigente en
+    `fecha`, usando asof() para rellenar hacia adelante cuando no hay
+    entrada exacta ese día (fines de semana/festivos donde el mercado
+    de acciones USA sí abrió pero el dato de FX cacheado no coincide
+    exactamente, o huecos puntuales de la caché).
+
+    `eurusd` : DataFrame con índice de fechas y columna "Close"
+               (mismo formato que cualquier otro activo cacheado por
+               data_manager.obtener_datos_cached("EURUSD=X", ...)).
+               None → fail-safe, devuelve NaN (desactiva el reporte
+               en EUR sin bloquear nada del motor en USD).
+
+    Devuelve NaN si no hay dato disponible (fail-safe).
+    """
+    if eurusd is None or eurusd.empty:
+        return float("nan")
+    try:
+        idx = eurusd.index.asof(pd.Timestamp(fecha))
+        if pd.isna(idx):
+            return float("nan")
+        return float(eurusd.loc[idx, "Close"])
+    except Exception:
+        return float("nan")
+
+
 # ==================================================
 # SEÑAL
 # ==================================================
@@ -618,7 +721,7 @@ def descargar_datos(universe, start, end):
 # MOTOR DEL BACKTEST — con Risk Guardian completo
 # ==================================================
 
-def ejecutar_backtest(datos, composicion_df=None):
+def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
     """
     Motor principal del backtest.
 
@@ -626,6 +729,17 @@ def ejecutar_backtest(datos, composicion_df=None):
         datos          : dict {symbol: DataFrame} generado por descargar_datos()
         composicion_df : DataFrame con composición histórica del S&P500
                          (de cargar_composicion_sp500()).  None → sin filtro.
+        eurusd         : DataFrame con histórico de EURUSD=X (columna
+                         "Close", mismo formato que cualquier otro activo
+                         cacheado). None (por defecto) → los trades no
+                         llevan el desglose en EUR (pnl_eur/
+                         pnl_trading_eur/efecto_fx_eur quedan ausentes),
+                         pero el resultado en USD es idéntico con o sin
+                         este parámetro — es una capa de reporte en
+                         paralelo, nunca afecta al motor. Las comisiones
+                         (COMISION_IBKR) SÍ se aplican siempre,
+                         independientemente de este parámetro. Ver
+                         calcular_pnl_eur() y obtener_tipo_cambio().
     """
 
     if composicion_df is None:
@@ -651,6 +765,20 @@ def ejecutar_backtest(datos, composicion_df=None):
     posiciones     = {}
     trades         = []
     curva_capital  = []
+
+    def registrar_capital(fecha):
+        """
+        Construye la fila de curva_capital para `fecha`. Añade
+        capital_eur (valor de mercado en EUR de la curva en USD, día a
+        día, usando el tipo de cambio real de ese día) solo si `eurusd`
+        está disponible — capa de reporte en paralelo, el motor sigue
+        dimensionando en USD sin cambios (Fase 5, 22/08/2026).
+        """
+        fila = {"fecha": fecha, "capital": round(capital, 2)}
+        if eurusd is not None:
+            rate = obtener_tipo_cambio(eurusd, fecha)
+            fila["capital_eur"] = round(convertir_a_eur(capital, rate), 2)
+        return fila
 
     # Contadores Risk Guardian y rebalanceo para el informe
     dias_bloqueados_drawdown = 0
@@ -684,7 +812,7 @@ def ejecutar_backtest(datos, composicion_df=None):
         # --------------------------------------------------
         if capital < RISK_MIN_CAPITAL:
             dias_detenido_capital += 1
-            curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
+            curva_capital.append(registrar_capital(fecha))
             continue
 
         # --------------------------------------------------
@@ -731,10 +859,11 @@ def ejecutar_backtest(datos, composicion_df=None):
                 slippage          = calcular_slippage(
                     pos["shares"], bar["Volume"], atr)
                 precio_salida     = precio_salida_gap - slippage  # cobra menos
-                pnl               = (precio_salida - pos["entry"]) * pos["shares"]
+                comision          = calcular_comision_total()
+                pnl               = (precio_salida - pos["entry"]) * pos["shares"] - comision
                 capital      += pnl
 
-                trades.append({
+                trade = {
                     "symbol"       : symbol,
                     "clase"        : pos["clase"],
                     "fecha_entrada": pos["fecha_entrada"],
@@ -742,10 +871,23 @@ def ejecutar_backtest(datos, composicion_df=None):
                     "entrada"      : round(pos["entry"], 4),
                     "salida"       : round(precio_salida, 4),
                     "shares"       : pos["shares"],
+                    "comision"     : round(comision, 2),
                     "pnl"          : round(pnl, 2),
                     "resultado"    : "LOSS" if pnl < 0 else "WIN",
                     "capital"      : round(capital, 2),
-                })
+                }
+
+                if eurusd is not None:
+                    entry_value_usd = pos["entry"] * pos["shares"]
+                    rate_entrada    = obtener_tipo_cambio(eurusd, pos["fecha_entrada"])
+                    rate_salida     = obtener_tipo_cambio(eurusd, fecha)
+                    pnl_total_eur, pnl_trading_eur, efecto_fx_eur = calcular_pnl_eur(
+                        entry_value_usd, pnl, rate_entrada, rate_salida)
+                    trade["pnl_eur"]         = round(pnl_total_eur, 2)
+                    trade["pnl_trading_eur"] = round(pnl_trading_eur, 2)
+                    trade["efecto_fx_eur"]   = round(efecto_fx_eur, 2)
+
+                trades.append(trade)
 
                 cerradas.append(symbol)
 
@@ -761,7 +903,7 @@ def ejecutar_backtest(datos, composicion_df=None):
 
         if drawdown_actual > RISK_MAX_DRAWDOWN:
             dias_bloqueados_drawdown += 1
-            curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
+            curva_capital.append(registrar_capital(fecha))
             continue
 
         # --------------------------------------------------
@@ -840,7 +982,7 @@ def ejecutar_backtest(datos, composicion_df=None):
         # 7. Portfolio lleno — no escanear señales
         # --------------------------------------------------
         if len(posiciones) >= MAX_POSITIONS:
-            curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
+            curva_capital.append(registrar_capital(fecha))
             continue
 
         # --------------------------------------------------
@@ -956,7 +1098,7 @@ def ejecutar_backtest(datos, composicion_df=None):
                         "fecha_entrada" : fecha_entrada,
                     }
 
-        curva_capital.append({"fecha": fecha, "capital": round(capital, 2)})
+        curva_capital.append(registrar_capital(fecha))
 
     # --------------------------------------------------
     # Cerrar posiciones abiertas al final del período
@@ -969,10 +1111,11 @@ def ejecutar_backtest(datos, composicion_df=None):
             continue
 
         ultimo_cierre = df.iloc[-1]["Close"]
-        pnl           = (ultimo_cierre - pos["entry"]) * pos["shares"]
+        comision      = calcular_comision_total()
+        pnl           = (ultimo_cierre - pos["entry"]) * pos["shares"] - comision
         capital      += pnl
 
-        trades.append({
+        trade = {
             "symbol"       : symbol,
             "clase"        : pos["clase"],
             "fecha_entrada": pos["fecha_entrada"],
@@ -980,10 +1123,23 @@ def ejecutar_backtest(datos, composicion_df=None):
             "entrada"      : round(pos["entry"], 4),
             "salida"       : round(ultimo_cierre, 4),
             "shares"       : pos["shares"],
+            "comision"     : round(comision, 2),
             "pnl"          : round(pnl, 2),
             "resultado"    : "OPEN→CLOSE",
             "capital"      : round(capital, 2),
-        })
+        }
+
+        if eurusd is not None:
+            entry_value_usd = pos["entry"] * pos["shares"]
+            rate_entrada    = obtener_tipo_cambio(eurusd, pos["fecha_entrada"])
+            rate_salida     = obtener_tipo_cambio(eurusd, df.index[-1])
+            pnl_total_eur, pnl_trading_eur, efecto_fx_eur = calcular_pnl_eur(
+                entry_value_usd, pnl, rate_entrada, rate_salida)
+            trade["pnl_eur"]         = round(pnl_total_eur, 2)
+            trade["pnl_trading_eur"] = round(pnl_trading_eur, 2)
+            trade["efecto_fx_eur"]   = round(efecto_fx_eur, 2)
+
+        trades.append(trade)
 
     print(f"\n  Risk Guardian — resumen:")
     print(f"    Días bloqueados por drawdown : {dias_bloqueados_drawdown}")
@@ -1050,7 +1206,7 @@ def calcular_metricas(trades, curva_capital, capital_final):
                 "pnl_total": round(subset["pnl"].sum(), 2),
             }
 
-    return {
+    resultado = {
         "total_trades"    : total_trades,
         "wins"            : len(wins),
         "losses"          : len(losses),
@@ -1065,6 +1221,24 @@ def calcular_metricas(trades, curva_capital, capital_final):
         "expectativa"     : round(expectativa, 2),
         "por_clase"       : por_clase,
     }
+
+    # Comisiones (Fase 5, 22/08/2026) — siempre presentes, se aplican
+    # incondicionalmente en el motor.
+    if "comision" in df_trades.columns:
+        resultado["comision_total"] = round(df_trades["comision"].sum(), 2)
+
+    # Desglose EUR (Fase 5, 22/08/2026) — solo si el run se ejecutó con
+    # eurusd disponible. Capa de reporte en paralelo: nunca sustituye a
+    # las cifras en USD de arriba, que siguen siendo la fuente de verdad
+    # del motor.
+    if "pnl_trading_eur" in df_trades.columns:
+        resultado["pnl_trading_eur_total"] = round(df_trades["pnl_trading_eur"].sum(), 2)
+        resultado["efecto_fx_eur_total"]   = round(df_trades["efecto_fx_eur"].sum(), 2)
+        resultado["pnl_eur_total"]         = round(df_trades["pnl_eur"].sum(), 2)
+    if "capital_eur" in df_capital.columns and not df_capital["capital_eur"].isna().all():
+        resultado["capital_final_eur"] = round(df_capital["capital_eur"].iloc[-1], 2)
+
+    return resultado
 
 
 # ==================================================
@@ -1110,10 +1284,17 @@ def imprimir_informe(metricas):
     print(f"  Max. drawdown     : {RISK_MAX_DRAWDOWN:.0%}")
     print(sep)
 
-    print(f"\n  CAPITAL")
+    print(f"\n  CAPITAL (USD — resultado de trading, motor sin cambios)")
     print(f"  Inicial          : {metricas['capital_inicial']:>12.2f} €")
     print(f"  Final            : {metricas['capital_final']:>12.2f} €")
     print(f"  Retorno total    : {metricas['retorno_total']:>12.1%}")
+    if "comision_total" in metricas:
+        print(f"  Comisiones total : {metricas['comision_total']:>12.2f} $")
+    if "capital_final_eur" in metricas:
+        print(f"\n  CAPITAL EN EUR (mark-to-market, capa de reporte — Fase 5)")
+        print(f"  Final en EUR     : {metricas['capital_final_eur']:>12.2f} €")
+        print(f"  PnL trading (EUR): {metricas['pnl_trading_eur_total']:>12.2f} €")
+        print(f"  Efecto FX (EUR)  : {metricas['efecto_fx_eur_total']:>12.2f} €")
 
     print(f"\n  OPERATIVA GLOBAL")
     print(f"  Total trades     : {metricas['total_trades']:>12d}")
