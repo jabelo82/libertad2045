@@ -19,6 +19,8 @@ Uso directo para descargar/actualizar toda la caché:
     python data_manager.py
 """
 
+import contextlib
+import io
 import os
 import time
 import warnings
@@ -61,22 +63,41 @@ def _descargar(symbol, start, end):
     NOTA (22/08/2026, diagnóstico Exp.46 retomado): yf.download() NO lanza
     una excepción cuando Yahoo devuelve rate limit — imprime "Failed
     download" a stdout y devuelve un DataFrame vacío. El bloque
-    "except Exception" de abajo casi nunca se activa para este caso real;
+    "except Exception" de abajo casi nunca se activa para ese caso real;
     antes de este fix, un df.empty devolvía None de inmediato sin
     reintentar ni esperar, dejando MAX_REINTENTOS/backoff sin efecto
-    práctico. Ahora el caso "vacío" también reintenta con el mismo backoff.
+    práctico. El caso "vacío" también reintenta ahora con el mismo backoff.
+
+    FIX ADICIONAL (22/08/2026, mismo día, detectado al re-ejecutar el
+    backtest canónico de 21 años): el fix de arriba trataba CUALQUIER
+    resultado vacío como "probable rate limit" y reintentaba con espera
+    — pero "possibly delisted; no timezone found" (ticker permanentemente
+    deslistado, sin datos en absoluto, ~350 casos en el universo histórico
+    del S&P500) es un motivo PERMANENTE, no transitorio, y no se beneficia
+    de ningún reintento — solo desperdicia 30+60s por ticker sin ninguna
+    posibilidad de éxito. Ahora se captura el mensaje real que yfinance
+    imprime a stdout (contextlib.redirect_stdout) para distinguir: solo
+    se reintenta con backoff si el mensaje menciona rate limit; si dice
+    "delisted" (u otro motivo no reconocido), se descarta de inmediato
+    sin esperar.
     """
     for intento in range(1, MAX_REINTENTOS + 1):
         try:
-            df = yf.download(symbol, start=start, end=end,
-                             progress=False, auto_adjust=True)
+            buffer_salida = io.StringIO()
+            with contextlib.redirect_stdout(buffer_salida):
+                df = yf.download(symbol, start=start, end=end,
+                                 progress=False, auto_adjust=True)
+            salida = buffer_salida.getvalue()
 
             if df.empty:
-                if intento < MAX_REINTENTOS:
+                es_rate_limit = "RateLimit" in salida or "Too Many" in salida
+                if es_rate_limit and intento < MAX_REINTENTOS:
                     espera = intento * 30
-                    print(f"    Vacío (probable rate limit) — esperando {espera}s antes de reintentar...")
+                    print(f"    Rate limit — esperando {espera}s antes de reintentar...")
                     time.sleep(espera)
                     continue
+                # Motivo permanente (delisted u otro) — no reintentar,
+                # o ya se agotaron los reintentos de rate limit.
                 return None
 
             # Aplanar MultiIndex si existe
@@ -95,8 +116,6 @@ def _descargar(symbol, start, end):
             else:
                 print(f"    ERROR: {e}")
                 return None
-
-    return None
 
     return None
 

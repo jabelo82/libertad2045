@@ -942,6 +942,140 @@ Commits principales en producción (más recientes primero):
   vigente del proyecto -- superior a v1 en todo, con WR mejor que v2 a
   costa de un PF ligeramente inferior segun el periodo.
 
+  BACKTEST v4 (commits 8dfcd4d + 4a64acc, 22/08/2026 -- MOTOR MEJORADO,
+  resultado de laboratorio, NO sustituye a v3 como referencia operativa
+  vigente -- ver "Parametros activos en produccion" mas abajo, sin
+  cambios): iniciativa "backtest mas fiel a la realidad". Mismo universo,
+  mismo periodo y misma metodologia que v3 (S&P500 historico
+  survivorship-bias corregido via universo_historico_sp500(), 2006-2025,
+  MISMO script backtest_expandido.py sin cambiar START_DATE/END_DATE/
+  universo), pero con dos correcciones de la logica de SIMULACION que
+  v3 nunca tuvo (no son cambios de datos, son cambios de como el motor
+  interpreta los datos que ya tenia disponibles):
+    Fase 1 (commit 8dfcd4d, 22/08/2026): simulacion de gaps de apertura
+      en entradas y salidas -- si el Open del dia ya cruzo el nivel
+      teorico del stop/buy_stop (gap overnight), el precio de ejecucion
+      simulado pasa a ser ese Open real, no el nivel teorico. v3 SIEMPRE
+      asumia ejecucion perfecta al precio teorico, ignorando los gaps --
+      motivado por el incidente real ANET (05-06/08/2026, stop teorico
+      196,40 ejecutado a 192,545 por gap bajista, ver seccion 13).
+    Fase 2 (commit 4a64acc, 22/08/2026): aproximacion de slippage por
+      impacto de mercado (forma "square-root law" de la literatura de
+      microstructure -- Almgren, Thum, Hauptmann, Li (2005), "Direct
+      Estimation of Equity Market Impact"; Bouchaud, Farmer, Lillo
+      (2008)), penalizando el precio de ejecucion segun la fraccion
+      orden/volumen diario. APROXIMACION EXPLICITA, no medicion real --
+      el backtest usa datos diarios, sin tick-by-tick ni libro de
+      ordenes; la constante de calibracion (SLIPPAGE_K=0,10) es una
+      eleccion propia razonable, NO calibrada con datos de ejecucion
+      reales de este proyecto.
+
+    RESULTADO (2006-2025, mismo universo que v3, ejecutado 22/08/2026):
+
+                           v3 (original)  v4 gaps-only   v4 completo
+                                          (solo Fase 1)  (Fase 1+2)
+      Capital final     :  8.888.418€     2.160.968€     2.143.244€
+      CAGR (fmla.proy.)*:  47,0%          36,98%         36,92%
+      TIR (XIRR real)** :  37,81%         26,80%         26,74%
+      Profit Factor     :  2,6071         1,8977         1,8889
+      Win Rate          :  54,1%          51,3%          51,3%
+      Max Drawdown      :  10,4%          11,8%          10,7%
+      Trades            :  2.402          2.349          2.340
+      Rebalanceos       :  ~390           257            259
+
+      * CAGR = (capital_final/capital_inicial)^(1/años) - 1, misma
+        formula ya usada en el resto del proyecto (backtest_exp45.py) --
+        ignora las aportaciones anuales, solo comparable entre filas de
+        esta tabla, no es la rentabilidad economica real con aportaciones.
+      ** TIR = XIRR calculado ad-hoc para esta comparacion (bisección
+        sobre el flujo de caja real: -4.000€ el primer dia de trading de
+        cada uno de los 20 años + capital final el ultimo dia) -- no se
+        encontro el script original que produjo el 37,81% de v3 para
+        confirmar que usa la misma metodologia exacta, pero XIRR es la
+        definicion estandar y correcta para este flujo de caja irregular.
+
+    LECTURA -- EXACTAMENTE LO ESPERADO, no un fallo del fix: el resultado
+    empeora en las cuatro metricas principales frente a v3 (capital final
+    -75,9% con Fase 1+2 combinadas). v3 estaba ocultando el coste real de
+    ejecucion que el motor anterior asumia "perfecta" en cada gap y cada
+    orden grande relativa al volumen.
+
+    DESGLOSE Fase 1 vs Fase 2 (aislado corriendo con SLIPPAGE_K=0 primero):
+    la Fase 1 (gaps) explica la GRAN MAYORIA de la caida frente a v3
+    (capital 8.888.418€ -> 2.160.968€, -75,7%) -- la Fase 2 (slippage)
+    añade un efecto marginal ADICIONAL y pequeño sobre eso (2.160.968€ ->
+    2.143.244€, -0,8% mas). Coherente con el motivo original del Exp.46:
+    el S&P500 es un universo generalmente muy liquido, la penalizacion
+    por slippage (proporcional a la fraccion orden/volumen) rara vez es
+    grande aqui -- se espera que importe mucho mas al añadir el
+    diferencial Russell 1000 (Fase 4, pendiente, ~4x menos liquido segun
+    la Fase 2 del Exp.46 retomado), que es precisamente el universo para
+    el que se diseño la Fase 2.
+    Dato no ocultado, contraintuitivo a primera vista: el Max Drawdown es
+    LIGERAMENTE MENOR con slippage incluido (10,7%) que sin el (11,8%).
+    Explicacion: el slippage cambia el capital dia a dia (afecta al
+    tamaño de cada posicion nueva, que depende del capital disponible),
+    desplazando CUANDO ocurre exactamente el pico de drawdown en 20 años
+    de interes compuesto -- interaccion de segundo orden de un sistema
+    con position sizing dependiente del capital, no una señal de que el
+    slippage "mejore" nada. Capital final y Profit Factor SI son
+    monotonos (peor con cada fase añadida), como se esperaba.
+
+    COBERTURA DE DATOS en este run (22/08/2026): 674/1.047 tickers del
+    universo historico cargados con exito (373 errores, "possibly
+    delisted"). Coherente en magnitud con la cobertura ya documentada
+    arriba (108/831 candidatos relevantes faltantes, 13,0%) mas
+    candidatos del universo bruto de 1.047 que quedan fuera de la
+    ventana 2006-2025 -- no es un hueco nuevo. NO se ha hecho la
+    reconciliacion exacta ticker a ticker de los 373 contra la lista
+    original de 108 -- se reporta la cifra bruta observada por
+    honestidad, no una cifra ya conciliada al 100%.
+
+    FIX COLATERAL aplicado durante esta ejecucion (data_manager.py, sin
+    relacion con la logica de backtest_expandido.py): el fix de
+    reintentos del 22/08 (mismo dia, diagnostico Exp.46 retomado)
+    trataba CUALQUIER resultado vacio de yf.download() como "probable
+    rate limit" y esperaba 30-90s -- para un ticker permanentemente
+    deslistado eso es espera inutil, multiplicada por ~350 tickers
+    habria tardado horas. Corregido para distinguir el motivo real
+    (captura el mensaje que yfinance imprime a stdout): reintenta con
+    espera SOLO si es rate limit de verdad, descarta de inmediato si es
+    permanente. Sin este fix, esta ejecucion habria tardado varias horas
+    en vez de ~8 minutos. Pendiente de commit junto a esta documentacion.
+
+    OPERACIONES MAS AFECTADAS por el nuevo motor (mayor gap real de
+    apertura en el dia de entrada o salida, verificado contra OHLC
+    crudo -- no artefactos, volumen coherente con un evento real de
+    mercado en cada caso, mismo criterio de verificacion que DPZ/CHRD
+    en el analisis de gaps del 19/08 y 22/08):
+      BIIB (Biogen), salida 2007-12-13: cierre previo 75,88 -> apertura
+        55,12 (-27,4%), volumen 31,1M vs ~2-3M habitual -- crisis real
+        de seguridad de Tysabri, diciembre 2007. MAYOR gap detectado en
+        los 21 años, ~14x la magnitud del incidente ANET.
+      SRE (Sempra Energy), salida 2025-02-25: cierre previo 83,83 ->
+        apertura 69,60 (-17,0%), volumen 29,5M vs ~3-4M habitual -- el
+        MISMO caso ya identificado de forma independiente en el analisis
+        de gaps del 19/08/2026 (alli reconstruido a mano como -14,3%;
+        pequeña diferencia numerica por distinta trayectoria de stop,
+        mismo evento real -- cruce de validacion entre dos analisis
+        distintos, buena señal).
+      FDX (FedEx), salida 2024-09-20: cierre previo 290,82 -> apertura
+        252,47 (-13,2%), volumen 17,5M vs ~1,3M habitual -- crash real
+        tras resultados trimestrales decepcionantes, 19/09/2024.
+      GRMN (Garmin), salida 2025-04-03: gap -13,2%.
+    Los tres primeros superan en magnitud al incidente ANET (-2%) que
+    motivo el fix -- validacion directa de que el motor captura eventos
+    reales de mercado que v3 ejecutaba "perfectos" sin mas, en un
+    universo grande (S&P500) y un periodo largo (21 años), no solo en el
+    caso puntual que origino la iniciativa.
+
+    PENDIENTE -- FASE 4 (NO ejecutada, requiere aprobacion explicita de
+    Javier): repetir la comparacion Exp.46 (Russell 1000 diferencial)
+    usando este v4 (motor mejorado) como nueva linea base en vez de v3 --
+    se espera que el efecto de la Fase 2 (slippage) sea mucho mas visible
+    ahi, dado el diferencial de liquidez ~4x ya cuantificado en la Fase 2
+    del Exp.46 retomado (22/08/2026).
+
   Parámetros activos en producción:
     SMA50 > SMA200    : filtro de tendencia alcista
     ATR dinámico      : stop loss adaptativo (percentil histórico B1)
