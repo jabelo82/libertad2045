@@ -905,6 +905,167 @@ Commits principales en producción (más recientes primero):
       nada desplegado), limite de exposicion Russell si se activa
       (idea original de Javier: maximo 40% del capital).
 
+      FASE 7A (23/08/2026) -- BACKTEST ACOTADO 2017-2022 CON COMPOSICION
+      RUSSELL 1000 REAL Y VERIFICADA -- corrige el sesgo de anticipacion
+      del Exp.48 de arriba (que proyectaba el Russell 1000 de HOY hacia
+      atras 20 años). NO sustituye al Exp.48 -- se conserva como
+      historico, mismo patron que v3/v4/v5/v6 mas abajo.
+
+      Fuente de verdad -- 6 snapshots oficiales "Russell 1000(R) Index
+      Membership list" de FTSE Russell/Russell Investments, descargados
+      de Wayback Machine y verificados al 100% (descargados y leidos,
+      no solo indicios): 2017 (derivado por diferencia de conjuntos
+      Russell3000-Russell2000, misma fecha), 2018-2022 (listas directas
+      Company+Ticker). Fechas de reconstitucion confirmadas leyendo cada
+      documento: 2017-06-26, 2018-06-25, 2019-07-01, 2020-06-29,
+      2021-06-28, 2022-06-24. De los 20 años necesarios para cubrir todo
+      el periodo del proyecto (2006-2025), estos son los UNICOS 8 años
+      con evidencia limpia hoy (los otros 6 confirmados -- 2006, 2009,
+      2018-2022 -- caen fuera de esta ventana de 5 años); 2010-2016 y
+      2023-2025 siguen sin cobertura tras la investigacion de fuentes
+      gratuitas (Yumpu/Scribd/SlideShare/DocumentCloud incluidos).
+
+      METODOLOGIA:
+        - Ventana: 2017-06-26 -> 2022-06-24 (rango de validez exacto de
+          los 6 snapshots) -- NO los 20 años del Exp.48/v4/v5/v6.
+        - Motor: backtest_expandido.py sin modificar, v6 completo (gaps,
+          slippage, comisiones IBKR, desglose FX, capital/aportaciones
+          convertidos a USD real segun tipo de cambio de cada fecha).
+        - Fuente S&P500: fichero "(Updated)" de fja05680/sp500 (llega
+          hasta 2026-06-30) -- NO la cache congelada en 2019-01-11
+          (sp500_composicion.csv, hallazgo documentado en la seccion 8
+          mas abajo, sin resolver todavia). Cache propia y separada
+          (sp500_composicion_updated_fase7a.csv), nunca toca la vieja.
+        - Composicion combinada = UNION de conjuntos en cada fecha de
+          cambio real (S&P500 real ∪ Russell1000 real, cada uno resuelto
+          con asof() independiente) -- NO el bypass estatico del Exp.48
+          (que añadia el Russell a TODAS las fechas por igual). Cada
+          ticker es elegible solo desde su fecha REAL de entrada al
+          Russell 1000 hasta su fecha REAL de salida.
+        - Desglose Russell-only vs S&P500 clasificado por la fecha REAL
+          de ENTRADA de cada trade concreto (no una lista estatica de
+          430 tickers como el Exp.48) -- un mismo ticker puede
+          clasificar distinto en dos trades si estuvo en ambos indices
+          en momentos distintos de la ventana.
+        - Sin buffer de calentamiento antes de 2017-06-26 (misma
+          decision que v4/v5/v6 con su propio 2006-01-01) -- consecuencia
+          verificada: 291 dias (9,6 meses) sin ningun trade al principio
+          de la ventana por el calentamiento del SMA200 (primera entrada
+          real: 2018-04-13, en los DOS runs). Proporcionalmente mucho
+          mas visible en 5 años que en 20.
+        - Script: fase7a_construir_composicion_russell1000.py (Parte 1,
+          genera russell1000_composicion_historica_2017_2022.csv) +
+          fase7a_backtest_2017_2022.py (Parte 2).
+
+      RESULTADO (2017-06-26 -> 2022-06-24, capital inicial 4.479,53$
+      real convertido, identico en los dos runs):
+
+                            S&P500 solo      S&P500+Russell1000 real
+        Capital final USD : 52.618,39$        51.601,22$    (-1,9%)
+        Capital final EUR : 48.828,32€        47.489,20€
+        Retorno total     : +1.074,6%         +1.051,9%
+        Profit Factor     : 1,7861            1,7329
+        Win Rate          : 50,2%             49,7%
+        Drawdown maximo   : 9,1%              10,4%
+        Dias bloqueados RG: 0                 11
+        Trades            : 566               557
+        Comision total    : 1.132,00$         1.114,00$
+
+      DESGLOSE Russell-only vs S&P500 DENTRO del run combinado:
+                          S&P500          Russell-only
+        Trades          : 325             232
+        Win Rate        : 48,3%           47,8%
+        Profit Factor   : 1,7733          1,6833
+        PnL total       : 12.534,42€      9.028,88€
+
+      LA COMPARACION CENTRAL -- mismo peso que el resto del hallazgo,
+      no una nota mas: el Exp.48 (20 años, sesgo de anticipacion sin
+      resolver) mostraba el Russell 1000 APORTANDO valor de forma clara
+      (capital combinado +39,2% vs S&P500 solo; Russell-only PF 2,0070 >
+      S&P500 PF 1,7971 DENTRO del mismo run). La Fase 7A (5 años,
+      composicion real verificada) muestra EXACTAMENTE LO CONTRARIO:
+      capital combinado -1,9% vs S&P500 solo; Russell-only PF 1,6833 <
+      S&P500 PF 1,7733 DENTRO del mismo run. La ventaja de capital Y la
+      ventaja de calidad (PF) del subconjunto Russell-only SE INVIERTEN
+      entre los dos experimentos.
+
+      INVESTIGACION DE POR QUE SE INVIERTE (23/08/2026, verificada con
+      datos reales, no especulada):
+        1. HIPOTESIS DESCARTADA -- "el Russell-only de la Fase 7A rinde
+           peor porque incluye fracasos reales que el Exp.48 excluia
+           (sesgo de supervivencia sobre la lista estatica de hoy)":
+           cruzando los 175 tickers Russell-only distintos que operaron
+           en la Fase 7A contra exp48_russell_incremental.txt (lista
+           estatica del Exp.48, 430 tickers basados en el Russell 1000
+           de HOY): los 79 tickers que YA NO estan en el Russell 1000
+           hoy (los que el Exp.48 habria excluido por completo) tuvieron
+           MEJOR rendimiento (PF 1,9420, WR 51,9%) que los 96 que SI
+           siguen (PF 1,4952, WR 44,5%) -- resultado contrario al
+           esperado (muchas caidas del indice son por adquisicion con
+           prima, no por fracaso del negocio). Esta hipotesis simple NO
+           explica la inversion.
+        2. COMPARACION DIRECTA -- Exp.48 v6 (20 años), filtrando solo
+           los trades con entrada dentro de la misma ventana calendario
+           2017-06-26/2022-06-24: 714 trades, WR 51,7%, PF 2,0814 --
+           MEJOR que los dos runs de la Fase 7A en la MISMA ventana
+           (incluido su propio S&P500-solo equivalente, PF 1,7861).
+        3. FACTOR DE CONFUSION REAL encontrado y declarado antes de
+           sacar conclusiones de (2): los dos runs de la Fase 7A no
+           operan nada hasta el 2018-04-13 (291 dias sin calentar el
+           SMA200 -- ver Metodologia arriba), mientras que el Exp.48,
+           corriendo desde 2006, llega a la ventana con los indicadores
+           ya calientes desde años antes y puede operar los 5 años
+           completos. Esto invalida PARCIALMENTE la comparacion (2)
+           como prueba limpia de sesgo -- parte de la diferencia es
+           simplemente arrancar en frio, no composicion. NO afecta a la
+           comparacion central (combinado vs solo, DENTRO de la Fase
+           7A) -- los dos runs comparten el mismo hueco de calentamiento
+           exactamente igual, asi que esa comparacion sigue siendo
+           limpia.
+        CONCLUSION DE LA INVESTIGACION: la inversion del resultado
+        central (combinado vs solo dentro de la Fase 7A) esta solidamente
+        establecida. El MECANISMO EXACTO por el que el Exp.48 mostraba
+        una ventaja tan grande no se ha aislado del todo -- aislarlo
+        exigiria un experimento adicional (Exp.48 con el mismo motor
+        pero arrancando en frio en 2017, no en 2006, para separar sesgo
+        de anticipacion puro del efecto de calentamiento) -- NO hecho,
+        pendiente si Javier lo pide.
+
+      CHEQUEO DE CANDIDATOS A CAMBIO DE TICKER/FUSION (los 9 de la
+      Parte 1: HCN/WELL, CBG/CBRE, DVMT/DELL, MSG/MSGE, BPR/BPYU, JEC/J,
+      AAXN/AXON, BLL/BALL, WLTW/WTW) contra los trades reales del run
+      combinado: 0 trades encontrados de ninguno de los 9 tickers
+      antiguos -- ninguno llego a operar en esta ventana concreta. Nada
+      que revisar, resultado limpio.
+
+      LIMITACIONES HONESTAS DE LA FASE 7A EN SI (no del hallazgo, del
+      experimento):
+        - Muestra de 5 años, no 20 -- menor robustez estadistica que el
+          resto de la linea v3-v6. SI incluye un evento de estres real
+          (crash COVID, marzo 2020), no es un periodo artificialmente
+          tranquilo.
+        - 291 dias sin trades al principio por calentamiento SMA200 (ver
+          Metodologia) -- reduce aun mas la muestra efectiva (~4,2 años
+          de trading real de los 5 nominales).
+        - Solo 8 de los 20 años del periodo completo del proyecto tienen
+          composicion Russell verificada hoy -- esta ventana concreta
+          (2017-2022) es la UNICA con evidencia limpia disponible, no
+          fue elegida por dar el resultado mas favorable a ninguna
+          hipotesis, fue la unica ventana continua posible con los 6
+          snapshots que hay.
+
+      RECOMENDACION PARA LA DECISION "RUSSELL SI/NO" EN PRODUCCION: con
+      la mejor evidencia disponible hoy, NO hay justificacion solida
+      para activar el Russell 1000 en produccion. El +39,2% del Exp.48
+      no es una base fiable para esa decision -- coincide en direccion Y
+      en mecanismo (composicion sesgada del indice) con lo que cabria
+      esperar si fuera un artefacto del sesgo de anticipacion, no una
+      ventaja real del universo mas grande, aunque el mecanismo exacto
+      no se ha aislado del todo (ver investigacion arriba). Si en el
+      futuro se completan mas años de composicion historica real (los
+      huecos 2010-2016 y 2023-2025), valdria la pena repetir este
+      experimento con una ventana mas larga antes de reconsiderar.
+
       --- Resultados originales de esta noche (NO FIABLES, conservados
       solo como referencia historica de lo que se penso inicialmente) ---
       EXP.46 — RUSSELL 1000, BACKTEST REAL COMPLETADO (01-02/08/2026):
