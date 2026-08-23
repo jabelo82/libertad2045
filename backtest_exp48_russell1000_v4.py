@@ -5,8 +5,18 @@ Fase 4 de la iniciativa Exp.46 (Russell 1000)
 
 Backtest completo con universo combinado S&P500 histórico + diferencial
 Russell 1000, usando el motor YA MEJORADO (gaps de apertura + slippage
-por liquidez, commits 8dfcd4d y 4a64acc — reutiliza backtest_expandido.py
-sin modificarlo, así que ambos fixes ya están incluidos automáticamente).
+por liquidez, comisiones IBKR y desglose FX de reporte — commits
+8dfcd4d, 4a64acc y 39f4f4d — reutiliza backtest_expandido.py sin
+modificarlo, así que todos los fixes ya están incluidos automáticamente).
+
+Encargo 2 (22/08/2026): faltaba cablear aquí el parámetro `eurusd` de
+ejecutar_backtest() — el motor ya soportaba el desglose FX de la Fase 5
+(capital_final_eur/pnl_trading_eur_total/efecto_fx_eur_total), pero
+este script no se lo pasaba, así que esas claves nunca aparecían en el
+informe/CSV de esta ejecución combinada. Único cambio: cargar EURUSD=X
+igual que cualquier otro activo cacheado y pasarlo a ejecutar_backtest()
+— NO se toca nada de la lógica de universo combinado/deduplicación de
+Russell ni el bypass de composición de más abajo.
 
 Línea base a batir: v4 (commits 6f23769/47b9860), NO v3 — capital final
 2.143.244€, PF 1,8889, DD 10,7%, WR 51,3%, 2.340 trades.
@@ -37,11 +47,14 @@ from backtest_expandido import (
     descargar_datos,
     ejecutar_backtest,
     calcular_metricas,
+    capital_inicial_usd_para_reporte,
     imprimir_informe,
     guardar_resultados,
     START_DATE,
     END_DATE,
 )
+
+from data_manager import obtener_datos_cached
 
 RUSSELL_FILE = "russell1000_diferencial_filtrado.txt"
 
@@ -116,8 +129,35 @@ def main():
           f"Russell-incrementales añadidos a TODAS las fechas del comp_df "
           f"(elegibles para señal todos los días, igual que el S&P500 real)")
 
-    trades, curva_capital, capital_final = ejecutar_backtest(datos, composicion_df=comp_df_bypass)
-    metricas = calcular_metricas(trades, curva_capital, capital_final)
+    # --------------------------------------------------
+    # Desglose FX de reporte (Fase 5, commit 39f4f4d) + conversión de
+    # capital inicial (Fase 6, 22/08/2026) — capa en paralelo, nunca
+    # toca el motor en USD ni el universo/dedup de arriba. Se carga
+    # igual que cualquier otro activo cacheado (mismo patrón
+    # documentado en backtest_expandido.py::obtener_tipo_cambio()).
+    # Fail-safe: sin caché de EURUSD=X, eurusd queda en None y
+    # ejecutar_backtest() se comporta exactamente como antes de este
+    # cableado (ver docstring de ejecutar_backtest()).
+    # --------------------------------------------------
+    eurusd = obtener_datos_cached("EURUSD=X", START_DATE, END_DATE)
+    if eurusd is None:
+        print("\n  AVISO: no se pudo cargar EURUSD=X — el backtest sigue en "
+              "USD sin desglose en EUR (fail-safe, sin cambio de comportamiento).")
+
+    trades, curva_capital, capital_final = ejecutar_backtest(
+        datos, composicion_df=comp_df_bypass, eurusd=eurusd)
+
+    # Fase 6, "Opción A" aprobada por Javier (22/08/2026): retorno_total
+    # y "capital_inicial" deben calcularse contra el capital real que
+    # usó el motor (convertido si `eurusd` estaba disponible el día 1),
+    # no contra la constante CAPITAL_INICIAL — ver docstring de
+    # calcular_metricas() y capital_inicial_usd_para_reporte() en
+    # backtest_expandido.py. None si eurusd es None (fail-safe, cae al
+    # comportamiento de siempre).
+    capital_inicial_usd = capital_inicial_usd_para_reporte(datos, eurusd)
+
+    metricas = calcular_metricas(
+        trades, curva_capital, capital_final, capital_inicial_usd=capital_inicial_usd)
     imprimir_informe(metricas)
     guardar_resultados(trades, curva_capital, metricas)
 
