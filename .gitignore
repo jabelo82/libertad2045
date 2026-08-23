@@ -20,6 +20,7 @@ portfolio_cache.json
 logged_exec_ids.txt
 logged_exec_ids_*.txt
 sp500_composicion.csv
+sp500_composicion_updated_fase7a.csv
 trades_*.json
 orders_*.json
 
