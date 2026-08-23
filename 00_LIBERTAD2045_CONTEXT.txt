@@ -1225,6 +1225,65 @@ Commits principales en producción (más recientes primero):
     FASE 4 COMPLETADA (22/08/2026) -- ver Exp.48 (provisional, pendiente
     de numero definitivo en la tabla de experimentos de Javier), seccion 7.
 
+    HALLAZGO INDEPENDIENTE (23/08/2026) -- SP500_COMPOSICION.CSV CONGELADO
+    EN 2019-01-11, NO ES UN PROBLEMA DE CACHE LOCAL:
+
+    Descubierto durante el diseño de la Fase 7A (Russell 1000 real
+    2017-2022, ver seccion 7), pero NO es parte de esa fase -- se
+    documenta aqui aparte porque afecta a v4/v5/v6, el backtest canonico
+    de 20 años, no solo a la Fase 7A.
+
+    cargar_composicion_sp500() usa sp500_composicion.csv como cache local
+    y NUNCA la refresca si el fichero ya existe (bug de caching aparte,
+    ver mas abajo). Verificado descargando la fuente EN VIVO de GitHub
+    (fja05680/sp500, fichero "S&P 500 Historical Components & Changes.csv",
+    sin sufijo): la fuente misma, no solo nuestra cache local, deja de
+    tener filas despues del 2019-01-11 -- esa rama del dataset esta
+    abandonada por su mantenedor, no es un problema de nuestra cache.
+
+    Consecuencia real, verificada con el mecanismo .asof() que usa
+    sp500_en_fecha(): devuelve la composicion de 2019-01-11 congelada
+    para CUALQUIER fecha posterior a esa. Esto significa que v4, v5 y v6
+    (backtest de 20 años, 2006-2025) han operado con composicion S&P500
+    REAL solo en su tramo 2006-01 a 2019-01 (13 de 20 años, 65%) y con la
+    FOTO CONGELADA de enero 2019 durante el resto (2019-01 a 2025-12, 6
+    de 20 años, el 30% de la ventana) -- incluido TODO el periodo COVID
+    (feb-abr 2020) y cualquier alta/baja real del S&P500 desde 2019 (ej.
+    Tesla, añadida diciembre 2020, nunca habria sido "elegible" via este
+    mecanismo en ese tramo). El "survivorship bias eliminado" que
+    reclaman v4/v5/v6 es cierto solo para el 65% de la ventana, no para
+    el 100% como se ha venido asumiendo hasta hoy.
+
+    FIX IDENTIFICADO Y VERIFICADO (no aplicado todavia -- decision de
+    Javier, ver PENDIENTE mas abajo): el mismo repositorio fja05680/sp500
+    tiene un fichero SI mantenido -- "S&P 500 Historical Components &
+    Changes (Updated).csv" -- que combina el original con
+    sp500_changes_since_2019.csv (actualizado cada pocos meses via
+    Wikipedia por el propio mantenedor). Descargado y verificado en vivo
+    el 23/08/2026: llega hasta 2026-06-30, practicamente al dia.
+
+    BUG DE CACHING APARTE (mismo hallazgo, causa relacionada pero
+    distinta): aunque se cambiara SP500_COMP_URL al fichero "(Updated)",
+    cargar_composicion_sp500() seguiria sirviendo la cache local
+    sp500_composicion.csv sin refrescarla nunca, porque solo comprueba
+    si el fichero existe (os.path.exists), no su antiguedad ni si la
+    fuente remota tiene una version mas nueva. Bug independiente del de
+    fuente-abandonada de arriba: incluso con una fuente perfecta, la
+    cache nunca se actualizaria sola una vez descargada la primera vez.
+
+    PENDIENTE -- decision de Javier, NADA de esto aplicado todavia:
+      1. Si cambiar SP500_COMP_URL al fichero "(Updated)".
+      2. Si arreglar el bug de caching (refresco por antiguedad o por
+         hash de contenido remoto, no solo por existencia del fichero).
+      3. Si reejecutar v4/v5/v6 retroactivamente con el S&P500 corregido
+         -- explicitamente APLAZADO por Javier el 23/08/2026 hasta cerrar
+         la Fase 7A primero, no se toca hasta entonces.
+
+    El fichero "(Updated)" se usa SOLO para la Fase 7A (2017-2022, ver
+    mas abajo en seccion 7) porque esa fase lo necesita para ser
+    correcta -- v4/v5/v6 de 20 años NO se han tocado ni reejecutado con
+    esto.
+
   Parámetros activos en producción:
     SMA50 > SMA200    : filtro de tendencia alcista
     ATR dinámico      : stop loss adaptativo (percentil histórico B1)
