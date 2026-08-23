@@ -534,6 +534,20 @@ def convertir_a_eur(valor_usd, rate):
     return valor_usd / rate
 
 
+def convertir_eur_a_usd(valor_eur, rate):
+    """
+    Convierte un valor en EUR a USD (rate = USD por 1 EUR) — inversa
+    exacta de convertir_a_eur(). Fase 6 (22/08/2026), iniciativa
+    "backtest más fiel a la realidad".
+
+    Fail-safe: rate inválido (None, NaN, <= 0) → devuelve NaN, mismo
+    criterio que convertir_a_eur().
+    """
+    if valor_eur is None or rate is None or pd.isna(rate) or rate <= 0:
+        return float("nan")
+    return valor_eur * rate
+
+
 def calcular_pnl_eur(entry_value_usd, pnl_usd, rate_entrada, rate_salida):
     """
     Descompone el PnL de un trade individual en EUR en dos partes
@@ -598,6 +612,76 @@ def obtener_tipo_cambio(eurusd, fecha):
         return float(eurusd.loc[idx, "Close"])
     except Exception:
         return float("nan")
+
+
+def convertir_aportacion_a_usd(monto_eur, eurusd, fecha):
+    """
+    Convierte una aportación en EUR (CAPITAL_INICIAL o
+    APORTACION_ANUAL) al USD nativo del motor, al tipo de cambio
+    EUR/USD REAL de `fecha` — Fase 6 (22/08/2026), iniciativa
+    "backtest más fiel a la realidad".
+
+    A DIFERENCIA de convertir_a_eur()/calcular_pnl_eur() (Fase 5,
+    22/08/2026 — capa de reporte que NUNCA toca el motor), esta
+    conversión SÍ afecta al comportamiento real del motor: el capital
+    disponible para dimensionar posiciones cada año pasa a depender
+    del EUR/USD real de ese día, exactamente como en la cuenta IBKR
+    real (Javier aporta EUR; IBKR los convierte a USD al tipo de
+    cambio del día antes de poder comprar nada denominado en USD).
+    CAMBIO DE COMPORTAMIENTO, no solo de reporte — v6 puede dar un
+    número de trades distinto a v5, igual que pasó entre v4 y v5.
+
+    Fail-safe (mismo patrón que el resto de la Fase 5, nunca rompe
+    una llamada existente):
+      - `eurusd` es None            → devuelve monto_eur SIN
+        convertir. Comportamiento IDÉNTICO al de antes de la Fase 6
+        — es el caso de TODAS las llamadas ya comiteadas de v3/v4/v5
+        que no pasan este parámetro.
+      - no hay tipo de cambio para `fecha` (NaN — huecos de caché,
+        fecha anterior al histórico de EURUSD=X)
+        → misma caída a monto_eur sin convertir. Nunca bloquea el
+        backtest ni inventa un tipo de cambio.
+    """
+    if eurusd is None:
+        return monto_eur
+    rate = obtener_tipo_cambio(eurusd, fecha)
+    convertido = convertir_eur_a_usd(monto_eur, rate)
+    return convertido if not pd.isna(convertido) else monto_eur
+
+
+def capital_inicial_usd_para_reporte(datos, eurusd):
+    """
+    Calcula el capital inicial REAL en USD (tras la conversión de la
+    Fase 6) para que un caller externo se lo pase a
+    calcular_metricas(capital_inicial_usd=...) — Fase 6 (22/08/2026),
+    diseño "Opción A" aprobado por Javier.
+
+    ejecutar_backtest() no puede devolver este valor como un 4º
+    elemento de su tupla de retorno sin romper el
+    "trades, curva_capital, capital_final = ejecutar_backtest(...)"
+    de todos los callers ya comiteados que importan esta función de
+    backtest_expandido (backtest_expandido.py::__main__,
+    backtest_exp48_russell1000_v4.py, y los tests de las Fases 5/6).
+    En vez de eso, este helper recalcula el mismo valor con la MISMA
+    fórmula que usa ejecutar_backtest() por dentro (única fuente de
+    verdad: convertir_aportacion_a_usd()) — nunca la duplica, solo la
+    reutiliza — para que ambos lados queden sincronizados por
+    construcción. Ver test_capital_inicial_usd_para_reporte_coincide_
+    con_el_que_uso_el_motor en test_backtest_aportaciones_eur.py.
+
+    `datos` : el mismo dict {symbol: DataFrame} que se le pasa a
+              ejecutar_backtest() — se usa solo para hallar la primera
+              fecha del backtest (mismo cálculo que fechas[0] dentro
+              de ejecutar_backtest()).
+    `eurusd`: igual que en ejecutar_backtest(). None (fail-safe) →
+              devuelve None, así calcular_metricas() cae a
+              CAPITAL_INICIAL — comportamiento idéntico al de antes de
+              la Fase 6.
+    """
+    if eurusd is None or not datos:
+        return None
+    primera_fecha = min(fecha for df in datos.values() for fecha in df.index)
+    return convertir_aportacion_a_usd(CAPITAL_INICIAL, eurusd, primera_fecha)
 
 
 # ==================================================
@@ -733,13 +817,28 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
                          "Close", mismo formato que cualquier otro activo
                          cacheado). None (por defecto) → los trades no
                          llevan el desglose en EUR (pnl_eur/
-                         pnl_trading_eur/efecto_fx_eur quedan ausentes),
-                         pero el resultado en USD es idéntico con o sin
-                         este parámetro — es una capa de reporte en
-                         paralelo, nunca afecta al motor. Las comisiones
-                         (COMISION_IBKR) SÍ se aplican siempre,
-                         independientemente de este parámetro. Ver
-                         calcular_pnl_eur() y obtener_tipo_cambio().
+                         pnl_trading_eur/efecto_fx_eur quedan ausentes)
+                         — esa parte (Fase 5) es una capa de reporte en
+                         paralelo que nunca afecta al motor. Las
+                         comisiones (COMISION_IBKR) SÍ se aplican
+                         siempre, independientemente de este parámetro.
+
+                         AVISO (Fase 6, 22/08/2026): a diferencia de la
+                         Fase 5, este parámetro YA NO es solo de
+                         reporte. CAPITAL_INICIAL y APORTACION_ANUAL se
+                         interpretan como EUR reales y se convierten al
+                         USD nativo del motor al tipo de cambio real de
+                         cada fecha (ver convertir_aportacion_a_usd()),
+                         igual que Javier aporta EUR reales a la cuenta
+                         IBKR. Con `eurusd` disponible, el resultado en
+                         USD YA NO es idéntico al de `eurusd=None` — el
+                         capital que dimensiona posiciones cada año
+                         cambia, así que el nº de trades y el resultado
+                         final pueden diferir de una ejecución sin este
+                         parámetro. Sin `eurusd` (o sin tipo de cambio
+                         disponible ese día), el comportamiento es
+                         exactamente el mismo que antes de la Fase 6.
+                         Ver obtener_tipo_cambio() y calcular_pnl_eur().
     """
 
     if composicion_df is None:
@@ -760,8 +859,18 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
         for fecha in df.index
     ))
 
-    capital        = CAPITAL_INICIAL
-    capital_pico   = CAPITAL_INICIAL   # Capital pico — se actualiza como en producción
+    # Fase 6 (22/08/2026): CAPITAL_INICIAL son EUR reales aportados a
+    # la cuenta IBKR el primer día del backtest, convertidos al USD
+    # nativo del motor al tipo de cambio EUR/USD REAL de ese día
+    # exacto (ver convertir_aportacion_a_usd()). CAMBIO DE
+    # COMPORTAMIENTO real (no solo de reporte, a diferencia de la
+    # capa de la Fase 5): el capital que dimensiona posiciones desde
+    # el día 1 pasa a depender del EUR/USD real de esa fecha. Sin
+    # `eurusd` (fail-safe), CAPITAL_INICIAL se usa tal cual, sin
+    # convertir — comportamiento idéntico al de antes de esta fase.
+    capital        = CAPITAL_INICIAL if not fechas else \
+        convertir_aportacion_a_usd(CAPITAL_INICIAL, eurusd, fechas[0])
+    capital_pico   = capital   # Capital pico — se actualiza como en producción
     posiciones     = {}
     trades         = []
     curva_capital  = []
@@ -791,13 +900,25 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
 
         # --------------------------------------------------
         # 1. Aportación anual — primer día de trading del año
+        # Fase 6 (22/08/2026): APORTACION_ANUAL son EUR reales,
+        # convertidos al USD nativo del motor al tipo de cambio
+        # EUR/USD de ESTE año concreto (no uno fijo ni el de hoy) —
+        # ver convertir_aportacion_a_usd(). Mismo cambio de
+        # comportamiento real y mismo fail-safe que el capital
+        # inicial de arriba.
         # --------------------------------------------------
         if idx > 0 and fecha.year > fechas[idx - 1].year:
-            capital += APORTACION_ANUAL
+            aportacion = convertir_aportacion_a_usd(APORTACION_ANUAL, eurusd, fecha)
+            capital += aportacion
             # La aportación también actualiza el pico si corresponde
             if capital > capital_pico:
                 capital_pico = capital
-            print(f"  Aportación anual: +{APORTACION_ANUAL:.0f}€ → capital: {capital:.2f}€")
+            if eurusd is not None:
+                print(f"  Aportación anual: +{APORTACION_ANUAL:.0f}€ "
+                      f"(={aportacion:.2f}$ al cambio de {fecha.date()}) "
+                      f"→ capital: {capital:.2f}€")
+            else:
+                print(f"  Aportación anual: +{APORTACION_ANUAL:.0f}€ → capital: {capital:.2f}€")
 
         # --------------------------------------------------
         # 2. Actualizar capital pico
@@ -1153,10 +1274,28 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
 # MÉTRICAS
 # ==================================================
 
-def calcular_metricas(trades, curva_capital, capital_final):
+def calcular_metricas(trades, curva_capital, capital_final, capital_inicial_usd=None):
+    """
+    `capital_inicial_usd` (Fase 6, 22/08/2026, "Opción A" aprobada por
+    Javier) — opcional, retrocompatible: None (por defecto) → cae
+    exactamente al comportamiento de antes de la Fase 6, usando la
+    constante CAPITAL_INICIAL para retorno_total y "capital_inicial".
+
+    Con la Fase 6, cuando ejecutar_backtest() recibe `eurusd`,
+    CAPITAL_INICIAL (EUR) se convierte a USD al tipo de cambio real
+    del día 1 (ver convertir_aportacion_a_usd()) — capital_final ya
+    viene en ese USD convertido, así que retorno_total DEBE calcularse
+    contra ese mismo valor, no contra la constante EUR-nominal, o
+    saldría mal calculado. ejecutar_backtest() no puede devolver ese
+    valor real como un 4º elemento de su tupla sin romper a todos los
+    callers existentes (ver capital_inicial_usd_para_reporte()) — por
+    eso el caller se lo pasa aquí explícitamente cuando lo tiene.
+    """
 
     if not trades:
         return {}
+
+    capital_inicial = capital_inicial_usd if capital_inicial_usd is not None else CAPITAL_INICIAL
 
     df_trades  = pd.DataFrame(trades)
     df_capital = pd.DataFrame(curva_capital)
@@ -1189,7 +1328,10 @@ def calcular_metricas(trades, curva_capital, capital_final):
         if dd > max_drawdown:
             max_drawdown = dd
 
-    retorno_total  = (capital_final - CAPITAL_INICIAL) / CAPITAL_INICIAL
+    # Fase 6 (22/08/2026): contra capital_inicial (real, convertido si
+    # se pasó capital_inicial_usd — ver docstring de esta función), no
+    # contra la constante CAPITAL_INICIAL a secas.
+    retorno_total  = (capital_final - capital_inicial) / capital_inicial
     pnl_medio_win  = wins["pnl"].mean()   if len(wins)   > 0 else 0
     pnl_medio_loss = losses["pnl"].mean() if len(losses) > 0 else 0
     expectativa    = (win_rate * pnl_medio_win) + ((1 - win_rate) * pnl_medio_loss)
@@ -1214,7 +1356,7 @@ def calcular_metricas(trades, curva_capital, capital_final):
         "profit_factor"   : profit_factor,
         "max_drawdown"    : max_drawdown,
         "retorno_total"   : retorno_total,
-        "capital_inicial" : CAPITAL_INICIAL,
+        "capital_inicial" : capital_inicial,
         "capital_final"   : round(capital_final, 2),
         "pnl_medio_win"   : round(pnl_medio_win, 2),
         "pnl_medio_loss"  : round(pnl_medio_loss, 2),
@@ -1365,7 +1507,27 @@ if __name__ == "__main__":
         print("ERROR: no se pudieron cargar datos.")
         exit(1)
 
-    trades, curva_capital, capital_final = ejecutar_backtest(datos, composicion_df=comp_df)
-    metricas = calcular_metricas(trades, curva_capital, capital_final)
+    # --------------------------------------------------
+    # Desglose FX de reporte (Fase 5, commit 39f4f4d) + conversión de
+    # capital inicial/aportaciones (Fase 6, 22/08/2026) — capa que se
+    # activa solo si hay caché de EURUSD=X, se carga igual que
+    # cualquier otro activo cacheado. AVISO: antes de la Fase 6 este
+    # __main__ nunca pasaba `eurusd` — se añade aquí porque si no, el
+    # parámetro capital_inicial_usd de calcular_metricas() de más
+    # abajo (Opción A, aprobada por Javier) no tendría ningún caso real
+    # que ejercitar en la ejecución canónica de este fichero. Fail-safe
+    # sin caché: eurusd=None, comportamiento idéntico al de siempre.
+    # --------------------------------------------------
+    from data_manager import obtener_datos_cached
+    eurusd = obtener_datos_cached("EURUSD=X", START_DATE, END_DATE)
+    if eurusd is None:
+        print("\n  AVISO: no se pudo cargar EURUSD=X — el backtest sigue en "
+              "USD sin desglose en EUR (fail-safe, sin cambio de comportamiento).")
+
+    trades, curva_capital, capital_final = ejecutar_backtest(
+        datos, composicion_df=comp_df, eurusd=eurusd)
+    capital_inicial_usd = capital_inicial_usd_para_reporte(datos, eurusd)
+    metricas = calcular_metricas(
+        trades, curva_capital, capital_final, capital_inicial_usd=capital_inicial_usd)
     imprimir_informe(metricas)
     guardar_resultados(trades, curva_capital, metricas)

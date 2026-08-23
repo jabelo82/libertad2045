@@ -7,9 +7,10 @@ Iniciativa "backtest más fiel a la realidad", Fase 5 (22/08/2026).
 Diagnóstico previo (confirmado por búsqueda exhaustiva en el código, no
 supuesto): backtest_expandido.py no modelaba NINGUNA comisión ni NINGÚN
 coste/conversión de divisa — trataba implícitamente 1 USD = 1 EUR
-durante los 21 años del backtest, mientras que producción real sí opera
-una cuenta EUR sobre acciones USD (dashboard.py::
-_obtener_tipo_cambio_mercado(), EURUSD=X vía yfinance).
+durante los 20 años del backtest (2006-01-01 -> 2025-12-31, etiqueta
+corregida en la Fase 6, 22/08/2026 — no son 21 años), mientras que
+producción real sí opera una cuenta EUR sobre acciones USD
+(dashboard.py::_obtener_tipo_cambio_mercado(), EURUSD=X vía yfinance).
 
 Diseño aprobado por Javier (22/08/2026) antes de escribir código:
   - Comisión IBKR: fija, ~1$/pata (entrada+salida = 2 patas por trade),
@@ -30,6 +31,13 @@ Tres niveles de test:
      el parámetro `eurusd`, para confirmar que el motor los usa de
      verdad y que el comportamiento sin `eurusd` es idéntico al de
      antes de esta Fase (salvo la comisión, que SIEMPRE se aplica).
+
+ACTUALIZACIÓN — Fase 6 (22/08/2026): dos tests de la sección 3 se han
+corregido porque su premisa ("con `eurusd` el resultado en USD es
+idéntico al de sin `eurusd`") dejó de ser cierta a propósito — ver
+convertir_aportacion_a_usd() en backtest_expandido.py. Los tests
+específicos de la conversión de CAPITAL_INICIAL/APORTACION_ANUAL viven
+en test_backtest_aportaciones_eur.py.
 """
 
 import sys
@@ -240,16 +248,44 @@ class TestEjecutarBacktestFx:
         trades, curva, capital_final = ejecutar_backtest(datos, eurusd=eurusd)
 
         assert all("capital_eur" in fila for fila in curva)
-        # Verifica una fila conocida: el día de entrada, capital sigue en
-        # CAPITAL_INICIAL (4000.0, sin trades cerrados aún), rate=1.20.
+        # Verifica una fila conocida: el día de entrada, sin trades
+        # cerrados aún. Desde la Fase 6 (22/08/2026), CAPITAL_INICIAL
+        # (4000.0 EUR reales) se convierte a USD al tipo de cambio del
+        # PRIMER día del backtest (rate=1.20, igual que el resto de este
+        # fixture hasta la entrada) -> capital = 4000*1.20 = 4800$. El
+        # día de entrada el rate sigue siendo 1.20 (no se ha movido
+        # todavía), así que el mark-to-market en EUR (capa de la Fase 5,
+        # capital_usd/rate) vuelve a dar el nominal EUR real depositado:
+        # 4800/1.20 = 4000.0€ exactos — el ida-y-vuelta EUR->USD->EUR al
+        # mismo tipo de cambio no puede alterar el valor. Antes de la
+        # Fase 6 este valor era 4000/1.20=3333.33€ (capital "atascado"
+        # en 4000 USD-nominal, ignorando que Javier deposita EUR reales).
         fila_entrada = next(f for f in curva if f["fecha"] == fechas[N_WARMUP + 1])
-        assert fila_entrada["capital_eur"] == pytest.approx(4000.0 / 1.20, abs=0.01)
+        assert fila_entrada["capital_eur"] == pytest.approx(4000.0, abs=0.01)
 
-    def test_resultado_en_usd_identico_con_o_sin_eurusd(self):
+    def test_capital_difiere_por_conversion_fase6_pero_trade_es_identico(self):
         """
-        El parámetro `eurusd` es puramente una capa de reporte — el
-        resultado en USD (entrada, salida, pnl, capital) debe ser
-        EXACTAMENTE igual con o sin él.
+        Desde la Fase 6 (22/08/2026), `eurusd` YA NO es puramente una
+        capa de reporte (a diferencia de la Fase 5): CAPITAL_INICIAL se
+        convierte de EUR a USD al tipo de cambio real del primer día,
+        así que el capital base del motor SÍ cambia con `eurusd`. Este
+        test reemplaza a la versión anterior (pre-Fase-6) que exigía
+        `capital_sin == capital_con` — esa igualdad ya no es el
+        comportamiento correcto, es justo lo que la Fase 6 corrige.
+
+        Lo que SÍ debe seguir cumpliéndose:
+          - La diferencia de capital es EXACTAMENTE la conversión de
+            CAPITAL_INICIAL al rate del día 1 (4000*(1.20-1) = 800$ en
+            este fixture) — nada más se cuela en el offset.
+          - El trade en sí (entrada, salida, shares, comisión, pnl en
+            USD) es idéntico con o sin `eurusd` en ESTE escenario de un
+            único trade — el dimensionado de posición de este fixture
+            no cruza ningún umbral distinto con 4800$ de capital en vez
+            de 4000$. Esto NO es una garantía general (con más capital
+            disponible, el position sizing SÍ puede pedir más acciones
+            — ver test_aportacion_anual_afecta_dimensionado_fase6 en
+            test_backtest_aportaciones_eur.py para el caso en que sí
+            cambia).
         """
         datos1 = _construir_escenario(gap_en_entrada=False, gap_en_salida=False)
         datos2 = _construir_escenario(gap_en_entrada=False, gap_en_salida=False)
@@ -259,7 +295,8 @@ class TestEjecutarBacktestFx:
         trades_sin, _, capital_sin = ejecutar_backtest(datos1)
         trades_con, _, capital_con = ejecutar_backtest(datos2, eurusd=eurusd)
 
-        assert capital_sin == pytest.approx(capital_con)
+        assert capital_con - capital_sin == pytest.approx(4000.0 * (1.20 - 1.0), abs=0.01)
+        assert trades_sin[0]["shares"] == trades_con[0]["shares"]
         assert trades_sin[0]["pnl"] == pytest.approx(trades_con[0]["pnl"])
         assert trades_sin[0]["entrada"] == pytest.approx(trades_con[0]["entrada"])
         assert trades_sin[0]["salida"] == pytest.approx(trades_con[0]["salida"])
