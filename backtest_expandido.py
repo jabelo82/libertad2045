@@ -5,12 +5,22 @@ Experimento 30: simulación fiel con Risk Guardian completo.
 
     El backtest replica exactamente el comportamiento de producción:
 
-    RISK GUARDIAN:
-        - Capital mínimo operativo: si capital < RISK_MIN_CAPITAL
-          el sistema se detiene completamente (no abre ni gestiona)
-        - Drawdown máximo: si caída desde pico > RISK_MAX_DRAWDOWN
-          el sistema no abre posiciones nuevas pero mantiene las abiertas
-          con sus stops activos hasta que el capital se recupere
+    RISK GUARDIAN (Fase 8, 24/08/2026 — corregido tras la auditoría de
+    paridad del 24/08/2026, ver 00_LIBERTAD2045_CONTEXT.txt):
+        - Capital mínimo operativo: si capital < RISK_MIN_CAPITAL, el
+          sistema no abre posiciones nuevas — pero SIGUE gestionando
+          (stops, trailing, break-even) y rebalanceando las abiertas,
+          igual que producción (risk_check() solo gatea entradas)
+        - Drawdown máximo: si caída desde pico > RISK_MAX_DRAWDOWN, el
+          sistema no abre posiciones nuevas, pero REDUCIR y AMPLIAR
+          siguen corriendo sin condición — "DECISIÓN A-1" de
+          rebalance.py: drawdown no bloquea rebalanceo, solo entradas
+        - Apalancamiento (MAX_LEVERAGE=1,00x): antes de cada AMPLIAR y
+          cada entrada nueva, se proyecta GrossPositionValue/
+          NetLiquidation "mark-to-market" y se bloquea si superaría el
+          límite — idéntico a verificar_apalancamiento_ampliar()/
+          verificar_riesgo_entrada() de producción (risk_guardian.py).
+          REDUCIR nunca pasa por este chequeo (reduce exposición)
         - Capital pico: se actualiza en tiempo real igual que en producción
 
     PALANCA 2B:
@@ -92,6 +102,12 @@ SALIDA_POR_CIERRE = True
 # --------------------------------------------------
 RISK_MIN_CAPITAL  = 2000.0   # Capital mínimo operativo
 RISK_MAX_DRAWDOWN = 0.10     # Drawdown máximo desde capital pico
+
+# Fase 8 (24/08/2026) — auditoría de paridad 24/08/2026, Hallazgo #1:
+# el motor nunca modelaba apalancamiento agregado. Idéntico a
+# risk_guardian.py MAX_LEVERAGE (producción) — GrossPositionValue no
+# puede superar NetLiquidation, el sistema opera sin margen.
+MAX_LEVERAGE      = 1.00
 
 # --------------------------------------------------
 # Rebalanceo dinámico — idéntico a rebalance.py
@@ -763,6 +779,84 @@ def calcular_posicion(df, i, capital):
 
 
 # ==================================================
+# RISK GUARDIAN — APALANCAMIENTO AGREGADO (Fase 8, 24/08/2026)
+# ==================================================
+# Auditoría de paridad 24/08/2026, Hallazgo #1: ni el límite original
+# de risk_check() ni CRÍTICA #1 (AMPLIAR) ni CRÍTICA #2 (entrada
+# individual) tenían equivalente aquí. Con capital sin descontar al
+# abrir posiciones y sin ningún tope de exposición bruta, el motor
+# podía simular hasta MAX_POSITIONS × MAX_POSITION_PCT (250%) de
+# exposición simultánea — algo que producción bloquea siempre por
+# debajo de MAX_LEVERAGE=1,00x.
+# ==================================================
+
+def _exposicion_y_capital_mtm(posiciones, precios_hoy, capital):
+    """
+    GrossPositionValue y NetLiquidation "mark-to-market" del motor.
+
+    `capital` en este simulador es una variable de equity REALIZADA:
+    solo se mueve con aportaciones y PnL ya cerrado (stops, REDUCIR) —
+    las posiciones abiertas nunca se marcan a mercado dentro de
+    `capital`. Si el apalancamiento se calculara como
+    Σ(shares×precio_hoy) / capital directamente, cualquier subida de
+    precio de una posición YA abierta (sin comprar ni una acción más)
+    inflaría el apalancamiento calculado, porque el numerador sube con
+    el precio y el denominador no — en producción SÍ suben los dos
+    juntos, porque NetLiquidation de IBKR es mark-to-market real. Por
+    eso `net_liq` aquí se reconstruye sumando el PnL no realizado de
+    cada posición abierta sobre `capital`, para que sea comparable de
+    verdad con lo que producción compara contra MAX_LEVERAGE.
+
+    precios_hoy: dict {symbol: precio} que el llamador ya tiene en la
+    mano ese día (reutiliza el Close que los pasos 4/6/9 ya leen — no
+    pide ningún dato nuevo). Si un símbolo abierto no tiene precio en
+    precios_hoy (hueco de datos ese día concreto), se usa pos["entry"]
+    como aproximación documentada — mismo espíritu que el resto de
+    fallbacks del motor ante datos ausentes.
+
+    Retorna (gross_pos, net_liq).
+    """
+    gross_pos = 0.0
+    net_liq   = capital
+
+    for symbol, pos in posiciones.items():
+        precio  = precios_hoy.get(symbol, pos["entry"])
+        shares  = pos["shares"]
+        gross_pos += shares * precio
+        net_liq   += shares * (precio - pos["entry"])
+
+    return gross_pos, net_liq
+
+
+def _apalancamiento_permite(posiciones, precios_hoy, capital, exposicion_adicional):
+    """
+    True si añadir `exposicion_adicional` (valor nocional de una orden
+    AMPLIAR o de una entrada nueva concreta) mantendría el
+    apalancamiento proyectado dentro de MAX_LEVERAGE.
+
+    Mismo criterio que verificar_apalancamiento_ampliar() /
+    verificar_riesgo_entrada() de producción (risk_guardian.py):
+    apalancamiento PROYECTADO (actual + esta orden concreta), no solo
+    el actual.
+
+    Fail-safe: net_liq <= 0 bloquea — nunca se asume que hay margen
+    sin poder comprobarlo. No debería darse nunca en la práctica
+    porque el gate de capital mínimo ya corrió antes de llegar aquí,
+    pero se protege igual.
+
+    Retorna (permitido: bool, leverage_proyectado: float | None).
+    """
+    gross_pos, net_liq = _exposicion_y_capital_mtm(posiciones, precios_hoy, capital)
+
+    if net_liq <= 0:
+        return False, None
+
+    leverage_proyectado = (gross_pos + exposicion_adicional) / net_liq
+
+    return leverage_proyectado <= MAX_LEVERAGE, leverage_proyectado
+
+
+# ==================================================
 # DESCARGA DE DATOS
 # ==================================================
 
@@ -890,9 +984,12 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
         return fila
 
     # Contadores Risk Guardian y rebalanceo para el informe
-    dias_bloqueados_drawdown = 0
-    dias_detenido_capital    = 0
-    rebalanceos_ejecutados   = 0
+    dias_bloqueados_drawdown       = 0
+    dias_detenido_capital          = 0
+    rebalanceos_ejecutados         = 0
+    # Fase 8 (24/08/2026) — Hallazgo #1: apalancamiento agregado
+    ampliaciones_bloqueadas_leverage = 0
+    entradas_bloqueadas_leverage     = 0
 
     for fecha in fechas:
 
@@ -927,21 +1024,23 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             capital_pico = capital
 
         # --------------------------------------------------
-        # 3. Risk Guardian — capital mínimo
-        # Si el capital cae por debajo del mínimo el sistema
-        # se detiene completamente — no gestiona ni abre nada
+        # 3. Gestionar posiciones abiertas con trailing stop
+        # Fase 8 (24/08/2026) — Hallazgos #2 y #3 de la auditoría de
+        # paridad: en producción, evaluar_stops_por_cierre() y
+        # rebalancear() corren SIEMPRE, sin que ningún gate de Risk
+        # Guardian (capital mínimo, drawdown) los bloquee — solo
+        # bloquean la fase de ENTRADAS NUEVAS (risk_check(),
+        # libertad2045.py:500, que corre DESPUÉS de stops+rebalanceo).
+        # El gate de capital mínimo, que hasta ahora saltaba también
+        # este paso, se ha movido más abajo (ver "Gate de entradas
+        # nuevas", entre el rebalanceo y el escaneo) — mismo alcance
+        # que risk_check() en producción.
         # --------------------------------------------------
-        if capital < RISK_MIN_CAPITAL:
-            dias_detenido_capital += 1
-            curva_capital.append(registrar_capital(fecha))
-            continue
-
-        # --------------------------------------------------
-        # 4. Gestionar posiciones abiertas con trailing stop
-        # Las posiciones se mantienen aunque el Risk Guardian
-        # bloquee nuevas entradas — igual que en producción
-        # --------------------------------------------------
-        cerradas = []
+        cerradas   = []
+        # Fase 8 — Hallazgo #1: precio de mercado de hoy por símbolo,
+        # reutilizado por el chequeo de apalancamiento (pasos 5 y 8)
+        # sin pedir ningún dato nuevo.
+        precios_hoy = {}
 
         for symbol, pos in posiciones.items():
 
@@ -956,6 +1055,8 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             bar      = df.loc[fecha]
             atr      = df.loc[fecha, "ATR"]
             i_actual = df.index.get_loc(fecha)
+
+            precios_hoy[symbol] = bar["Close"]
 
             if not pd.isna(atr) and atr > 0:
                 mult       = obtener_multiplicador(df, i_actual)
@@ -1016,25 +1117,21 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             del posiciones[symbol]
 
         # --------------------------------------------------
-        # 5. Risk Guardian — drawdown máximo
-        # Si el drawdown supera el límite no se abren
-        # posiciones nuevas pero las abiertas siguen activas
-        # --------------------------------------------------
-        drawdown_actual = (capital_pico - capital) / capital_pico if capital_pico > 0 else 0
-
-        if drawdown_actual > RISK_MAX_DRAWDOWN:
-            dias_bloqueados_drawdown += 1
-            curva_capital.append(registrar_capital(fecha))
-            continue
-
-        # --------------------------------------------------
-        # 6. Rebalanceo dinámico de posiciones abiertas
+        # 4. Rebalanceo dinámico de posiciones abiertas
         # Ajusta tamaños que se desviaron > REBALANCE_THRESHOLD del
         # óptimo calculado con calcular_posicion().
         # Sigue la misma lógica que rebalance.py en producción:
-        #   · REDUCIR : realiza PnL parcial → capital sube/baja
+        #   · REDUCIR : realiza PnL parcial → capital sube/baja.
+        #     NUNCA se bloquea por drawdown ni por apalancamiento
+        #     (reduce exposición) — "DECISIÓN A-1" en rebalance.py.
         #   · AMPLIAR : aumenta shares con entry ponderada
-        #               (sin deducir coste — consistente con el modelo del backtest)
+        #               (sin deducir coste — consistente con el modelo del backtest).
+        #     Fase 8 (24/08/2026) — Hallazgo #1: tampoco se bloquea por
+        #     drawdown (mismo "DECISIÓN A-1" — drawdown NO bloquea
+        #     AMPLIAR en producción), pero SÍ se bloquea si el
+        #     apalancamiento proyectado supera MAX_LEVERAGE — idéntico
+        #     a verificar_apalancamiento_ampliar() (risk_guardian.py,
+        #     CRÍTICA #1).
         # --------------------------------------------------
         for symbol in list(posiciones.keys()):
 
@@ -1053,10 +1150,14 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             if pd.isna(precio) or precio <= 0:
                 continue
 
+            precios_hoy[symbol] = precio
+
             shares_actual = pos["shares"]
             valor_actual  = shares_actual * precio
 
-            # Protección MAX_POSITION_PCT — límite duro de concentración
+            # Protección MAX_POSITION_PCT — límite duro de concentración.
+            # Siempre es una REDUCCIÓN de exposición — no pasa por el
+            # chequeo de apalancamiento, igual que REDUCIR más abajo.
             limite_valor = capital * MAX_POSITION_PCT
             if capital > 0 and valor_actual > limite_valor:
                 shares_limite = int(limite_valor / precio)
@@ -1083,13 +1184,28 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
                 continue
 
             if delta < 0:
-                # REDUCIR — realizar PnL parcial de las acciones sobrantes
+                # REDUCIR — realizar PnL parcial de las acciones sobrantes.
+                # Nunca pasa por el chequeo de apalancamiento (reduce
+                # exposición, "DECISIÓN A-1").
                 shares_vendidas = -delta
                 pnl_parcial     = (precio - pos["entry"]) * shares_vendidas
                 capital        += pnl_parcial
                 posiciones[symbol]["shares"] = shares_optimo
 
             else:
+                # AMPLIAR — Fase 8 (24/08/2026): comprobar apalancamiento
+                # proyectado ANTES de aplicar el ajuste. `posiciones`
+                # todavía refleja el estado previo a este AMPLIAR en
+                # este punto — exposicion_adicional es solo el delta de
+                # acciones que se añadiría.
+                exposicion_adicional = delta * precio
+                permitido, leverage_proyectado = _apalancamiento_permite(
+                    posiciones, precios_hoy, capital, exposicion_adicional
+                )
+                if not permitido:
+                    ampliaciones_bloqueadas_leverage += 1
+                    continue
+
                 # AMPLIAR — entry blended para no distorsionar el PnL final
                 entry_blended = (
                     (pos["entry"] * shares_actual + precio * delta) / shares_optimo
@@ -1100,14 +1216,40 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             rebalanceos_ejecutados += 1
 
         # --------------------------------------------------
-        # 7. Portfolio lleno — no escanear señales
+        # 5. Risk Guardian — gate de entradas nuevas
+        # Fase 8 (24/08/2026) — Hallazgos #2 y #3: capital mínimo y
+        # drawdown máximo se comprueban AQUÍ, después de gestión de
+        # posiciones (paso 3) y rebalanceo (paso 4) — nunca antes.
+        # Igual que risk_check() en producción (libertad2045.py:500,
+        # llamado DESPUÉS de evaluar_stops_por_cierre() y
+        # rebalancear()): este gate bloquea EXCLUSIVAMENTE la apertura
+        # de posiciones nuevas (pasos 6-8 de aquí en adelante) — nunca
+        # la gestión de lo ya abierto ni el rebalanceo, que ya
+        # corrieron sin condición ninguna arriba. Mismo orden interno
+        # que risk_check(): capital mínimo (punto 3) antes que drawdown
+        # (punto 4).
+        # --------------------------------------------------
+        if capital < RISK_MIN_CAPITAL:
+            dias_detenido_capital += 1
+            curva_capital.append(registrar_capital(fecha))
+            continue
+
+        drawdown_actual = (capital_pico - capital) / capital_pico if capital_pico > 0 else 0
+
+        if drawdown_actual > RISK_MAX_DRAWDOWN:
+            dias_bloqueados_drawdown += 1
+            curva_capital.append(registrar_capital(fecha))
+            continue
+
+        # --------------------------------------------------
+        # 6. Portfolio lleno — no escanear señales
         # --------------------------------------------------
         if len(posiciones) >= MAX_POSITIONS:
             curva_capital.append(registrar_capital(fecha))
             continue
 
         # --------------------------------------------------
-        # 8. Escanear señales
+        # 7. Escanear señales
         # --------------------------------------------------
         señales = []
 
@@ -1178,7 +1320,7 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
         señales      = señales[:slots_libres]
 
         # --------------------------------------------------
-        # 9. Abrir posiciones al día siguiente
+        # 8. Abrir posiciones al día siguiente
         # --------------------------------------------------
         if idx + 1 < len(fechas):
 
@@ -1209,6 +1351,34 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
                     coste              = precio_entrada * señal["shares"]
 
                     if coste > capital:
+                        continue
+
+                    # Fase 8 (24/08/2026) — Hallazgo #1: apalancamiento
+                    # proyectado antes de abrir. Las posiciones YA
+                    # abiertas (de hoy o de señales anteriores de este
+                    # mismo bucle, ya mutadas en `posiciones` más abajo)
+                    # se valoran al precio de `fecha_entrada` — el día
+                    # en que esta orden se ejecutaría de verdad, no el
+                    # día del escaneo. Si un símbolo abierto no cotiza
+                    # ese día concreto (hueco de datos), se usa su
+                    # entry como aproximación (ver
+                    # _exposicion_y_capital_mtm). Al mutar `posiciones`
+                    # dentro de este mismo bucle, la exposición se
+                    # acumula correctamente entre varias entradas del
+                    # mismo día — no solo entre AMPLIAR y entradas.
+                    precios_entrada_hoy = {}
+                    for sym_abierto, pos_abierta in posiciones.items():
+                        df_ab = datos.get(sym_abierto)
+                        if df_ab is not None and fecha_entrada in df_ab.index:
+                            precios_entrada_hoy[sym_abierto] = df_ab.loc[fecha_entrada, "Close"]
+                        else:
+                            precios_entrada_hoy[sym_abierto] = pos_abierta["entry"]
+
+                    permitido, leverage_proyectado = _apalancamiento_permite(
+                        posiciones, precios_entrada_hoy, capital, coste
+                    )
+                    if not permitido:
+                        entradas_bloqueadas_leverage += 1
                         continue
 
                     posiciones[symbol] = {
@@ -1263,9 +1433,11 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
         trades.append(trade)
 
     print(f"\n  Risk Guardian — resumen:")
-    print(f"    Días bloqueados por drawdown : {dias_bloqueados_drawdown}")
-    print(f"    Días detenido por capital    : {dias_detenido_capital}")
-    print(f"    Rebalanceos ejecutados       : {rebalanceos_ejecutados}")
+    print(f"    Días bloqueados por drawdown      : {dias_bloqueados_drawdown}")
+    print(f"    Días detenido por capital         : {dias_detenido_capital}")
+    print(f"    Rebalanceos ejecutados            : {rebalanceos_ejecutados}")
+    print(f"    AMPLIARs bloqueados (apalancamiento): {ampliaciones_bloqueadas_leverage}")
+    print(f"    Entradas bloqueadas (apalancamiento): {entradas_bloqueadas_leverage}")
 
     return trades, curva_capital, capital
 
