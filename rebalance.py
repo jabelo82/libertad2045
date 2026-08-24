@@ -24,6 +24,7 @@ ese control lo hace el orquestador antes de invocar este módulo.
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -58,6 +59,51 @@ REBALANCE_MIN_SHARES = int(os.getenv("REBALANCE_MIN_SHARES", "5"))  # Ver tambi�
 # Gateway, no para esperar una ejecución legítima que tarde más.
 # Ver incidente DVN (10-11/08/2026, sección 12 del contexto).
 PENDING_ORPHAN_THRESHOLD_DAYS = int(os.getenv("PENDING_ORPHAN_THRESHOLD_DAYS", "3"))
+
+# --------------------------------------------------
+# Confirmación activa del reemplazo de stop GTC (vía "cantidad cambia" de
+# _reemplazar_stop_gtc) -- Fase 2 del fix del hallazgo ALTA #2 (auditoría
+# 07/08/2026: confirmación de órdenes por sondeo de tiempo fijo, sin
+# verificar el estado real). Ver investigación previa a este fix.
+# --------------------------------------------------
+
+# Timeout para confirmar que el stop NUEVO alcanzó un estado real
+# (PreSubmitted/Submitted/Filled) antes de cancelar el antiguo. 8s: ~2,7x
+# el margen ya validado empíricamente en trade_executor.py para el mismo
+# tipo de orden (STP) -- 1s resultó insuficiente, 3s resolvió el problema
+# real la primera noche LIVE (03/08/2026), sin necesidad posterior de
+# ampliarlo más.
+REPLACE_STOP_CONFIRM_TIMEOUT = float(os.getenv("REPLACE_STOP_CONFIRM_TIMEOUT", "8.0"))
+
+# Timeout para confirmar la CANCELACIÓN del stop antiguo -- más corto:
+# si falla, el peor caso es un stop duplicado (el nuevo ya está
+# confirmado protegiendo la posición), no una posición desprotegida --
+# y reconciliar_stops_gtc() ya limpia duplicados en un ciclo posterior
+# (mismo mecanismo del hallazgo MEDIA "GTC duplicados").
+REPLACE_STOP_CANCEL_TIMEOUT = float(os.getenv("REPLACE_STOP_CANCEL_TIMEOUT", "5.0"))
+
+# Intervalo de sondeo -- más grueso que los 0,2s de obtener_precio_vivo()
+# (portfolio_manager.py, incidente ANET): ahí se sondea un precio que
+# cambia tick a tick; aquí una transición de estado de orden, que no
+# necesita esa precisión.
+REPLACE_STOP_POLL_INTERVAL = float(os.getenv("REPLACE_STOP_POLL_INTERVAL", "0.5"))
+
+# Estados que cuentan como "el stop nuevo está realmente protegiendo".
+# Deliberadamente un SUBCONJUNTO de Trade.isActive() de ib_insync 0.9.86
+# (ActiveStates = {PendingSubmit, ApiPending, PreSubmitted, Submitted},
+# confirmado leyendo el order.py instalado) -- PendingSubmit/ApiPending
+# NO cuentan aquí: significan que ni siquiera hay confirmación del
+# servidor todavía. PreSubmitted es el estado de reposo NORMAL de una
+# orden STP GTC ya aceptada (IBKR la vigila a la espera del disparador)
+# -- no es un estado "a medias". Filled cubre el caso raro de disparo
+# inmediato al colocarla.
+_ESTADOS_STOP_NUEVO_CONFIRMADO = frozenset({"PreSubmitted", "Submitted", "Filled"})
+
+# Estados que cuentan como "el stop antiguo ya no compite con el nuevo".
+# Filled incluido a propósito: si el antiguo se dispara de verdad durante
+# la espera de cancelación (ventana pequeña pero real, ver diseño), es un
+# desenlace correcto -- la posición se cerró -- no un fallo de esta espera.
+_ESTADOS_STOP_ANTERIOR_RESUELTO = frozenset({"Cancelled", "ApiCancelled", "Filled"})
 
 
 # --------------------------------------------------
@@ -403,6 +449,55 @@ def _hay_stop_gtc_activo(ib, symbol: str, stop_price: float, shares: int) -> boo
     return False
 
 
+def _esperar_confirmacion_orden(ib, trade, timeout, estados_confirmados,
+                                 poll=None):
+    """
+    Espera ACTIVA (bucle de sondeo con ib.sleep(), nunca un sleep fijo
+    seguido de una única lectura) a que trade.orderStatus.status alcance
+    un estado realmente confirmado -- Fase 2 del fix del hallazgo ALTA #2
+    (auditoría 07/08/2026).
+
+    `poll` por defecto None -- deliberado: un default `poll=REPLACE_STOP_
+    POLL_INTERVAL` se evaluaría UNA VEZ al definir la función (al
+    importar el módulo), congelando el valor de entonces -- un cambio
+    posterior de REPLACE_STOP_POLL_INTERVAL (vía .env o en tests) no
+    tendría ningún efecto real. Resolviéndolo dentro del cuerpo de la
+    función se lee el valor vigente en cada llamada, igual que timeout.
+
+    ib.sleep() bombea el loop de asyncio de fondo -- orderStatus llega tan
+    al día sondeando cada `poll` segundos como con un handler de evento
+    (confirmado leyendo util.py de ib_insync 0.9.86 antes de este
+    diseño). Se elige sondeo sobre suscripción a eventos por ser el mismo
+    idioma ya validado en obtener_precio_vivo() (portfolio_manager.py,
+    incidente ANET) -- sin añadir el riesgo de una fuga de handler si una
+    excepción salta antes de desuscribirlo.
+
+    "Rejected" e "Inactive" nunca forman parte de Trade.isDone() ni
+    Trade.isActive() en ib_insync 0.9.86 (confirmado leyendo el order.py
+    instalado) -- se comprueban aquí de forma explícita y cortan la
+    espera de inmediato, sin agotar el timeout.
+
+    Retorna (resultado, estado_final):
+        resultado = "CONFIRMADO" | "RECHAZADO" | "TIMEOUT"
+        estado_final = el último trade.orderStatus.status observado.
+    """
+    if poll is None:
+        poll = REPLACE_STOP_POLL_INTERVAL
+
+    deadline = time.monotonic() + timeout
+    estado = trade.orderStatus.status if trade else "Unknown"
+
+    while True:
+        if estado in ("Rejected", "Inactive"):
+            return "RECHAZADO", estado
+        if estado in estados_confirmados:
+            return "CONFIRMADO", estado
+        if time.monotonic() >= deadline:
+            return "TIMEOUT", estado
+        ib.sleep(poll)
+        estado = trade.orderStatus.status if trade else "Unknown"
+
+
 def _reemplazar_stop_gtc(
     ib,
     symbol: str,
@@ -417,10 +512,14 @@ def _reemplazar_stop_gtc(
     Estrategia:
         · Si la cantidad no cambia → modificar in-place el stop existente
           (mismo orderId, IBKR lo interpreta como modificación). Sin ventana.
-        · Si la cantidad cambia → crear nuevo y cancelar el anterior (H-8).
-          Antes de crear, verificar que no existe ya un stop idéntico (guard).
+        · Si la cantidad cambia → crear nuevo, esperar confirmación ACTIVA
+          de que está realmente activo (Fase 2, fix ALTA #2 auditoría
+          07/08/2026 -- ver _esperar_confirmacion_orden), y solo entonces
+          cancelar el anterior (H-8). Antes de crear, verificar que no
+          existe ya un stop idéntico (guard).
 
-    Nunca cancelar el stop existente si el nuevo no es válido o falla.
+    Nunca cancelar el stop existente si el nuevo no es válido, falla, o no
+    se confirma realmente activo dentro del timeout.
     """
     # Validar precio antes de tocar nada
     if not (stop_price and stop_price > 0):
@@ -467,27 +566,46 @@ def _reemplazar_stop_gtc(
         nuevo_stop.transmit      = True
 
         trade_nuevo = ib.placeOrder(contrato, nuevo_stop)
-        ib.sleep(1)
 
-        estado = trade_nuevo.orderStatus.status if trade_nuevo else "Unknown"
-        if estado in ("Inactive", "Cancelled", "Rejected"):
+        # Fase 2 (fix ALTA #2, auditoría 07/08/2026): espera ACTIVA a que
+        # el nuevo stop alcance un estado real -- antes era ib.sleep(1) +
+        # una lista de exclusión que trataba cualquier estado "todavía
+        # pendiente" (PendingSubmit/ApiPending, ninguno terminal) como
+        # éxito sin más verificación. Nunca se cancela el stop antiguo
+        # hasta confirmar de verdad que el nuevo está activo.
+        resultado, estado = _esperar_confirmacion_orden(
+            ib, trade_nuevo, REPLACE_STOP_CONFIRM_TIMEOUT,
+            _ESTADOS_STOP_NUEVO_CONFIRMADO,
+        )
+
+        if resultado != "CONFIRMADO":
+            motivo = ("rechazado" if resultado == "RECHAZADO"
+                      else f"sin confirmar tras {REPLACE_STOP_CONFIRM_TIMEOUT:.0f}s")
             log_event("ERROR",
-                      f"Rebalanceo: nuevo stop GTC de {symbol} rechazado "
+                      f"Rebalanceo: nuevo stop GTC de {symbol} {motivo} "
                       f"(estado={estado}) — stop anterior conservado sin cambios",
                       symbol=symbol)
             try:
                 from telegram import send_telegram_critical
                 send_telegram_critical(
-                    f"🔴 LIBERTAD_2045 — Stop GTC rechazado: {symbol} | "
+                    f"🔴 LIBERTAD_2045 — Stop GTC {motivo}: {symbol} | "
                     f"stop={stop_price:.2f} | estado={estado}"
                 )
             except Exception:
                 pass
             return False
 
-        log_event("INFO",
-                  f"Nuevo stop GTC | qty={shares_nuevas} | stop={stop_price:.2f}",
-                  symbol=symbol, shares=shares_nuevas, stop=stop_price)
+        if estado == "Filled":
+            log_event("WARN",
+                      f"Rebalanceo: el nuevo stop GTC de {symbol} se disparó "
+                      f"de inmediato (Filled) al colocarlo -- la posición ya "
+                      f"se cerró por el stop nuevo, no por el antiguo",
+                      symbol=symbol)
+        else:
+            log_event("INFO",
+                      f"Nuevo stop GTC confirmado ({estado}) | qty={shares_nuevas} | "
+                      f"stop={stop_price:.2f}",
+                      symbol=symbol, shares=shares_nuevas, stop=stop_price)
 
     except Exception as e:
         log_event("ERROR",
@@ -496,12 +614,48 @@ def _reemplazar_stop_gtc(
                   symbol=symbol)
         return False
 
-    # Cancelar el stop anterior solo si el nuevo se colocó sin errores
+    # Cancelar el stop anterior solo si el nuevo se colocó y confirmó sin errores
     if stop_anterior is not None:
         try:
             ib.cancelOrder(stop_anterior.order)
-            ib.sleep(1)
-            log_event("INFO", f"Stop GTC anterior cancelado", symbol=symbol)
+
+            # Fase 2: espera activa también para la cancelación, pero con
+            # timeout más corto y sin escalar a Telegram crítico si falla
+            # -- el nuevo stop YA está confirmado protegiendo la posición
+            # en este punto, así que el peor caso de no confirmar la
+            # cancelación es un stop duplicado (redundante, no peligroso),
+            # no una posición desprotegida. reconciliar_stops_gtc() ya
+            # limpia duplicados en un ciclo posterior (mismo mecanismo del
+            # hallazgo MEDIA "GTC duplicados").
+            resultado_cancel, estado_cancel = _esperar_confirmacion_orden(
+                ib, stop_anterior, REPLACE_STOP_CANCEL_TIMEOUT,
+                _ESTADOS_STOP_ANTERIOR_RESUELTO,
+            )
+
+            if resultado_cancel == "CONFIRMADO" and estado_cancel == "Filled":
+                # Nota A del diseño: ventana pequeña pero real -- el stop
+                # antiguo se disparó de verdad antes de que la cancelación
+                # surtiera efecto. Desenlace correcto (la posición se
+                # cerró), pero el stop nuevo puede haber quedado huérfano.
+                log_event("WARN",
+                          f"Rebalanceo: el stop GTC antiguo de {symbol} se "
+                          f"disparó (Filled) durante la espera de "
+                          f"cancelación -- la posición ya se cerró por el "
+                          f"stop antiguo, el nuevo stop puede haber "
+                          f"quedado huérfano",
+                          symbol=symbol)
+            elif resultado_cancel != "CONFIRMADO":
+                log_event("WARN",
+                          f"Rebalanceo: cancelación del stop GTC antiguo de "
+                          f"{symbol} sin confirmar tras "
+                          f"{REPLACE_STOP_CANCEL_TIMEOUT:.0f}s (estado="
+                          f"{estado_cancel}) -- el nuevo stop ya protege la "
+                          f"posición; reconciliar_stops_gtc() debería "
+                          f"limpiar el duplicado en un ciclo posterior",
+                          symbol=symbol)
+            else:
+                log_event("INFO", f"Stop GTC anterior cancelado ({estado_cancel})",
+                          symbol=symbol)
         except Exception as e:
             log_event("WARN",
                       f"Rebalanceo: error cancelando stop GTC anterior de {symbol}: {e}",
