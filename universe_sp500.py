@@ -8,7 +8,7 @@
 # Revisión recomendada cada 6 meses para reflejar
 # cambios en la composición del índice.
 #
-# Última revisión: 2026-08-17
+# Última revisión: 2026-08-24
 # --------------------------------------------------
 
 
@@ -35,8 +35,8 @@ SP500 = [
     "APP",  "CHTR",  "CMCSA",  "DIS",  "ECHO",
     "FOX",  "FOXA",  "GOOG",  "GOOGL",  "LYV",
     "META",  "NFLX",  "NWS",  "NWSA",  "OMC",
-    "PSKY",  "T",  "TKO",  "TMUS",  "TTD",
-    "TTWO",  "VZ",  "WBD",
+    "PSKY",  "RDDT",  "T",  "TKO",  "TMUS",
+    "TTD",  "TTWO",  "VZ",  "WBD",
 
     # Consumo discrecional
     "ABNB",  "AMZN",  "APTV",  "AZO",  "BBY",
@@ -134,13 +134,12 @@ SP500 = [
     "XEL",
 
     # Inmobiliario
-    "AMT",  "ARE",  "AVB",  "BXP",  "CBRE",
-    "CCI",  "CPT",  "CSGP",  "DLR",  "DOC",
-    "EQIX",  "EQR",  "ESS",  "EXR",  "FRT",
-    "HST",  "INVH",  "IRM",  "KIM",  "MAA",
-    "O",  "PLD",  "PSA",  "REG",  "SBAC",
-    "SPG",  "UDR",  "VICI",  "VTR",  "WELL",
-    "WY",
+    "AMT",  "ARE",  "BXP",  "CBRE",  "CCI",
+    "CPT",  "CSGP",  "DLR",  "DOC",  "EQIX",
+    "ESS",  "EXR",  "FRT",  "HST",  "INVH",
+    "IRM",  "KIM",  "MAA",  "O",  "PLD",
+    "PSA",  "REG",  "SBAC",  "SPG",  "UDR",
+    "VICI",  "VMRK",  "VTR",  "WELL",  "WY",
 
 ]
 
