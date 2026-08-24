@@ -171,6 +171,16 @@ class TestReemplazarStopGtcInPlace(unittest.TestCase):
         nuevo_trade = MagicMock()
         nuevo_trade.orderStatus.status = "Submitted"
         ib.placeOrder.return_value = nuevo_trade
+        # Fase 2 (fix ALTA #2): _reemplazar_stop_gtc ahora espera
+        # confirmación ACTIVA de la cancelación del stop antiguo antes de
+        # darla por buena (ver test_reemplazo_stop_gtc_confirmado.py para
+        # la cobertura dedicada de ese mecanismo). Aquí solo simulamos que
+        # cancelOrder() confirma al instante (transición realista, no el
+        # estado "Submitted" congelado por defecto de _make_trade) para
+        # que este test siga siendo rápido y sirva de humo básico del
+        # camino feliz completo.
+        ib.cancelOrder.side_effect = lambda order: setattr(
+            stop_ant.orderStatus, "status", "Cancelled")
         contrato = MagicMock()
 
         result = _reemplazar_stop_gtc(ib, "TRV", contrato, 6, 306.18, stop_ant)
