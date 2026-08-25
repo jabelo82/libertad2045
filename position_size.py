@@ -13,6 +13,22 @@ RISK_PERCENT     = 0.0085     # Riesgo por operación: 0.85% del capital  # Ver 
 MAX_POSITION_PCT = 0.25       # Tamaño máximo de una posición: 25% del capital
 
 # --------------------------------------------------
+# Precio de referencia para el límite de capital (Hallazgo MEDIA #5,
+# auditoría 07/08/2026) — mismo buffer que usan libertad2045.py y
+# trade_executor.py para el buy-stop real (high + buffer). shares_capital
+# dividía antes por df["close"], el cierre del día del escaneo, en vez del
+# precio al que realmente se ejecuta la entrada — el buy-stop siempre está
+# por encima del cierre (rango intradía del día + este buffer), así que
+# shares_capital podía sobredimensionar la posición respecto al 25% real.
+# Cuantificado con datos reales de IBKR (23 entradas LIVE, 04-25/08/2026):
+# gap mediano buy-stop/cierre 0,46%, gap mediano con slippage real de
+# ejecución 0,65%, máximo observado 4,77%. shares_risk (RISK_PERCENT) no
+# se ve afectado — nunca dependió de este precio.
+# --------------------------------------------------
+
+ENTRY_BUFFER = 0.05    # Ver también libertad2045.py:652 y trade_executor.py — mismo valor, sin importar de aquí (deuda pendiente)
+
+# --------------------------------------------------
 # Stop loss dinámico B1 — experimento 16
 # Multiplicador ATR interpolado según percentil de volatilidad histórica.
 # Percentil alto (activo muy volátil ahora) → multiplicador bajo → stop ajustado
@@ -136,7 +152,7 @@ def calcular_posicion(df, capital):
     Calcula el tamaño de posición basado en riesgo real.
 
     Parámetros:
-        df      : DataFrame con columnas ATR, ATR_PERCENTIL y close
+        df      : DataFrame con columnas ATR, ATR_PERCENTIL, close y high
                   calculadas por data_loader
         capital : capital real de la cuenta, leído de IBKR en cada ciclo
 
@@ -167,6 +183,15 @@ def calcular_posicion(df, capital):
     if pd.isna(last_price) or last_price <= 1:
         return 0, None, None
 
+    # high del día del escaneo — precio de referencia real de shares_capital
+    # (Hallazgo MEDIA #5, ver comentario de ENTRY_BUFFER más arriba). No
+    # sustituye a last_price: last_price se conserva como validación de
+    # calidad de datos del cierre, que sigue siendo relevante.
+    high_hoy = df["high"].iloc[-1]
+
+    if pd.isna(high_hoy) or high_hoy <= 1:
+        return 0, None, None
+
     # --------------------------------------------------
     # Multiplicador dinámico B1
     # --------------------------------------------------
@@ -186,9 +211,14 @@ def calcular_posicion(df, capital):
     risk_amount   = capital * RISK_PERCENT
     shares_risk   = int(risk_amount / stop_distance)
 
-    # Shares por capital: límite máximo de exposición por posición
-    max_position_value = capital * MAX_POSITION_PCT
-    shares_capital     = int(max_position_value / last_price)
+    # Shares por capital: límite máximo de exposición por posición.
+    # Se divide por el precio de entrada real estimado (high + buffer,
+    # el mismo buy-stop que colocará la orden), no por el cierre — si se
+    # dividiera por el cierre, la posición real (comprada al buy-stop)
+    # podría superar el 25% de capital pretendido (Hallazgo MEDIA #5).
+    max_position_value      = capital * MAX_POSITION_PCT
+    precio_entrada_estimado = high_hoy + ENTRY_BUFFER
+    shares_capital          = int(max_position_value / precio_entrada_estimado)
 
     # El tamaño final es el mínimo de ambos límites
     shares = min(shares_risk, shares_capital)

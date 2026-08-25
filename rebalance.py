@@ -35,7 +35,7 @@ from ib_insync import ExecutionFilter, Order, Stock
 
 from data_loader import obtener_datos
 from logger import log_event
-from position_size import MAX_POSITION_PCT, calcular_posicion, calcular_trailing_stop
+from position_size import ENTRY_BUFFER, MAX_POSITION_PCT, calcular_posicion, calcular_trailing_stop
 from risk_guardian import verificar_apalancamiento_ampliar
 from telegram import send_telegram
 
@@ -1049,6 +1049,27 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                 ))
                 continue
 
+            # Precio de entrada real estimado para un eventual AMPLIAR — el
+            # mismo buy-stop (high + buffer) que usa libertad2045.py para
+            # entradas nuevas, no el cierre de _precio_cierre_reciente()
+            # (Hallazgo MEDIA #5, auditoría 07/08/2026: el AMPLIAR se
+            # transmite como orden MKT que puede ejecutarse horas después,
+            # en la siguiente apertura — el cierre de anoche no es su precio
+            # real). Solo se usa para el chequeo de apalancamiento más abajo;
+            # el sizing del AMPLIAR ya queda corregido dentro de
+            # calcular_posicion() (position_size.py). Fallback defensivo a
+            # `precio` si high viene NaN (dato de mercado incompleto) — no
+            # bloquea el ciclo por esto, pero deja constancia en el log.
+            high_hoy = df["high"].iloc[-1]
+            if pd.isna(high_hoy):
+                log_event("WARN",
+                          f"Rebalanceo: high de hoy no disponible para {symbol} — "
+                          f"chequeo de apalancamiento del AMPLIAR usa el cierre como fallback",
+                          symbol=symbol)
+                precio_entrada_ampliar = precio
+            else:
+                precio_entrada_ampliar = round(high_hoy + ENTRY_BUFFER, 2)
+
             # Auto-crear stop GTC si la posición no tiene protección activa
             if symbol not in stops_gtc and mode in ("PAPER", "LIVE"):
                 log_event("WARN",
@@ -1273,8 +1294,15 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     # risk_guardian.py) — fail-safe: si no se puede leer el dato de cuenta,
                     # se bloquea este AMPLIAR por precaución. REDUCIR nunca pasa por aquí:
                     # reduce exposición, nunca la aumenta.
+                    #
+                    # exposicion_adicional usa precio_entrada_ampliar (high + buffer,
+                    # calculado más arriba), no `precio` (cierre reciente) — Hallazgo
+                    # MEDIA #5, auditoría 07/08/2026: la orden AMPLIAR es MKT y puede
+                    # ejecutarse horas después en la siguiente apertura, no al cierre
+                    # de anoche. Sin este cambio el apalancamiento proyectado se
+                    # subestima justo en el caso que este chequeo existe para atrapar.
                     if accion_orden == "BUY":
-                        exposicion_adicional = shares_abs * precio
+                        exposicion_adicional = shares_abs * precio_entrada_ampliar
                         permitido, motivo_leverage, leverage_proy = verificar_apalancamiento_ampliar(
                             ib, exposicion_adicional=exposicion_adicional
                         )

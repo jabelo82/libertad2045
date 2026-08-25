@@ -82,6 +82,7 @@ for mod in ("logger", "telegram", "data_loader", "position_size",
     m.calcular_trailing_stop = MagicMock(return_value=(None, None))
     m.calcular_posicion = MagicMock(return_value=(0, 0, 0))
     m.MAX_POSITION_PCT = 0.20
+    m.ENTRY_BUFFER = 0.05
     # verificar_apalancamiento_ampliar (CRÍTICA #1, auditoría 07/08/2026):
     # stub permisivo -- no es objeto de este fichero de test.
     m.verificar_apalancamiento_ampliar = MagicMock(return_value=(True, "OK", 0.0))

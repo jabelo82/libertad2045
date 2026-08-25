@@ -59,6 +59,7 @@ for mod in ("logger", "telegram", "data_loader", "position_size",
     m.calcular_trailing_stop = MagicMock(return_value=(None, None))
     m.calcular_posicion = MagicMock(return_value=(0, 0, 0))
     m.MAX_POSITION_PCT = 0.20
+    m.ENTRY_BUFFER = 0.05
     # Por defecto permisivo — cada test que necesite otro veredicto lo
     # sobreescribe con patch.object(rebalance, "verificar_apalancamiento_ampliar", ...)
     m.verificar_apalancamiento_ampliar = MagicMock(return_value=(True, "OK", 0.0))
@@ -122,7 +123,14 @@ _CAPITAL = 10000.0
 # avgCost=0 en _make_position desactiva el bloque de break-even, pero
 # atr_actual = df["ATR"].iloc[-1] se evalúa igualmente antes de esa
 # comprobación -> necesita un DataFrame real, no un stub de lista.
-_DF_DUMMY = pd.DataFrame({"close": [100.0] * 25, "ATR": [1.0] * 25})
+# "high" es necesario desde el fix del Hallazgo MEDIA #5 (auditoría
+# 07/08/2026): rebalancear() calcula precio_entrada_ampliar = high + buffer
+# en cuanto df está disponible, antes de llegar al chequeo de apalancamiento.
+_HIGH_DUMMY = 100.5
+_DF_DUMMY = pd.DataFrame({"close": [100.0] * 25, "high": [_HIGH_DUMMY] * 25, "ATR": [1.0] * 25})
+# high + ENTRY_BUFFER (0.05), redondeado a 2 decimales — mismo cálculo que
+# rebalancear() aplica a precio_entrada_ampliar.
+_PRECIO_ENTRADA_AMPLIAR = round(_HIGH_DUMMY + 0.05, 2)
 
 
 def _decision_ampliar() -> DecisionRebalanceo:
@@ -197,9 +205,12 @@ class TestApalancamientoAmpliarWiring(unittest.TestCase):
             decisiones = rebalancear(ib, _CAPITAL, mode="PAPER", datos={_SYMBOL: _DF_DUMMY})
 
         mock_check.assert_called_once()
-        # exposicion_adicional = shares_abs (10) * precio (100) = 1000
+        # exposicion_adicional = shares_abs (10) * precio_entrada_ampliar
+        # (high + buffer = 100.55), NO shares_abs * precio_cierre (100) —
+        # Hallazgo MEDIA #5, ver test_leverage_usa_precio_entrada_no_cierre.
         _, kwargs = mock_check.call_args
-        self.assertAlmostEqual(kwargs.get("exposicion_adicional", 0), 1000.0)
+        self.assertAlmostEqual(kwargs.get("exposicion_adicional", 0),
+                                10 * _PRECIO_ENTRADA_AMPLIAR)
 
         ib.placeOrder.assert_called_once()
         orden_enviada = ib.placeOrder.call_args[0][1]
@@ -209,6 +220,33 @@ class TestApalancamientoAmpliarWiring(unittest.TestCase):
         # No se omitió por apalancamiento — no hay aviso de bloqueo preventivo
         for llamada in mock_telegram.call_args_list:
             self.assertNotIn("AMPLIAR omitido", llamada[0][0])
+
+    # ------------------------------------------------------------
+    # Hallazgo MEDIA #5 (auditoría 07/08/2026): exposicion_adicional debe
+    # usar el precio de entrada real (high + buffer), no el cierre reciente
+    # — la orden AMPLIAR es MKT y puede ejecutarse horas después, en la
+    # siguiente apertura, no al cierre de anoche.
+    # ------------------------------------------------------------
+
+    def test_leverage_usa_precio_entrada_no_cierre(self):
+        ib = _make_ib(_SYMBOL, 100)
+
+        with patch.object(rebalance, "evaluar_posicion", return_value=_decision_ampliar()), \
+             patch.object(rebalance, "verificar_apalancamiento_ampliar",
+                           return_value=(True, "OK", 0.95)) as mock_check, \
+             patch.object(rebalance, "send_telegram"):
+
+            rebalancear(ib, _CAPITAL, mode="PAPER", datos={_SYMBOL: _DF_DUMMY})
+
+        _, kwargs = mock_check.call_args
+        exposicion = kwargs.get("exposicion_adicional", 0)
+
+        # El precio de cierre (_PRECIO=100) sigue siendo el que usa
+        # evaluar_posicion() para valorar la posición existente — pero el
+        # chequeo de apalancamiento del AMPLIAR debe ignorarlo y usar
+        # high+buffer (100.55), no 100.
+        self.assertNotAlmostEqual(exposicion, 10 * _PRECIO)
+        self.assertAlmostEqual(exposicion, 10 * _PRECIO_ENTRADA_AMPLIAR)
 
     # ------------------------------------------------------------
     # REDUCIR nunca pasa por este chequeo
