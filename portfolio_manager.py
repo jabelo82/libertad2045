@@ -6,6 +6,7 @@ from ib_insync import *
 
 from logger import log_event
 from position_size import calcular_trailing_stop, verificar_margen_stop_vivo
+from rebalance import detectar_stops_gtc_duplicados
 
 
 # --------------------------------------------------
@@ -108,39 +109,41 @@ def evaluar_stops_por_cierre(ib, capital_peak_file="capital_peak.txt", datos=Non
         if not positions:
             log_event("INFO", "Sin posiciones abiertas — evaluación de stops omitida")
             return cerrados
- # Solicitar TODOS los open orders a IBKR, incluyendo los de sesiones
+
+        # Solicitar TODOS los open orders a IBKR, incluyendo los de sesiones
         # anteriores (GTC colocados antes de un reinicio de TWS/Gateway).
         ib.reqAllOpenOrders()
         ib.sleep(1)
-        # Mapa symbol → orden GTC de stop loss
+
+        # Mapa symbol → orden GTC de stop loss. Agrupación y filtro vía
+        # detectar_stops_gtc_duplicados() (Hallazgo MEDIA #6, rebalance.py)
+        # — mismo helper que usan _obtener_gtc_stops() y reconciliar_stops_gtc().
+        agrupados = detectar_stops_gtc_duplicados(ib.trades())
+
         stops_gtc = {}
-        for trade in ib.trades():
-            if (trade.order.orderType in ("STP", "TRAIL") and
-                    trade.order.action == "SELL" and
-                    trade.order.tif == "GTC"):
-                symbol = trade.contract.symbol
-                if symbol in stops_gtc:
-                    precio_exist = getattr(stops_gtc[symbol].order, "auxPrice", 0) or 0
-                    precio_nuevo = getattr(trade.order, "auxPrice", 0) or 0
+        for symbol, trades_symbol in agrupados.items():
+            conservar = trades_symbol[0]
+            stops_gtc[symbol] = conservar
+
+            if len(trades_symbol) > 1:
+                precio_exist = getattr(conservar.order, "auxPrice", 0) or 0
+                for extra in trades_symbol[1:]:
+                    precio_nuevo = getattr(extra.order, "auxPrice", 0) or 0
                     log_event("CRITICAL",
                               f"STOP GTC DUPLICADO: {symbol} — "
-                              f"órdenes {stops_gtc[symbol].order.orderId} ({precio_exist:.2f}) "
-                              f"y {trade.order.orderId} ({precio_nuevo:.2f}) — "
+                              f"órdenes {conservar.order.orderId} ({precio_exist:.2f}) "
+                              f"y {extra.order.orderId} ({precio_nuevo:.2f}) — "
                               f"conservando precio mayor",
                               symbol=symbol)
                     try:
                         from telegram import send_telegram_critical
                         send_telegram_critical(
                             f"🔴 LIBERTAD_2045 — Stop GTC duplicado: {symbol} | "
-                            f"Órdenes {stops_gtc[symbol].order.orderId} y {trade.order.orderId}. "
+                            f"Órdenes {conservar.order.orderId} y {extra.order.orderId}. "
                             f"Revisar manualmente."
                         )
                     except Exception:
                         pass
-                    if precio_nuevo > precio_exist:
-                        stops_gtc[symbol] = trade
-                else:
-                    stops_gtc[symbol] = trade
 
         for pos in positions:
 

@@ -250,6 +250,11 @@ def _make_posicion_con_stop(symbol="TEST", shares=10, stop_actual=150.0, order_i
     trade_stop.order.auxPrice      = stop_actual
     trade_stop.order.totalQuantity = shares
     trade_stop.order.orderId       = order_id
+    # Stop GTC ya activo — necesario desde el fix del Hallazgo MEDIA #6
+    # (auditoría 07/08/2026): detectar_stops_gtc_duplicados() ahora filtra
+    # por orderStatus.status, y un MagicMock sin configurar no coincide
+    # con ningún estado "vivo".
+    trade_stop.orderStatus.status  = "PreSubmitted"
 
     ib = MagicMock()
     ib.positions.return_value = [pos]

@@ -93,6 +93,10 @@ def _make_stop_gtc_trade(symbol: str, qty: int) -> MagicMock:
     trade.order.tif = "GTC"
     trade.order.totalQuantity = qty
     trade.order.auxPrice = 90.0
+    # Necesario desde el fix del Hallazgo MEDIA #6 (auditoría 07/08/2026):
+    # detectar_stops_gtc_duplicados() filtra por orderStatus.status, y un
+    # MagicMock sin configurar no coincide con ningún estado "vivo".
+    trade.orderStatus.status = "PreSubmitted"
     return trade
 
 

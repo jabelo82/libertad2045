@@ -357,43 +357,87 @@ class DecisionRebalanceo:
 # Helpers internos
 # --------------------------------------------------
 
+def detectar_stops_gtc_duplicados(trades) -> dict:
+    """
+    Agrupa por símbolo los stops GTC activos (STP/TRAIL, SELL, GTC, en
+    estado PreSubmitted o Submitted) y los devuelve ordenados de mayor a
+    menor precio (auxPrice) — el primero de cada lista es siempre "el que
+    se conserva", bajo el criterio ya usado en todo el proyecto (precio
+    mayor = stop más favorable para la posición larga).
+
+    Devuelve una entrada por CADA símbolo con al menos un stop activo, no
+    solo los duplicados — una lista de longitud 1 no es un duplicado; cada
+    llamador decide si len() > 1 le importa. Esto es deliberado: permite
+    que _obtener_gtc_stops() y el bloque equivalente de portfolio_manager
+    construyan su mapa symbol→stop-vigente (tomando [0]) con la misma
+    llamada que reconciliar_stops_gtc() usa para decidir qué cancelar
+    (tomando [1:]).
+
+    Pura — no llama a IBKR ni hace logging/Telegram. Cada llamador decide
+    qué hacer con lo que devuelve, según su propio contexto (frecuencia de
+    la llamada, si cancela o no, tono de la alerta).
+
+    Hallazgo MEDIA #6 (auditoría 07/08/2026): unifica el filtro y el
+    desempate que antes vivían triplicados (portfolio_manager.py inline,
+    _obtener_gtc_stops(), reconciliar_stops_gtc()). El filtro de
+    orderStatus es el que ya usaba reconciliar_stops_gtc() — las otras dos
+    copias no lo tenían y podían confundir un stop ya cancelado/ejecutado
+    (que sigue en ib.trades(), la caché de la sesión) con un duplicado
+    activo real (caso real TRV, 23/06/2026, ver investigación de Fase 1).
+    """
+    por_simbolo: dict[str, list] = {}
+    for trade in trades:
+        if (trade.order.orderType in ("STP", "TRAIL") and
+                trade.order.action == "SELL" and
+                trade.order.tif == "GTC" and
+                trade.orderStatus.status in ("PreSubmitted", "Submitted")):
+            por_simbolo.setdefault(trade.contract.symbol, []).append(trade)
+
+    return {
+        symbol: sorted(trades_symbol,
+                        key=lambda t: getattr(t.order, "auxPrice", 0) or 0,
+                        reverse=True)
+        for symbol, trades_symbol in por_simbolo.items()
+    }
+
+
 def _obtener_gtc_stops(ib) -> dict:
     """
     Devuelve un mapa {symbol: trade} con los stops GTC activos.
-    Usa el mismo patrón que evaluar_stops_por_cierre() en portfolio_manager.
+    Usa detectar_stops_gtc_duplicados() (Hallazgo MEDIA #6) para agrupar y
+    filtrar — el mismo helper que usan evaluar_stops_por_cierre() en
+    portfolio_manager y reconciliar_stops_gtc() en este mismo módulo.
     """
     ib.reqAllOpenOrders()
     ib.sleep(2)
 
+    agrupados = detectar_stops_gtc_duplicados(ib.trades())
+
     stops = {}
-    for trade in ib.trades():
-        if (trade.order.orderType in ("STP", "TRAIL")
-                and trade.order.action == "SELL"
-                and trade.order.tif == "GTC"):
-            symbol = trade.contract.symbol
-            if symbol in stops:
-                precio_exist = getattr(stops[symbol].order, "auxPrice", 0) or 0
-                precio_nuevo = getattr(trade.order, "auxPrice", 0) or 0
+    for symbol, trades_symbol in agrupados.items():
+        conservar = trades_symbol[0]
+        stops[symbol] = conservar
+
+        if len(trades_symbol) > 1:
+            precio_exist = getattr(conservar.order, "auxPrice", 0) or 0
+            for extra in trades_symbol[1:]:
+                precio_nuevo = getattr(extra.order, "auxPrice", 0) or 0
                 log_event("CRITICAL",
                           f"STOP GTC DUPLICADO (rebalance): {symbol} — "
-                          f"órdenes {stops[symbol].order.orderId} ({precio_exist:.2f}) "
-                          f"y {trade.order.orderId} ({precio_nuevo:.2f}) — "
+                          f"órdenes {conservar.order.orderId} ({precio_exist:.2f}) "
+                          f"y {extra.order.orderId} ({precio_nuevo:.2f}) — "
                           f"conservando precio mayor",
                           symbol=symbol)
                 try:
                     from telegram import send_telegram_critical
                     send_telegram_critical(
                         f"⚠️ LIBERTAD_2045 — Stop GTC duplicado detectado: {symbol} | "
-                        f"Órdenes {stops[symbol].order.orderId} y {trade.order.orderId}. "
+                        f"Órdenes {conservar.order.orderId} y {extra.order.orderId}. "
                         f"Ventana normal de reemplazo (cantidad cambio) — "
                         f"se autorresuelve en la próxima reconciliación."
                     )
                 except Exception:
                     pass
-                if precio_nuevo > precio_exist:
-                    stops[symbol] = trade
-            else:
-                stops[symbol] = trade
 
     return stops
 
@@ -1572,8 +1616,9 @@ def reconciliar_stops_gtc(ib, mode: str = "PAPER") -> int:
           requiere una bajada mayor para activarse, preservando más beneficio).
         · Cancela todos los demás, con log completo de cada cancelación.
 
-    Criterio «precio mayor»: consistente con la lógica ya aplicada en
-    _obtener_gtc_stops() y evaluar_stops_por_cierre() cuando detectan duplicados.
+    Criterio «precio mayor»: el mismo que aplica detectar_stops_gtc_duplicados()
+    (Hallazgo MEDIA #6), compartido con _obtener_gtc_stops() y
+    evaluar_stops_por_cierre() en portfolio_manager.
 
     Se debe llamar:
         1. Al arranque del bot, antes de evaluar_stops_por_cierre().
@@ -1588,17 +1633,9 @@ def reconciliar_stops_gtc(ib, mode: str = "PAPER") -> int:
         log_event("ERROR", f"reconciliar_stops_gtc: error al solicitar órdenes: {e}")
         return 0
 
-    # Agrupar todos los stops GTC activos por símbolo
-    stops_por_simbolo: dict[str, list] = {}
-    for trade in ib.trades():
-        if (trade.order.orderType in ("STP", "TRAIL") and
-                trade.order.action == "SELL" and
-                trade.order.tif == "GTC" and
-                trade.orderStatus.status in ("PreSubmitted", "Submitted")):
-            sym = trade.contract.symbol
-            stops_por_simbolo.setdefault(sym, []).append(trade)
-
-    duplicados = {sym: trades for sym, trades in stops_por_simbolo.items()
+    # Agrupar todos los stops GTC activos por símbolo (Hallazgo MEDIA #6)
+    agrupados  = detectar_stops_gtc_duplicados(ib.trades())
+    duplicados = {sym: trades for sym, trades in agrupados.items()
                   if len(trades) > 1}
 
     if not duplicados:
@@ -1608,14 +1645,9 @@ def reconciliar_stops_gtc(ib, mode: str = "PAPER") -> int:
     cancelados_total = 0
 
     for sym, trades in duplicados.items():
-        # Ordenar de mayor a menor precio: el primero se conserva
-        trades_ord = sorted(
-            trades,
-            key=lambda t: getattr(t.order, "auxPrice", 0) or 0,
-            reverse=True,
-        )
-        conservar      = trades_ord[0]
-        a_cancelar     = trades_ord[1:]
+        # Ya vienen ordenados de mayor a menor precio — el primero se conserva
+        conservar      = trades[0]
+        a_cancelar     = trades[1:]
         precio_conserv = getattr(conservar.order, "auxPrice", 0) or 0
 
         log_event("CRITICAL",
