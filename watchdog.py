@@ -307,10 +307,29 @@ def relanzar_bot():
             )
         else:
             modo_relaunch = os.getenv("TRADING_MODE", "PAPER")
-            # Guard LIVE a mediodía: el shutdown de mediodía dispara a las 12:10.
-            # Si el relaunch es a las 12:05+ en LIVE, el bot tendría <5 min antes
-            # de recibir SIGTERM — los trades podrían ejecutarse sin supervisión esa tarde.
-            shutdown_inminente = datetime.now().hour == 12 and datetime.now().minute >= 5
+            # Guard LIVE a mediodía -- SOLO aplica fuera del VPS (mismo
+            # patrón que check_rtc(), línea ~227): el shutdown físico de
+            # mediodía (trading-midday-shutdown.timer, 12:10 L-V) es un
+            # mecanismo de la Torre retirada, deshabilitado desde el
+            # cutover del 03/07/2026 (cutover_formal_03jul.md, los 3
+            # timers a disabled) y nunca provisionado en el VPS, que no
+            # se apaga nunca. Sin este guard, en el VPS el bloqueo se
+            # disparaba cada día laborable basándose en una premisa que
+            # ya no es cierta, dejando la cartera sin relanzamiento LIVE
+            # ese día entero (hallazgo ALTA #1, auditoría 07/08/2026).
+            #
+            # Ventana real 12:05-12:09 (antes cubría 12:05-12:59, 55 min,
+            # no los "<5 min" que ya describía correctamente el propio
+            # comentario original): el shutdown dispara EXACTAMENTE a las
+            # 12:10 (INFRAESTRUCTURA_IBG.md, diagnostico_rtc_29jun.md) —
+            # pasado ese instante ya no hay ningún SIGTERM inminente que
+            # proteger, ni siquiera en una hipotética Torre reactivada.
+            ahora = datetime.now()
+            shutdown_inminente = (
+                os.getenv("MAQUINA") != "VPS"
+                and ahora.hour == 12
+                and 5 <= ahora.minute < 10
+            )
             if shutdown_inminente and modo_relaunch == "LIVE":
                 _send(
                     "⚠️ LIBERTAD_2045 — LIVE: bot NO relanzado a mediodía "
