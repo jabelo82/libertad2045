@@ -15,7 +15,10 @@ from position_size import calcular_posicion
 from portfolio_manager import obtener_posiciones_abiertas, filtrar_senales, evaluar_stops_por_cierre
 from trade_executor import ejecutar_trade
 from order_manager import cancelar_ordenes_pendientes
-from logger import log_event, limpiar_logs_antiguos
+from logger import (
+    log_event, limpiar_logs_antiguos,
+    leer_exec_ids_registrados, registrar_exec_ids,
+)
 from telegram import send_telegram, send_telegram_critical
 from universe_sp500 import SP500
 from risk_guardian import risk_check, verificar_riesgo_entrada
@@ -35,8 +38,11 @@ MODE = os.getenv("TRADING_MODE", "SIM")
 
 
 _PROJECT_DIR   = Path(__file__).resolve().parent
-FILLS_IDS_FILE = _PROJECT_DIR / "logged_exec_ids.txt"
 _LAST_RUN_FILE = _PROJECT_DIR / "last_run.txt"
+# FILLS_IDS_FILE vive ahora en logger.py — es un fichero compartido entre
+# registrar_fills_recientes() (aquí) y el camino de AMPLIAR con fill
+# inmediato (rebalance.py), para que un mismo exec_id no genere dos
+# TRADE_FILLED (hallazgo KPI "Trades ejecutados", 31/08/2026).
 
 
 def _escribir_last_run():
@@ -94,9 +100,7 @@ def registrar_fills_recientes(ib):
         ib.reqExecutions()
         ib.sleep(3)
 
-        logged_ids = set()
-        if FILLS_IDS_FILE.exists():
-            logged_ids = set(FILLS_IDS_FILE.read_text().strip().splitlines())
+        logged_ids = leer_exec_ids_registrados()
 
         # Agrupar fills por símbolo y lado — consolida parciales
         fills_bot = {}
@@ -171,13 +175,7 @@ def registrar_fills_recientes(ib):
             )
             nuevos_ids.extend(datos["exec_ids"])
 
-        if nuevos_ids:
-            todas = list(logged_ids) + nuevos_ids
-            try:
-                FILLS_IDS_FILE.write_text("\n".join(todas[-10000:]))
-            except Exception as e_write:
-                log_event("ERROR",
-                          f"registrar_fills_recientes: fallo persistiendo logged_exec_ids.txt: {e_write}")
+        registrar_exec_ids(nuevos_ids, existentes=logged_ids)
         log_event("INFO", f"Fills nuevos registrados: "
                            f"{len(fills_bot)} compras, {len(fills_sld)} ventas "
                            f"({len(nuevos_ids)} ejecuciones parciales)")

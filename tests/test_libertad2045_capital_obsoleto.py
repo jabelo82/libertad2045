@@ -46,6 +46,9 @@ sys.modules["ib_insync"] = _ib_stub
 _logger_stub = types.ModuleType("logger")
 _logger_stub.log_event = MagicMock()
 _logger_stub.limpiar_logs_antiguos = MagicMock()
+_logger_stub.leer_exec_ids_registrados = MagicMock(return_value=set())
+_logger_stub.exec_ids_pendientes_de_registrar = MagicMock(side_effect=lambda ids: list(ids))
+_logger_stub.registrar_exec_ids = MagicMock()
 sys.modules["logger"] = _logger_stub
 
 _telegram_stub = types.ModuleType("telegram")

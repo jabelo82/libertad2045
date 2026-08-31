@@ -34,7 +34,7 @@ import pandas as pd
 from ib_insync import ExecutionFilter, Order, Stock
 
 from data_loader import obtener_datos
-from logger import log_event
+from logger import log_event, exec_ids_pendientes_de_registrar, registrar_exec_ids
 from position_size import ENTRY_BUFFER, MAX_POSITION_PCT, calcular_posicion, calcular_trailing_stop
 from risk_guardian import verificar_apalancamiento_ampliar
 from telegram import send_telegram
@@ -1406,11 +1406,75 @@ def rebalancear(ib, capital: float, mode: str = "SIM", datos=None) -> List[Decis
                     decision.ejecutado = True
 
                     if estado == "Filled" and filled >= shares_abs:
-                        log_event("TRADE",
-                                  f"Rebalanceo {decision.accion} ejecutado | "
-                                  f"{accion_orden} {shares_abs} acc. | "
-                                  f"precio_ref={precio:.2f}",
-                                  symbol=symbol, shares=shares_abs, entry=precio)
+                        texto_evento = (
+                            f"Rebalanceo {decision.accion} ejecutado | "
+                            f"{accion_orden} {shares_abs} acc. | "
+                            f"precio_ref={precio:.2f}"
+                        )
+                        if accion_orden == "BUY":
+                            # AMPLIAR con fill inmediato: level="TRADE_FILLED" (no
+                            # "TRADE") para que dashboard.py::leer_logs() lo cuente
+                            # como ejecución confirmada, igual que las entradas
+                            # nuevas via registrar_fills_recientes() — unificado
+                            # bajo la misma fuente evita el doble conteo que tenía
+                            # antes (hallazgo KPI "Trades ejecutados", 31/08/2026).
+                            #
+                            # registrar_fills_recientes() (libertad2045.py) puede
+                            # volver a ver este mismo fill en un ciclo posterior
+                            # (ib.fills()/reqExecutions() no está acotado a esta
+                            # conexión — ver docstring de
+                            # _verificar_ejecucion_pendiente() más arriba), así
+                            # que marcamos aquí mismo el exec_id en el fichero
+                            # compartido logged_exec_ids.txt para que ese ciclo
+                            # posterior lo salte y no genere un segundo
+                            # TRADE_FILLED para el mismo fill real.
+                            exec_ids = [
+                                f.execution.execId for f in getattr(trade_ajuste, "fills", [])
+                                if getattr(f, "execution", None) and f.execution.execId
+                            ]
+                            if exec_ids:
+                                nuevos = exec_ids_pendientes_de_registrar(exec_ids)
+                                if nuevos:
+                                    log_event("TRADE_FILLED", texto_evento,
+                                              symbol=symbol, shares=shares_abs, entry=precio)
+                                    registrar_exec_ids(exec_ids)
+                                else:
+                                    # Ya contado por otro punto del código (p.ej.
+                                    # registrar_fills_recientes() en un ciclo
+                                    # anterior) — no duplicar el TRADE_FILLED.
+                                    log_event("WARN",
+                                              f"Rebalanceo AMPLIAR de {symbol} ya contado "
+                                              f"(exec_id duplicado) — omitiendo TRADE_FILLED repetido",
+                                              symbol=symbol)
+                            else:
+                                # No deberíamos llegar aquí con estado=="Filled" sin
+                                # fills asociados, pero si ib_insync no ha
+                                # poblado trade.fills todavía, no podemos
+                                # deduplicar por exec_id — registramos igualmente
+                                # para no perder el evento (mismo riesgo de doble
+                                # conteo que había antes de este fix, pero no
+                                # peor; queda visible via el WARN para depurar).
+                                log_event("WARN",
+                                          f"Rebalanceo AMPLIAR de {symbol}: Filled sin "
+                                          f"exec_ids en trade.fills — no se pudo deduplicar",
+                                          symbol=symbol)
+                                log_event("TRADE_FILLED", texto_evento,
+                                          symbol=symbol, shares=shares_abs, entry=precio)
+                        else:
+                            # REDUCIR: se deja sin cambios (level="TRADE", sin
+                            # registrar exec_id). registrar_fills_recientes()
+                            # sigue siendo la única fuente de TRADE_SOLD para
+                            # ventas, con el precio real de ejecución — aquí
+                            # `precio` es una referencia (ver comentario más
+                            # arriba sobre precio_entrada_ampliar), no el fill
+                            # real, así que renombrar este evento a TRADE_FILLED
+                            # degradaría leer_precios_salida() (Fuente 2 lo
+                            # tomaría como precio de salida en vez de esperar al
+                            # TRADE_SOLD real). dashboard.py::leer_logs() cuenta
+                            # esta línea igualmente para el KPI vía un chequeo
+                            # explícito de texto, no por level.
+                            log_event("TRADE", texto_evento,
+                                      symbol=symbol, shares=shares_abs, entry=precio)
                     else:
                         log_event("INFO",
                                   f"Rebalanceo {decision.accion} encolado para apertura | "

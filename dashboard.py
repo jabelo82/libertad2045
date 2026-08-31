@@ -244,10 +244,26 @@ def leer_logs():
                         if symbol and shares:
                             try:
                                 side = "SELL" if "SLD" in event.upper() else "BUY"
+                                # REDUCIR con fill inmediato (rebalance.py) se
+                                # loguea con level="TRADE" pero SOLO cuando IBKR
+                                # ya confirmó estado=="Filled" — a diferencia de
+                                # "Orden enviada a IBKR" (trade_executor.py), que
+                                # se loguea ANTES de saber si la BUY STOP llega a
+                                # dispararse y puede no ejecutarse nunca. Se
+                                # marca como "FILLED" aquí (no se renombra el
+                                # level en origen porque `entry` en ese evento es
+                                # un precio de referencia, no el fill real — ver
+                                # comentario en rebalance.py) para que cuente en
+                                # el KPI "Trades ejecutados" igual que una
+                                # ejecución confirmada. Hallazgo 31/08/2026.
+                                es_reduccion_confirmada = event.startswith(
+                                    "Rebalanceo REDUCIR ejecutado"
+                                )
                                 key = (ts[:10], symbol, entry)
                                 if key not in [(t["ts"][:10], t["symbol"], t["entry"]) for t in trades]:
                                     trades.append({"ts": ts, "symbol": symbol, "shares": shares,
-                                                   "entry": entry, "stop": stop, "source": "ORDER",
+                                                   "entry": entry, "stop": stop,
+                                                   "source": "FILLED" if es_reduccion_confirmada else "ORDER",
                                                    "side": side})
                             except Exception:
                                 pass
@@ -395,7 +411,13 @@ def calcular_stats(sesiones):
     capital_pico    = max(capitales)
     rentabilidad    = (capital_actual - capital_inicial) / capital_inicial * 100
     dd_actual       = (capital_actual - capital_pico) / capital_pico * 100
-    total_trades    = sum(len(s["trades"]) for s in sesiones)
+    # Solo ejecuciones confirmadas (source=="FILLED") — NO entradas "ORDER"
+    # sin confirmar, que pueden no llegar a dispararse nunca (BUY STOP DAY
+    # que expira sin fill). Hallazgo KPI "Trades ejecutados", 31/08/2026:
+    # antes sumaba ambas fuentes, contando huérfanas como ejecutadas y
+    # duplicando cada trade real (una entrada ORDER + una FILLED).
+    total_trades    = sum(1 for s in sesiones for t in s["trades"]
+                           if t.get("source") == "FILLED")
     total_señales   = sum(s["señales"] for s in sesiones)
 
     return {

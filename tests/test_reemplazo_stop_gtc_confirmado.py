@@ -76,6 +76,9 @@ for mod in ("logger", "telegram", "data_loader", "position_size",
             "portfolio_manager"):
     m = types.ModuleType(mod)
     m.log_event = MagicMock()
+    m.leer_exec_ids_registrados = MagicMock(return_value=set())
+    m.exec_ids_pendientes_de_registrar = MagicMock(side_effect=lambda ids: list(ids))
+    m.registrar_exec_ids = MagicMock()
     m.send_telegram = MagicMock()
     m.send_telegram_critical = MagicMock()
     m.obtener_datos = MagicMock(return_value=None)
