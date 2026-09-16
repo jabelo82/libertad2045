@@ -288,6 +288,36 @@ def cargar_composicion_sp500() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+import re as _re
+
+_SP500_TICKER_SUFIJO_FECHA = _re.compile(r'-\d{6,8}$')
+_SP500_TICKER_VALIDO       = _re.compile(r'^[A-Z]{1,5}$')
+
+
+def _limpiar_ticker_sp500(raw: str) -> str:
+    """
+    Quita el sufijo "-YYYYMM"/"-YYYYMMDD" (fecha de baja del índice) que
+    sp500_composicion.csv incrusta en el ticker de CUALQUIER empresa que
+    en algún momento salió del S&P500 — incrustado en TODAS las filas
+    donde aparece ese ticker, no solo en la última antes de la baja.
+
+    Fuente única para universo_historico_sp500() y sp500_en_fecha() —
+    antes de este fix (Parte J, hallazgo 16/09/2026, investigación del
+    drawdown de v9) universo_historico_sp500() sí limpiaba el sufijo al
+    construir la lista de descarga (`datos` queda indexado por ticker
+    bare), pero sp500_en_fecha() devolvía el token crudo del CSV tal
+    cual — así que "CBE" in sp500_en_fecha(...) daba SIEMPRE False para
+    cualquier fecha, incluso en fechas donde Cooper Industries (CBE) era
+    un componente real del índice. Cuantificado sobre el fichero
+    congelado completo: 422 de 1.047 tickers históricos (~40%) llevan el
+    sufijo en el 100% de sus apariciones → quedaban permanentemente
+    excluidos de la cartera tradeable en los 20 años completos del
+    backtest, no solo tras el congelamiento de 2019-01-11 (hallazgo
+    distinto, sección 8 del contexto).
+    """
+    return _SP500_TICKER_SUFIJO_FECHA.sub('', raw.strip())
+
+
 def universo_historico_sp500(comp_df: pd.DataFrame) -> list:
     """
     Extrae el conjunto de todos los tickers que alguna vez estuvieron en el
@@ -297,10 +327,6 @@ def universo_historico_sp500(comp_df: pd.DataFrame) -> list:
     if comp_df.empty:
         return list(SP500)
 
-    import re
-    _date_suffix = re.compile(r'-\d{6,8}$')
-    _valid_ticker = re.compile(r'^[A-Z]{1,5}$')
-
     todos: set = set()
     col = comp_df.columns[0]
     for val in comp_df[col].dropna():
@@ -308,10 +334,9 @@ def universo_historico_sp500(comp_df: pd.DataFrame) -> list:
             ticker = ticker.strip()
             if not ticker:
                 continue
-            # Strip trailing date suffix like -199702 or -20031231
-            ticker = _date_suffix.sub('', ticker)
+            ticker = _limpiar_ticker_sp500(ticker)
             # Keep only pure uppercase-letter tickers, max 5 chars
-            if _valid_ticker.match(ticker):
+            if _SP500_TICKER_VALIDO.match(ticker):
                 todos.add(ticker)
     return sorted(todos)
 
@@ -331,7 +356,7 @@ def sp500_en_fecha(comp_df: pd.DataFrame, fecha) -> set:
         if pd.isna(idx):
             return None
         val = comp_df.iloc[comp_df.index.get_loc(idx), 0]
-        return {t.strip() for t in str(val).split(",") if t.strip()}
+        return {_limpiar_ticker_sp500(t) for t in str(val).split(",") if t.strip()}
     except Exception:
         return None
 
@@ -417,6 +442,82 @@ def obtener_multiplicador(df, i):
             return B2_MULT_MEDIO
 
     return ATR_MULTIPLIER
+
+
+# --------------------------------------------------
+# Guardia de datos corruptos (Parte J investigación, 16/09/2026)
+# --------------------------------------------------
+# Motivada por la investigación de por qué v9 casi duplicaba el
+# drawdown de v8: Yahoo Finance sirve, en fechas puntuales alrededor de
+# fusiones/bajas de bolsa (caso real verificado: CBE/Cooper Industries,
+# adquirida por Eaton, cerrada 30/11/2012 — el ticker fue reciclado
+# después para otro instrumento), barras con precio casi cero o
+# negativo (segundo caso real: MEE, 09/12/2009, Low=-0,027$)
+# intercaladas con precios reales del día anterior/siguiente — no es un
+# movimiento de mercado real, ninguna acción cae >80-90% en un día sin
+# recuperarse al día siguiente salvo un evento conocido que este motor
+# no puede verificar caso a caso. Sin esta guardia, un stop se ejecuta
+# contra el precio corrupto — el caso que la motivó: CBE
+# 02/11/2012→21/11/2012, entrada 77,09$, "salida" 0,02$, -6.475,94$, el
+# 97% del peor episodio de drawdown de v9 (ver
+# backtest_results/parteJ_drawdown_v9_16-09-2026.md).
+PRECIO_CAIDA_SOSPECHOSA = 0.80  # caída de un día tratada como posible dato corrupto
+RANGO_INTRADIA_DEGENERADO = 0.02  # (High-Low)/High <= 2% en un día ya hundido = vela plana, sospechosa
+
+
+def _bar_precio_corrupto(bar, prev_close) -> bool:
+    """
+    True si la barra de hoy tiene las señales de un dato corrupto de
+    Yahoo Finance (splice de ticker reciclado, feed erróneo en torno a
+    una fusión/baja de bolsa) en vez de un movimiento de mercado real:
+
+      - cualquier precio no positivo (Open, High, Low o Close <= 0) —
+        nunca ocurre en un instrumento real. Por sí solo ya es corrupto,
+        caiga lo que caiga el resto del día.
+
+      - el HIGH del día cae más de PRECIO_CAIDA_SOSPECHOSA respecto al
+        cierre previo Y ADEMÁS la vela es DEGENERADA (High≈Low≈Open≈
+        Close, rango intradía casi nulo — (High-Low)/High <=
+        RANGO_INTRADIA_DEGENERADO). Las DOS señales juntas, no una
+        sola: un crash real (incluso violento, gap bajista genuino)
+        sigue teniendo variación intradía real entre Open/High/Low/
+        Close — lo que no tiene un crash real es un precio idéntico en
+        los cuatro campos. Verificado con los dos casos reales que
+        motivaron esta guardia: CBE 21/11/2012 (Open=High=Low=Close=
+        0,08$, rango=0) y MEE en varias fechas de 12/2009 (mismo
+        patrón, incluido un caso con precio negativo). Un crash real
+        con rango intradía genuino (p.ej. Open=2, High=3, Low=1,
+        Close=2 sobre un cierre previo de 51,5 — caída del 94%) NO debe
+        marcarse como corrupto: es una pérdida real que el sistema debe
+        registrar (ver TestReduccionDuranteDrawdown,
+        tests/test_backtest_paridad_riesgo.py).
+
+    `prev_close` inválido (None, NaN, <= 0) → False siempre (fail-safe:
+    nunca bloquea sin una referencia válida contra la que comparar).
+
+    LIMITACIÓN EXPLÍCITA: compara solo contra el cierre del día de
+    cotización INMEDIATAMENTE anterior en la serie — si la corrupción
+    persiste varios días seguidos, cada nuevo día corrupto se compara
+    contra el día corrupto previo (ya no contra el último precio real),
+    así que una deriva lenta A TRAVÉS de varios días corruptos
+    consecutivos podría no detectarse. Cubre el patrón real observado
+    (un pico de corrupción aislado insertado entre datos reales) — una
+    guardia con memoria del último precio "bueno" conocido es una
+    mejora posible pero fuera de alcance de lo pedido aquí.
+    """
+    if prev_close is None or pd.isna(prev_close) or prev_close <= 0:
+        return False
+
+    for campo in ("Open", "High", "Low", "Close"):
+        v = bar.get(campo)
+        if v is None or pd.isna(v) or v <= 0:
+            return True
+
+    if bar["High"] >= prev_close * (1 - PRECIO_CAIDA_SOSPECHOSA):
+        return False
+
+    rango = bar["High"] - bar["Low"]
+    return bool(rango <= bar["High"] * RANGO_INTRADIA_DEGENERADO)
 
 
 def calcular_precio_salida_stop(bar, stop):
@@ -752,11 +853,15 @@ def calcular_posicion(df, i, capital):
 
     atr        = df.iloc[i]["ATR"]
     last_price = df.iloc[i]["Close"]
+    high_hoy   = df.iloc[i]["High"]
 
     if pd.isna(atr) or atr <= 0:
         return 0, None, None
 
     if pd.isna(last_price) or last_price <= 0.01:
+        return 0, None, None
+
+    if pd.isna(high_hoy) or high_hoy <= 0.01:
         return 0, None, None
 
     multiplicador = obtener_multiplicador(df, i)
@@ -765,10 +870,26 @@ def calcular_posicion(df, i, capital):
     if stop_distance <= 0:
         return 0, None, None
 
-    risk_amount        = capital * RISK_PERCENT
-    shares_risk        = int(risk_amount / stop_distance)
+    risk_amount   = capital * RISK_PERCENT
+    shares_risk   = int(risk_amount / stop_distance)
+
+    # shares_capital: dividir por el precio de ENTRADA real (buy_stop =
+    # high + BUFFER, la misma referencia que usa el bloque de apertura
+    # de posiciones unas líneas más abajo, `round(señal["high"] + BUFFER, 4)`),
+    # no por el cierre del día del escaneo -- la orden siempre se
+    # ejecuta al buy_stop, nunca al cierre, así que dividir por el
+    # cierre podía sobredimensionar la posición real por encima de
+    # MAX_POSITION_PCT. Fix portado desde producción (Hallazgo MEDIA #5,
+    # auditoría 07/08/2026, commit fdf3479 -- ese commit corrigió
+    # position_size.py/rebalance.py pero dejó explícitamente esta misma
+    # reimplementación en backtest_expandido.py sin tocar, señalada como
+    # divergencia nueva de paridad backtest/producción pendiente de su
+    # propio fix y su propia revalidación de 20 años; parte de los "5
+    # fixes combinados" de v10, 16/09/2026). shares_risk no se ve
+    # afectado -- nunca dependió de este precio.
     max_position_value = capital * MAX_POSITION_PCT
-    shares_capital     = int(max_position_value / last_price)
+    precio_entrada_estimado = high_hoy + BUFFER
+    shares_capital      = int(max_position_value / precio_entrada_estimado)
 
     shares = min(shares_risk, shares_capital)
 
@@ -1056,6 +1177,17 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             atr      = df.loc[fecha, "ATR"]
             i_actual = df.index.get_loc(fecha)
 
+            # Guardia de datos corruptos (Parte J, 16/09/2026) — se
+            # trata como si el dato de hoy no existiera (misma forma que
+            # "fecha not in df.index" más arriba): ni actualiza trailing
+            # ni break-even ni evalúa el stop contra el precio de hoy.
+            # precios_hoy[symbol] queda SIN fijar — _exposicion_y_capital_mtm
+            # ya cae a pos["entry"] como aproximación cuando falta.
+            if i_actual > 0:
+                prev_close = df.iloc[i_actual - 1]["Close"]
+                if _bar_precio_corrupto(bar, prev_close):
+                    continue
+
             precios_hoy[symbol] = bar["Close"]
 
             if not pd.isna(atr) and atr > 0:
@@ -1145,6 +1277,15 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
 
             pos       = posiciones[symbol]
             i_reb     = df_reb.index.get_loc(fecha)
+
+            # Guardia de datos corruptos (Parte J, 16/09/2026) — no
+            # rebalancear contra un precio corrupto (dispararía un
+            # shares_optimo sin sentido en calcular_posicion()).
+            if i_reb > 0:
+                prev_close_reb = df_reb.iloc[i_reb - 1]["Close"]
+                if _bar_precio_corrupto(df_reb.iloc[i_reb], prev_close_reb):
+                    continue
+
             precio    = df_reb.iloc[i_reb]["Close"]
 
             if pd.isna(precio) or precio <= 0:
@@ -1278,6 +1419,13 @@ def ejecutar_backtest(datos, composicion_df=None, eurusd=None):
             i = df.index.get_loc(fecha)
 
             if i < 200:
+                continue
+
+            # Guardia de datos corruptos (Parte J, 16/09/2026) — no
+            # escanear una señal ni dimensionar una entrada nueva sobre
+            # un High/Close corrupto (buy_stop y shares_capital
+            # quedarían sin sentido).
+            if _bar_precio_corrupto(df.iloc[i], df.iloc[i - 1]["Close"]):
                 continue
 
             if not detectar_senal(df, i):
