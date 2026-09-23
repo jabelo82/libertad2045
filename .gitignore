@@ -21,6 +21,7 @@ logged_exec_ids.txt
 logged_exec_ids_*.txt
 sp500_composicion.csv
 sp500_composicion_updated_fase7a.csv
+sp500_composicion_CORREGIDO.csv
 trades_*.json
 orders_*.json
 
