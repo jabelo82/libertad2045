@@ -95,7 +95,7 @@ SLIPPAGE_K       = 0.10
 COMISION_IBKR    = 1.0  # USD por pata
 
 # Palanca 2B — salida por cierre
-SALIDA_POR_CIERRE = True
+SALIDA_POR_CIERRE = False
 
 # --------------------------------------------------
 # Risk Guardian — idéntico a producción
@@ -118,7 +118,7 @@ REBALANCE_MIN_SHARES = 5     # Delta mínimo de acciones (evita micro-operacione
 # --------------------------------------------------
 # Universo dinámico S&P500 — fja05680/sp500
 # --------------------------------------------------
-SP500_COMP_CACHE = "sp500_composicion.csv"
+SP500_COMP_CACHE = "sp500_composicion_CORREGIDO.csv"
 SP500_COMP_URL   = (
     "https://raw.githubusercontent.com/fja05680/sp500/master/"
     "S%26P%20500%20Historical%20Components%20%26%20Changes.csv"

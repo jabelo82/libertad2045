@@ -217,7 +217,18 @@ def _construir_ticker(dias_extra: list) -> pd.DataFrame:
         SMA200=SMA200_INICIO + N_WARMUP * SMA200_INCREMENTO,
     ))
     filas.append(_fila(   # día 201 — entrada, sin gap
-        Open=50.5, High=52.0, Low=50.0, Close=51.5,
+        # High/Close deliberadamente contenidos (v11, 23/09/2026): con
+        # SALIDA_POR_CIERRE=False (default desde v11) el propio día de
+        # entrada evalúa el stop contra el Low, no contra el Close --
+        # un High=52,0 aquí recalcularía el trailing a 50,8375 (por
+        # encima del Low=50,0 de este mismo día) y cerraría la posición
+        # de inmediato, igual que demuestra intencionadamente
+        # test_backtest_salida_intradia_v8.py. Estos escenarios no
+        # prueban esa divergencia -- necesitan que la posición
+        # sobreviva al día de entrada para poder "hundirse" en un día
+        # posterior, así que el High se contiene por debajo del umbral
+        # que dispararía el stop contra el Low de este mismo día.
+        Open=50.5, High=51.1, Low=50.0, Close=50.8,
         SMA200=SMA200_INICIO + (N_WARMUP + 1) * SMA200_INCREMENTO,
     ))
 
@@ -231,8 +242,14 @@ def _construir_ticker(dias_extra: list) -> pd.DataFrame:
 
 def _dia_plano(**overrides):
     """Día extra sin movimiento respecto a la entrada — para rellenar
-    huecos donde un ticker concreto no necesita hacer nada."""
-    base = dict(Open=51.0, High=52.0, Low=50.5, Close=51.0)
+    huecos donde un ticker concreto no necesita hacer nada.
+
+    Rango contenido (v11, 23/09/2026, mismo motivo que el día 201 de
+    _construir_ticker): con SALIDA_POR_CIERRE=False el High de este
+    día también recalcula el trailing stop, y debe quedar por debajo
+    del Low del propio día para que "sin movimiento" siga significando
+    "no dispara el stop"."""
+    base = dict(Open=51.0, High=51.1, Low=50.7, Close=51.0)
     base.update(overrides)
     return base
 
@@ -244,7 +261,7 @@ def _dia_plano(**overrides):
 class TestReduccionDuranteDrawdown:
     """
     CRASH: entra día 201, se hunde el día 202 (gap bajista brutal a
-    través del stop) -> pérdida real ~983€ sobre 4.000€ (24,6% de
+    través del stop) -> pérdida real ~934€ sobre 4.000€ (23,3% de
     drawdown, muy por encima del límite del 10%).
 
     GROW: entra día 201 (mismos 20 acc. que CRASH), se mantiene plano
@@ -280,7 +297,7 @@ class TestReduccionDuranteDrawdown:
 
         crash_trade = next(t for t in trades if t["symbol"] == "CRASH")
         assert crash_trade["resultado"] == "LOSS"
-        assert crash_trade["pnl"] < -800   # pérdida real grande, calibrada ~-983
+        assert crash_trade["pnl"] < -800   # pérdida real grande, calibrada ~-934
 
         # Prueba EXTERNA (vía curva_capital, no vía estado interno) de
         # que el drawdown estuvo por encima del límite del 10% —
@@ -300,11 +317,17 @@ class TestReduccionDuranteDrawdown:
         trades, curva, capital_final = ejecutar_backtest(datos)
 
         grow_trade = next(t for t in trades if t["symbol"] == "GROW")
-        # Abrió con 20 acciones (mismas que CRASH, mismo patrón de
+        # Abrió con 19 acciones (mismas que CRASH, mismo patrón de
         # entrada) -- si REDUCIR nunca se hubiera ejecutado, el trade
-        # final seguiría teniendo 20. Verificado por debajo de 10 acc.
-        # (calibrado: termina en 2).
-        assert grow_trade["shares"] < 10
+        # final seguiría teniendo 19. Verificado por debajo de ese
+        # valor de entrada (calibrado v11, SALIDA_POR_CIERRE=False:
+        # termina en 14 -- el salto de precio del día 203 dispara
+        # además el propio stop, ya recalculado más arriba, así que la
+        # posición se cierra por stop ese mismo día en vez de llegar
+        # forzada al final de los datos; el punto que prueba este test
+        # -- que REDUCIR se ejecutó pese al drawdown activo -- se
+        # verifica igual con el nuevo valor).
+        assert grow_trade["shares"] < 19
         assert grow_trade["resultado"] in ("WIN", "LOSS", "OPEN→CLOSE")
         assert grow_trade["pnl"] > 0   # se vendió muy por encima de la entrada
 
